@@ -1,0 +1,65 @@
+{% extends 'base/base.html' %}
+{% block title %}Payment Successful!{% endblock %}
+{% block start %}
+
+<!-- ============================ COMPONENT Payment Success ================================= -->
+<section class="section-content padding-bottom">
+  <div class="container-xl d-flex justify-content-center align-items-center mt-5">
+    <div class="row justify-content-center w-100">
+      <div class="col-xl-5">
+        <div class="card mb-4">
+          <div class="card-header" style="text-align: center; font-size: 25px">
+            {% if order.payment_mode == 'Cash on Delivery' %}
+            Order Placed!
+            {% else %}
+            Payment Successful!
+            {% endif %}
+          </div>
+          <div class="card-body text-center">
+            <p>
+              Your order with Order ID: <strong>{{ order_id }} </strong> has
+              {% if order.payment_mode == 'Cash on Delivery' %}
+              been placed. Please pay when your order is delivered.
+              {% else %}
+              been successfully processed.
+              {% endif %}
+            </p>
+            <p>Thank you for shopping with us!</p>
+            <a href="{% url 'index' %}" class="btn btn-primary mt-3 mb-3 mr-3">
+              Continue Shopping
+            </a>
+            {% if order.user %}
+            <a href="{% url 'order_details' order_id=order_id %}" class="btn btn-outline-primary view-order-btn">
+              View Order Details
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- ============================ COMPONENT Payment Success END ================================= -->
+
+<style>
+  /* Unified Color System */
+  :root {
+    --primary-color: #6366f1;
+    --accent-color: #fbbf24;
+    --text-dark: #1e293b;
+  }
+
+  .view-order-btn {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    transition: all 0.3s ease;
+  }
+
+  .view-order-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: var(--text-dark);
+  }
+</style>
+
+{% endblock %}

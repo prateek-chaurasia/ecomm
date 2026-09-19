@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #333; line-height: 1.5;">
+  <h2>Thank you for your order, {{ customer_name }}.</h2>
+  <p>Your {{ order.payment_mode }} order has been placed successfully.</p>
+  <p><strong>Order ID:</strong> {{ order.order_id }}</p>
+
+  <h3>Order summary</h3>
+  <table cellpadding="8" cellspacing="0" border="1" style="border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th align="left">Product</th>
+        <th align="left">Quantity</th>
+        <th align="left">Price</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in order_items %}
+      <tr>
+        <td>{{ item.product.product_name }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>INR {{ item.product_price }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p><strong>Total:</strong> INR {{ order.grand_total }}</p>
+  <p><strong>Payment mode:</strong> {{ order.payment_mode }}</p>
+  <p><strong>Shipping address:</strong> {{ order.shipping_address }}</p>
+  {% if order.payment_mode == 'Cash on Delivery' %}
+  <p>Please pay when your order is delivered.</p>
+  {% endif %}
+</body>
+</html>

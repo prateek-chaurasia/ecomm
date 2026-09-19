@@ -1,0 +1,34 @@
+{% extends "base/base.html" %}
+{% block start %}
+<div class="container my-5">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Shop by Category</h2>
+    <a href="{% url 'index' %}" class="btn btn-outline-dark">Browse All Products</a>
+  </div>
+
+  <div class="row">
+    {% for category in categories %}
+    <div class="col-md-4 mb-4">
+      <a href="{% url 'category_products' category.slug %}" class="text-decoration-none text-dark">
+        <div class="card h-100 shadow-sm border-0 overflow-hidden">
+          {% if category.category_image %}
+          <img src="{{ category.category_image.url }}" alt="{{ category.category_name }}" class="card-img-top" style="height: 260px; object-fit: cover;">
+          {% else %}
+          <div class="d-flex align-items-center justify-content-center bg-light" style="height: 260px;">
+            <span class="text-muted">No image</span>
+          </div>
+          {% endif %}
+          <div class="card-body text-center">
+            <h5 class="card-title mb-0">{{ category.category_name }}</h5>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% empty %}
+    <div class="col-12">
+      <div class="alert alert-info">No categories available right now.</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

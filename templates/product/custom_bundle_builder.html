@@ -1,0 +1,381 @@
+{% extends "base/base.html" %}
+{% block title %}Create Your Bundle{% endblock %}
+{% block start %}
+<style>
+  .bundle-studio {
+    --bundle-ink: #17202a;
+    --bundle-muted: #66727d;
+    --bundle-line: #dfe5e8;
+    --bundle-mint: #d9f3e7;
+    --bundle-mint-deep: #1b6a50;
+    --bundle-coral: #e8674e;
+    background: #f5f7f4;
+    color: var(--bundle-ink);
+    padding: 34px 0 64px;
+  }
+
+  .bundle-hero {
+    background: #17202a;
+    border-radius: 18px;
+    color: #fff;
+    overflow: hidden;
+    position: relative;
+    padding: 38px 42px;
+  }
+
+  .bundle-hero::after {
+    content: "";
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border: 1px solid rgba(217, 243, 231, 0.35);
+    border-radius: 50%;
+    right: -68px;
+    top: -92px;
+  }
+
+  .bundle-kicker {
+    color: #9ce0c3;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .bundle-hero h1 {
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.02;
+    max-width: 570px;
+    margin: 10px 0 12px;
+  }
+
+  .bundle-hero p {
+    color: #cbd5d9;
+    max-width: 560px;
+    margin: 0;
+  }
+
+  .bundle-limit {
+    align-items: center;
+    background: rgba(255, 255, 255, .1);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 24px;
+    padding: 8px 12px;
+  }
+
+  .bundle-workspace {
+    margin-top: 24px;
+  }
+
+  .bundle-section-heading {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .bundle-section-heading h2 {
+    font-size: 1.35rem;
+    font-weight: 800;
+    margin: 0;
+  }
+
+  .bundle-selection-count {
+    color: var(--bundle-muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .bundle-product-card {
+    background: #fff;
+    border: 1px solid var(--bundle-line);
+    border-radius: 12px;
+    cursor: pointer;
+    display: block;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+  }
+
+  .bundle-product-card:hover {
+    border-color: #a9cdbd;
+    box-shadow: 0 12px 24px rgba(23, 32, 42, .08);
+    transform: translateY(-2px);
+  }
+
+  .bundle-product-card.is-selected {
+    border: 2px solid var(--bundle-mint-deep);
+    box-shadow: 0 10px 22px rgba(27, 106, 80, .14);
+  }
+
+  .bundle-product-image {
+    background: #edf2ef;
+    height: 164px;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .bundle-product-placeholder {
+    align-items: center;
+    background: #edf2ef;
+    color: #91a49b;
+    display: flex;
+    font-size: 34px;
+    height: 164px;
+    justify-content: center;
+  }
+
+  .bundle-product-info {
+    padding: 14px 15px 16px;
+  }
+
+  .bundle-product-name {
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.25;
+    min-height: 38px;
+  }
+
+  .bundle-product-meta {
+    color: var(--bundle-muted);
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  .bundle-check {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #bbc8c2;
+    border-radius: 50%;
+    color: transparent;
+    display: flex;
+    height: 28px;
+    justify-content: center;
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 28px;
+    z-index: 1;
+  }
+
+  .bundle-check input {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+  }
+
+  .bundle-product-card.is-selected .bundle-check {
+    background: var(--bundle-mint-deep);
+    border-color: var(--bundle-mint-deep);
+    color: #fff;
+  }
+
+  .bundle-summary {
+    background: #fff;
+    border: 1px solid var(--bundle-line);
+    border-radius: 14px;
+    padding: 20px;
+    position: sticky;
+    top: 18px;
+  }
+
+  .bundle-summary h2 {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 5px;
+  }
+
+  .bundle-summary-intro {
+    color: var(--bundle-muted);
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+
+  .bundle-summary-list {
+    border-bottom: 1px solid var(--bundle-line);
+    border-top: 1px solid var(--bundle-line);
+    min-height: 84px;
+    padding: 10px 0;
+  }
+
+  .bundle-summary-empty {
+    color: #89959b;
+    font-size: 13px;
+    padding: 12px 0;
+  }
+
+  .bundle-summary-item {
+    align-items: center;
+    display: flex;
+    font-size: 13px;
+    justify-content: space-between;
+    padding: 5px 0;
+  }
+
+  .bundle-summary-item span:last-child {
+    color: var(--bundle-muted);
+    font-weight: 700;
+  }
+
+  .bundle-quantity {
+    margin: 18px 0;
+  }
+
+  .bundle-quantity label {
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 7px;
+  }
+
+  .bundle-quantity input {
+    border: 1px solid #cbd6d1;
+    border-radius: 8px;
+    font-weight: 700;
+    height: 44px;
+  }
+
+  .bundle-total {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .bundle-total small {
+    color: var(--bundle-muted);
+    display: block;
+    font-size: 11px;
+  }
+
+  .bundle-total strong {
+    font-size: 1.45rem;
+  }
+
+  .bundle-submit {
+    background: var(--bundle-coral);
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 800;
+    min-height: 46px;
+    width: 100%;
+  }
+
+  .bundle-submit:disabled {
+    background: #c5cfca;
+    cursor: not-allowed;
+  }
+
+  .bundle-empty-state {
+    background: #fff;
+    border: 1px dashed #bbc8c2;
+    border-radius: 12px;
+    color: var(--bundle-muted);
+    padding: 34px;
+    text-align: center;
+  }
+
+  @media (max-width: 991.98px) {
+    .bundle-summary { margin-top: 24px; position: static; }
+  }
+
+  @media (max-width: 575.98px) {
+    .bundle-studio { padding-top: 18px; }
+    .bundle-hero { border-radius: 12px; padding: 28px 22px; }
+    .bundle-product-image, .bundle-product-placeholder { height: 142px; }
+  }
+</style>
+
+<section class="section-content padding-y">
+  <div class="container bundle-studio">
+    {% include 'base/alert.html' %}
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <div class="bundle-hero">
+      <span class="bundle-kicker">The gift studio</span>
+      <h1>Create your own gift bundle</h1>
+      <p>Pick the things they will actually love. We will show you the complete set before it goes to your cart.</p>
+      <span class="bundle-limit"><i class="fas fa-layer-group mr-2" aria-hidden="true"></i> Up to {{ max_products }} items in one bundle</span>
+    </div>
+    <form method="post" id="custom-bundle-form" class="bundle-workspace">
+      {% csrf_token %}
+      <div class="row">
+        <div class="col-lg-8">
+          <div class="bundle-section-heading">
+            <h2>Choose your pieces</h2>
+            <span class="bundle-selection-count"><span id="selected-count">0</span> / {{ max_products }} selected</span>
+          </div>
+          <div class="row">
+            {% for product in available_products %}
+            <div class="col-sm-6 col-xl-4 mb-3">
+              <label class="bundle-product-card" data-product-card>
+                <span class="bundle-check"><input type="checkbox" name="products" value="{{ product.uid }}" data-product-name="{{ product.product_name|escapejs }}" data-product-price="{{ product.price }}" data-product-check><i class="fas fa-check" aria-hidden="true"></i></span>
+                {% if product.product_images.first.image_url %}<img src="{{ product.product_images.first.image_url.url }}" alt="{{ product.product_name }}" class="bundle-product-image">{% else %}<span class="bundle-product-placeholder"><i class="fas fa-gift" aria-hidden="true"></i></span>{% endif %}
+                <span class="bundle-product-info">
+                  <strong class="bundle-product-name">{{ product.product_name }}</strong>
+                  <span class="bundle-product-meta">₹{{ product.price }} · {{ product.stock_quantity }} available</span>
+                </span>
+              </label>
+            </div>
+            {% empty %}
+            <div class="col-12"><div class="bundle-empty-state"><i class="fas fa-box-open fa-2x mb-3"></i><p class="mb-0">There are no bundle-eligible products available right now.</p></div></div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <aside class="bundle-summary">
+            <h2>Your bundle</h2>
+            <p class="bundle-summary-intro">Your selected items will make one complete gift set.</p>
+            <div class="bundle-summary-list" id="bundle-summary-list" aria-live="polite"><div class="bundle-summary-empty">Nothing selected yet</div></div>
+            <div class="bundle-quantity">
+              <label for="bundle-quantity">Complete bundles needed</label>
+              <input id="bundle-quantity" class="form-control" type="number" name="quantity" min="1" value="{{ quantity }}" required>
+            </div>
+            <div class="bundle-total"><div><small>Estimated total</small><span class="text-muted small">before checkout coupons</span></div><strong>₹<span id="bundle-total">0</span></strong></div>
+            <button class="bundle-submit" type="submit" id="bundle-submit" disabled>Review my bundle <i class="fas fa-arrow-right ml-1" aria-hidden="true"></i></button>
+          </aside>
+        </div>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+  (function () {
+    const maxProducts = {{ max_products }};
+    const checks = Array.from(document.querySelectorAll('[data-product-check]'));
+    const count = document.getElementById('selected-count');
+    const summary = document.getElementById('bundle-summary-list');
+    const total = document.getElementById('bundle-total');
+    const quantity = document.getElementById('bundle-quantity');
+    const submit = document.getElementById('bundle-submit');
+
+    function refreshBundleSummary() {
+      const selected = checks.filter((check) => check.checked);
+      count.textContent = selected.length;
+      submit.disabled = selected.length < 1 || selected.length > maxProducts;
+      summary.innerHTML = selected.length ? selected.map((check) => `
+        <div class="bundle-summary-item"><span>${check.dataset.productName}</span><span>₹${check.dataset.productPrice}</span></div>
+      `).join('') : '<div class="bundle-summary-empty">Nothing selected yet</div>';
+      const unitTotal = selected.reduce((sum, check) => sum + Number(check.dataset.productPrice), 0);
+      total.textContent = unitTotal * Math.max(1, Number(quantity.value) || 1);
+      selected.forEach((check) => check.closest('[data-product-card]').classList.add('is-selected'));
+      checks.filter((check) => !check.checked).forEach((check) => check.closest('[data-product-card]').classList.remove('is-selected'));
+      checks.filter((check) => !check.checked).forEach((check) => { check.disabled = selected.length >= maxProducts; });
+    }
+
+    checks.forEach((check) => check.addEventListener('change', refreshBundleSummary));
+    quantity.addEventListener('input', refreshBundleSummary);
+    refreshBundleSummary();
+  }());
+</script>
+{% endblock %}

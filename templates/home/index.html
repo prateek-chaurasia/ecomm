@@ -1,0 +1,385 @@
+{% extends "base/base.html"%} {% block start %}
+<style>
+  .filter-section {
+    margin-bottom: 18px;
+  }
+
+  .filter-shell {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 18px;
+    box-shadow: 0 8px 26px rgba(15, 23, 42, 0.06);
+    padding: 14px 16px 10px;
+  }
+
+  .filter-toggle {
+    display: none;
+  }
+
+  .filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .filter-field {
+    flex: 1 1 170px;
+    min-width: 150px;
+    margin: 0;
+  }
+
+  .filter-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+
+  .filter-field .form-control {
+    height: 38px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: #fff;
+    box-shadow: none;
+    font-size: 14px;
+    padding: 8px 12px;
+    transition: all 0.2s ease;
+  }
+
+  .filter-field .form-control:focus {
+    border-color: rgba(59, 130, 246, 0.8);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+
+  .filter-actions {
+    flex: 0 0 auto;
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 130px;
+    margin-left: auto;
+  }
+
+  .clear-filter-btn {
+    border: 1px solid rgba(148, 163, 184, 0.7);
+    background: #fff;
+    color: #0f172a;
+    border-radius: 12px;
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  }
+
+  .clear-filter-btn:hover {
+    background: #f8fafc;
+    border-color: rgba(15, 23, 42, 0.16);
+    transform: translateY(-1px);
+  }
+
+  @keyframes appear {
+    from {
+      opacity: 0;
+      scale: 0.5;
+    }
+
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+
+  .card {
+    animation: appear linear;
+    animation-timeline: view();
+    animation-range: entry 0% cover 40%;
+  }
+
+  @media (max-width: 767.98px) {
+    .filter-shell {
+      padding: 0;
+    }
+
+    .filter-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      background: transparent;
+      color: #0f172a;
+      font-size: 15px;
+      font-weight: 700;
+      padding: 14px 16px;
+      text-align: left;
+    }
+
+    .filter-toggle-icon {
+      transition: transform 0.2s ease;
+    }
+
+    .filter-toggle[aria-expanded="true"] .filter-toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .filter-content {
+      display: none;
+      padding: 0 16px 14px;
+    }
+
+    .filter-content.is-open {
+      display: block;
+    }
+
+    .filter-form {
+      align-items: stretch;
+    }
+
+    .filter-field,
+    .filter-actions {
+      flex-basis: 100%;
+      min-width: 100%;
+      margin-left: 0;
+    }
+
+    .filter-actions {
+      justify-content: stretch;
+    }
+
+    .clear-filter-btn {
+      width: 100%;
+    }
+  }
+</style>
+<div class="container mt-3 pt-3">
+  {% include 'base/alert.html' %}
+  {% if banners %}
+  <div id="homeBannerCarousel" class="carousel slide mb-4" data-ride="carousel">
+    <ol class="carousel-indicators">
+      {% for banner in banners %}
+      <li data-target="#homeBannerCarousel" data-slide-to="{{ forloop.counter0 }}" class="{% if forloop.first %}active{% endif %}"></li>
+      {% endfor %}
+    </ol>
+    <div class="carousel-inner rounded shadow-sm">
+      {% for banner in banners %}
+      <div class="carousel-item {% if forloop.first %}active{% endif %}">
+        {% if banner.image %}
+        <img src="{{ banner.image.url }}" class="d-block w-100" alt="{{ banner.title }}" style="height: 360px; object-fit: cover;">
+        {% endif %}
+        <div class="carousel-caption d-none d-md-block text-left" style="background: rgba(0,0,0,0.35); border-radius: 12px; padding: 20px; max-width: 420px; right: 8%; left: auto; bottom: 40px;">
+          <h2>{{ banner.title }}</h2>
+          {% if banner.subtitle %}
+          <p>{{ banner.subtitle }}</p>
+          {% endif %}
+          {% if banner.link_url %}
+          <a href="{{ banner.link_url }}" class="btn btn-light">{{ banner.button_text }}</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <a class="carousel-control-prev" href="#homeBannerCarousel" role="button" data-slide="prev">
+      <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+      <span class="sr-only">Previous</span>
+    </a>
+    <a class="carousel-control-next" href="#homeBannerCarousel" role="button" data-slide="next">
+      <span class="carousel-control-next-icon" aria-hidden="true"></span>
+      <span class="sr-only">Next</span>
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- Filter Section -->
+  <div class="filter-section">
+    <div class="filter-shell">
+      <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterContent">
+        <span>Filters</span>
+        <span class="filter-toggle-icon" aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="filter-content" id="filterContent">
+        <form method="GET" class="filter-form">
+        {% if selected_category %}
+        <div class="filter-field">
+          <label for="q">Search in {{ selected_category }}:</label>
+          <input type="text" id="q" name="q" class="form-control" value="{{ selected_query|default:'' }}" placeholder="Search in {{ selected_category }}...">
+        </div>
+        {% endif %}
+
+        <div class="filter-field">
+          <label for="category">Category</label>
+          <select id="category" name="category" class="form-control" onchange="this.form.submit()">
+            <option value="">All</option>
+            {% for category in categories %}
+            <option value="{{ category.category_name }}" {% if selected_category == category.category_name %}selected{%endif %}>
+              {{ category.category_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="sort">Reviews</label>
+          <select id="sort" name="sort" class="form-control" onchange="this.form.submit()">
+            <option value="">All Reviews</option>
+            <option value="ratingAsc" {% if selected_sort == 'ratingAsc' %}selected{% endif %}>Low to High</option>
+            <option value="ratingDesc" {% if selected_sort == 'ratingDesc' %}selected{% endif %}>High to Low</option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="brand">Brand</label>
+          <select id="brand" name="brand" class="form-control" onchange="this.form.submit()">
+            <option value="">All Brands</option>
+            {% for brand in brands %}
+            <option value="{{ brand }}" {% if selected_brand == brand %}selected{% endif %}>{{ brand }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="age_group">Age Group</label>
+          <select id="age_group" name="age_group" class="form-control" onchange="this.form.submit()">
+            <option value="">All Ages</option>
+            {% for group in age_groups %}
+            <option value="{{ group }}" {% if selected_age_group == group %}selected{% endif %}>{{ group }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="sort_order">Sort by</label>
+          <select id="sort_order" name="sort" class="form-control" onchange="this.form.submit()">
+            <option value="">Default</option>
+            <option value="newest" {% if selected_sort == 'newest' %}selected{% endif %}>Newest</option>
+            <option value="priceAsc" {% if selected_sort == 'priceAsc' %}selected{% endif %}>Price: Low-High</option>
+            <option value="priceDesc" {% if selected_sort == 'priceDesc' %}selected{% endif %}>Price: High-Low</option>
+          </select>
+        </div>
+
+        <div class="filter-actions">
+          <button type="button" class="clear-filter-btn" onclick="window.location.href='{{ request.path }}';">
+            Clear Filters
+          </button>
+        </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var filterToggle = document.getElementById('filterToggle');
+      var filterContent = document.getElementById('filterContent');
+
+      if (!filterToggle || !filterContent) {
+        return;
+      }
+
+      filterToggle.addEventListener('click', function () {
+        var isOpen = filterToggle.getAttribute('aria-expanded') === 'true';
+        filterToggle.setAttribute('aria-expanded', String(!isOpen));
+        filterContent.classList.toggle('is-open', !isOpen);
+      });
+    }());
+  </script>
+
+  <!-- Product List -->
+  <div class="row" id="product-grid">
+    {% include 'product_parts/product_cards.html' with products=products %}
+  </div>
+
+  <div id="product-load-status" class="text-center text-muted py-3" aria-live="polite"></div>
+  <div id="product-load-trigger" aria-hidden="true"></div>
+
+  <!-- Pagination Section -->
+  <nav id="product-pagination" aria-label="Page navigation example">
+    <ul class="pagination justify-content-center mb-4">
+      {% if products.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ products.previous_page_number }}" aria-label="Previous">
+          <span aria-hidden="true">&laquo; Previous</span>
+        </a>
+      </li>
+      {% else %}
+      <li class="page-item disabled">
+        <a class="page-link">Previous</a>
+      </li>
+      {% endif %}
+
+      {% for num in products.paginator.page_range %}
+      <li class="page-item {% if products.number == num %}active{% endif %}">
+        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+      </li>
+      {% endfor %}
+
+      {% if products.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ products.next_page_number }}" aria-label="Next">
+          <span aria-hidden="true">Next &raquo;</span>
+        </a>
+      </li>
+      {% else %}
+      <li class="page-item disabled">
+        <a class="page-link">Next</a>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+
+  <script>
+    (function () {
+      var grid = document.getElementById('product-grid');
+      var trigger = document.getElementById('product-load-trigger');
+      var status = document.getElementById('product-load-status');
+      var pagination = document.getElementById('product-pagination');
+      var nextPage = {% if products.has_next %}{{ products.next_page_number }}{% else %}null{% endif %};
+      var loading = false;
+
+      if (!grid || !trigger || !nextPage || !window.IntersectionObserver) {
+        return;
+      }
+
+      if (pagination) pagination.classList.add('d-none');
+
+      var observer = new IntersectionObserver(function (entries) {
+        if (!entries[0].isIntersecting || loading || !nextPage) return;
+
+        loading = true;
+        status.textContent = 'Loading more products...';
+        var params = new URLSearchParams(window.location.search);
+        params.set('page', nextPage);
+        fetch(window.location.pathname + '?' + params.toString(), {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+          .then(function (response) {
+            if (!response.ok) throw new Error('Unable to load more products.');
+            return response.json();
+          })
+          .then(function (data) {
+            grid.insertAdjacentHTML('beforeend', data.html);
+            nextPage = data.next_page;
+            status.textContent = nextPage ? '' : 'You have reached the end of the products.';
+            if (!nextPage) observer.disconnect();
+          })
+          .catch(function () {
+            status.textContent = 'Products could not be loaded. Please refresh and try again.';
+          })
+          .finally(function () {
+            loading = false;
+          });
+      }, { rootMargin: '600px 0px' });
+
+      observer.observe(trigger);
+    }());
+  </script>
+
+</div>
+
+{% endblock %}

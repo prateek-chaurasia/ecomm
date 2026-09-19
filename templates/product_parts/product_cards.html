@@ -1,0 +1,38 @@
+{% for product in products %}
+<div class="col-md-3">
+  <figure class="card card-product-grid">
+    <div class="img-wrap" style="position: relative;">
+      {% with image=product.product_images.first %}
+      {% if image and image.image_url %}
+      <img src="{{ image.image_url.url }}" alt="{{ product.product_name }}" loading="lazy" />
+      {% endif %}
+      {% endwith %}
+      {% if product.stock_quantity <= 0 %}
+      <span class="badge badge-danger" style="position: absolute; top: 10px; left: 10px; font-size: 12px; padding: 6px 8px; z-index: 1;">Out of stock</span>
+      {% endif %}
+    </div>
+    <figcaption class="info-wrap border-top">
+      <a href="{% url 'get_product' product.slug %}" class="title">
+        <b>{{ product.product_name }}</b>
+      </a>
+      <div class="mt-1 text-muted small">
+        <strong>Brand:</strong> {{ product.brand_name }}
+      </div>
+      {% if product.age_groups.all %}
+      <div class="mt-1 text-muted small">
+        <strong>Age:</strong> {% for age_group in product.age_groups.all %}{{ age_group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </div>
+      {% endif %}
+      <div class="price mt-2">
+        {% if product.has_discount %}
+        <span class="text-muted" style="text-decoration: line-through; margin-right: 8px;">₹{{ product.marked_price }}.00</span>
+        <span class="font-weight-bold text-danger">{{ product.discount_label }}</span>
+        <div class="mt-1">₹{{ product.price }}.00</div>
+        {% else %}
+        <div>₹{{ product.price }}.00</div>
+        {% endif %}
+      </div>
+    </figcaption>
+  </figure>
+</div>
+{% endfor %}

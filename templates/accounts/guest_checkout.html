@@ -1,0 +1,28 @@
+{% extends "base/base.html" %}
+{% block title %}Shipping Address{% endblock title %}
+{% load crispy_forms_tags %}
+{% block start %}
+<section class="section-content padding-y">
+  <div class="container">
+    {% include 'base/alert.html' %}
+    <div class="row justify-content-center">
+      <div class="col-md-8 col-lg-6">
+        <div class="card">
+          <div class="card-header">Shipping Address</div>
+          <div class="card-body">
+            <form method="POST">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ next_url }}">
+              {{ form|crispy }}
+              <div class="d-flex justify-content-between mt-3">
+                <a class="btn btn-outline-primary" href="{% url 'cart' %}">Back to Cart</a>
+                <button class="btn btn-primary" type="submit">Place COD Order</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

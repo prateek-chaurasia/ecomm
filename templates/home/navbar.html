@@ -1,0 +1,308 @@
+{% load static %}
+
+<style>
+  @media (max-width: 992px) {
+    .widgets-wrap {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: left;
+      flex-wrap: nowrap;
+    }
+
+    .widget-header {
+      margin-right: 10px;
+    }
+
+    .icontext {
+      display: flex;
+      align-items: center;
+    }
+
+    .icontext .text {
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .text span {
+      display: block;
+    }
+
+    .text div {
+      display: inline;
+    }
+  }
+</style>
+
+<header class="section-header">
+  <nav class="navbar navbar-dark navbar-expand-md bg-dark">
+    <div class="container">
+      <button class="navbar-toggler ml-auto" type="button" data-toggle="collapse" data-target="#navbarCollapse"
+        aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarCollapse">
+        <ul class="navbar-nav mr-auto" style="gap: 20px;">
+          <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'categories' %}">Categories</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'bundle_offers' %}">Gift Bundles</a></li>
+          {% if user.is_authenticated %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'wishlist' %}">Wishlist ({{request.user.wishlist.count}})</a></li>
+          {% else %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'wishlist' %}">Wishlist</a></li>
+          {% endif %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'order_history' %}">Your Orders</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'product_reviews' %}">Your Reviews</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact Us</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About Us</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <section class="header-main border-bottom">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-lg-2 col-4">
+          <div class="brand-wrap">
+            <a href="{% url 'index' %}" class="brand-link" style="text-decoration: none;">
+              <h2 class="logo-text">Shop Easy</h2>
+            </a>
+          </div>
+        </div>
+        <div class="col-lg-6 col-sm-12">
+          <form method="GET" action="{% url 'product_search' %}" class="search" id="globalSearchForm">
+            <div class="input-group w-100" style="position: relative;">
+              <input type="text" class="form-control" name="q" id="globalSearchInput" placeholder="Search products" value="{{ query|default:"" }}" autocomplete="off" />
+              <div class="input-group-append">
+                <button class="btn btn-primary" type="submit">
+                  <i class="fa fa-search"></i>
+                </button>
+              </div>
+              <div id="searchSuggestions" class="list-group" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; display: none; margin-top: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.12);"></div>
+            </div>
+          </form>
+        </div>
+
+        <div class="col-lg-4 col-sm-6 col-8">
+          <div class="widgets-wrap float-md-right">
+
+            <!-- Cart Icon with badge -->
+            <div class="widget-header mr-3">
+              <a href="{% url 'cart' %}" class="icon icon-sm rounded-circle border">
+                <i class="fa fa-shopping-cart"></i>
+              </a>
+              {% if user.is_authenticated %}
+              <span class="badge badge-pill badge-danger notify">
+                {{request.user.profile.get_cart_count}}
+              </span>
+              {% else %}
+              <span class="badge badge-pill badge-danger notify"></span>
+              {% endif %}
+            </div>
+
+            <!-- Profile Icon -->
+            <div class="widget-header icontext">
+              {% if user.is_authenticated %}
+              {% if user.profile.profile_image %}
+              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
+                <img src="{{ user.profile.profile_image }}" alt="Profile Image" class="rounded-circle" width="42"
+                  height="42" />
+              </a>
+              {% else %}
+              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
+                <i class="fa fa-user"></i>
+              </a>
+              {% endif %}
+              {% else %}
+              <a href="{% url 'login' %}" class="icon icon-sm rounded-circle border">
+                <i class="fa fa-user"></i>
+              </a>
+              {% endif %}
+
+              <!-- Welcome Text and Logout Link -->
+              <div class="text">
+                {% if request.user.is_authenticated %}
+                <span class="text-muted">Welcome, {{ request.user }}!</span>
+                <div>
+                  <form method="post" action="{% url 'logout' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item">Logout</button>
+                  </form>
+                </div>
+                {% else %}
+                <span class="text-muted">Welcome</span>
+                <div>
+                  <a href="{% url 'login' %}">Sign in</a> |
+                  <a href="{% url 'register' %}">Register</a>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</header>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const input = document.getElementById('globalSearchInput');
+    const suggestionsBox = document.getElementById('searchSuggestions');
+    const form = document.getElementById('globalSearchForm');
+
+    if (!input || !suggestionsBox || !form) return;
+
+    const hideSuggestions = () => {
+      suggestionsBox.style.display = 'none';
+      suggestionsBox.innerHTML = '';
+    };
+
+    const showSuggestions = (items) => {
+      if (!items.length) {
+        hideSuggestions();
+        return;
+      }
+
+      suggestionsBox.innerHTML = items.map((item) => `
+        <button type="button" class="list-group-item list-group-item-action" data-value="${item}">${item}</button>
+      `).join('');
+
+      suggestionsBox.style.display = 'block';
+
+      suggestionsBox.querySelectorAll('button').forEach((button) => {
+        button.addEventListener('click', function () {
+          input.value = button.dataset.value;
+          hideSuggestions();
+          form.submit();
+        });
+      });
+    };
+
+    input.addEventListener('input', function () {
+      const value = this.value.trim();
+      if (!value || value.length < 2) {
+        hideSuggestions();
+        return;
+      }
+
+      fetch(`{% url 'product_search' %}?q=${encodeURIComponent(value)}&format=json`)
+        .then((response) => response.json())
+        .then((data) => {
+          showSuggestions(data.suggestions || []);
+        })
+        .catch(() => hideSuggestions());
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!suggestionsBox.contains(event.target) && event.target !== input) {
+        hideSuggestions();
+      }
+    });
+  });
+</script>
+
+<style>
+  /* Unified Color System for Navbar */
+  :root {
+    --primary-color: #6366f1;
+    --primary-dark: #4f46e5;
+    --accent-color: #fbbf24;
+    --accent-dark: #f59e0b;
+    --text-dark: #1e293b;
+    --white: #ffffff;
+  }
+
+  /* Brand Styling */
+  .brand-link .logo-text {
+    color: var(--primary-color);
+    font-weight: 800;
+    font-size: 1.75rem;
+    margin: 0;
+    transition: all 0.3s ease;
+  }
+
+  .brand-link:hover .logo-text {
+    color: var(--accent-color);
+    transform: scale(1.05);
+  }
+
+  /* Search Button */
+  .search .btn-primary {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    transition: all 0.3s ease;
+  }
+
+  .search .btn-primary:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: var(--text-dark);
+    transform: scale(1.05);
+  }
+
+  /* Navigation Links */
+  .navbar-nav .nav-link {
+    color: var(--text-dark);
+    font-weight: 500;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .navbar-nav .nav-link:hover {
+    color: var(--primary-color);
+  }
+
+  .navbar-nav .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background: var(--accent-color);
+    transition: all 0.3s ease;
+    transform: translateX(-50%);
+  }
+
+  .navbar-nav .nav-link:hover::after {
+    width: 100%;
+  }
+
+  /* Cart and Profile Icons */
+  .icon {
+    color: var(--primary-color);
+    transition: all 0.3s ease;
+  }
+
+  .icon:hover {
+    color: var(--accent-color);
+    transform: scale(1.1);
+  }
+
+  /* Badge */
+  .badge {
+    background-color: var(--accent-color);
+    color: var(--text-dark);
+  }
+
+  /* Welcome text links */
+  .text a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: all 0.3s ease;
+  }
+
+  .text a:hover {
+    color: var(--accent-color);
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .brand-link .logo-text {
+      font-size: 1.5rem;
+    }
+  }
+</style>

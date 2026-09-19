@@ -1,0 +1,31 @@
+{% extends "base/base.html" %}
+{% block title %}Gift Bundles{% endblock %}
+{% block start %}
+<section class="section-content padding-y">
+  <div class="container">
+    <div class="mb-4">
+      <p class="text-uppercase text-muted small font-weight-bold mb-2">Made for giving</p>
+      <h1>Gift bundles for every occasion</h1>
+      <p class="text-muted">Choose a curated bundle, then make it yours before checkout.</p>
+      <a class="btn btn-primary" href="{% url 'create_custom_bundle' %}">Create your own bundle</a>
+    </div>
+    <div class="row">
+      {% for offer in offers %}
+      <div class="col-md-6 col-lg-4 mb-4">
+        <article class="card h-100 shadow-sm">
+          {% if offer.banner %}<img src="{{ offer.banner.url }}" class="card-img-top" style="height:210px;object-fit:cover" alt="{{ offer.title }}">{% endif %}
+          <div class="card-body d-flex flex-column">
+            <h2 class="h4">{{ offer.title }}</h2>
+            <p class="text-muted flex-grow-1">{{ offer.description }}</p>
+            <p class="small text-muted mb-3">{{ offer.products.count }} product options{% if offer.discount_percentage %} · {{ offer.discount_percentage }}% bundle saving{% endif %}</p>
+            <a class="btn btn-primary" href="{% url 'bundle_builder' offer.slug %}">Build this bundle</a>
+          </div>
+        </article>
+      </div>
+      {% empty %}
+      <div class="col-12"><p class="text-muted">New gifting bundles are being prepared.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

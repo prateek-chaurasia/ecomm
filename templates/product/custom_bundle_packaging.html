@@ -1,0 +1,87 @@
+{% extends "base/base.html" %}
+{% block title %}Choose Packaging{% endblock %}
+{% block start %}
+<style>
+  .packaging-page { background: #f5f7f4; padding: 34px 0 64px; color: #17202a; }
+  .packaging-intro { background: #17202a; border-radius: 16px; color: #fff; padding: 32px 38px; }
+  .packaging-kicker { color: #9ce0c3; font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+  .packaging-intro h1 { font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 800; line-height: 1.05; margin: 10px 0; }
+  .packaging-intro p { color: #cbd5d9; margin: 0; max-width: 650px; }
+  .packaging-layout { margin-top: 24px; }
+  .packaging-heading { align-items: end; display: flex; justify-content: space-between; margin-bottom: 14px; }
+  .packaging-heading h2 { font-size: 1.35rem; font-weight: 800; margin: 0; }
+  .packaging-heading span { color: #66727d; font-size: 13px; }
+  .packaging-option { background: #fff; border: 2px solid #dfe5e8; border-radius: 12px; cursor: pointer; display: block; height: 100%; overflow: hidden; position: relative; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+  .packaging-option:hover { border-color: #a9cdbd; box-shadow: 0 12px 24px rgba(23, 32, 42, .08); transform: translateY(-2px); }
+  .packaging-option.is-selected { border-color: #1b6a50; box-shadow: 0 10px 22px rgba(27, 106, 80, .14); }
+  .packaging-option input { height: 1px; opacity: 0; position: absolute; width: 1px; }
+  .packaging-sample { background: #edf2ef; height: 190px; object-fit: cover; width: 100%; }
+  .packaging-info { padding: 15px 16px 18px; }
+  .packaging-name { display: block; font-size: 16px; font-weight: 800; }
+  .packaging-description { color: #66727d; font-size: 13px; line-height: 1.45; margin: 7px 0 13px; min-height: 38px; }
+  .packaging-price { color: #1b6a50; font-size: 14px; font-weight: 800; }
+  .packaging-radio { align-items: center; background: #fff; border: 1px solid #bbc8c2; border-radius: 50%; color: transparent; display: flex; height: 28px; justify-content: center; position: absolute; right: 12px; top: 12px; width: 28px; }
+  .packaging-option.is-selected .packaging-radio { background: #1b6a50; border-color: #1b6a50; color: #fff; }
+  .packaging-selection { background: #fff; border: 1px solid #dfe5e8; border-radius: 12px; margin-top: 24px; padding: 18px; }
+  .packaging-selection strong { font-size: 13px; }
+  .packaging-product-list { color: #66727d; font-size: 13px; margin-top: 6px; }
+  .packaging-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+  .packaging-actions .btn-primary { background: #e8674e; border: 0; font-weight: 800; }
+  @media (max-width: 575.98px) { .packaging-page { padding-top: 18px; } .packaging-intro { border-radius: 12px; padding: 27px 22px; } .packaging-heading { align-items: start; flex-direction: column; gap: 5px; } .packaging-actions { flex-direction: column-reverse; } }
+</style>
+
+<section class="section-content padding-y">
+  <div class="container packaging-page">
+    {% include 'base/alert.html' %}
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <div class="packaging-intro">
+      <span class="packaging-kicker">The finishing touch</span>
+      <h1>Choose how your gift arrives</h1>
+      <p>Review the sample sheets below and choose the material that fits your occasion. The packaging charge is added separately for each complete bundle.</p>
+    </div>
+
+    <form method="post" class="packaging-layout">
+      {% csrf_token %}
+      <div class="packaging-heading">
+        <h2>Packaging samples</h2>
+        <span>Prices shown are per complete bundle</span>
+      </div>
+      <div class="row">
+        {% for option in packaging_options %}
+        <div class="col-md-6 col-xl-4 mb-3">
+          <label class="packaging-option" data-packaging-card>
+            <span class="packaging-radio"><input type="radio" name="packaging_option" value="{{ option.uid }}" data-packaging-radio required><i class="fas fa-check" aria-hidden="true"></i></span>
+            <img src="{{ option.sample_image.url }}" alt="{{ option.name }} packaging sample" class="packaging-sample">
+            <span class="packaging-info">
+              <strong class="packaging-name">{{ option.name }}</strong>
+              <span class="packaging-description">{{ option.description|default:'A thoughtful finish for your complete gift bundle.' }}</span>
+              <span class="packaging-price">+₹{{ option.price }} per bundle</span>
+            </span>
+          </label>
+        </div>
+        {% empty %}
+        <div class="col-12"><div class="alert alert-info">Packaging options will appear here once they are added by the store team.</div></div>
+        {% endfor %}
+      </div>
+      <div class="packaging-selection">
+        <strong><i class="fas fa-gift mr-2"></i>Your selected products</strong>
+        <div class="packaging-product-list">{% for product in selected_products %}{{ product.product_name }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+      </div>
+      <div class="packaging-actions">
+        <a href="{% url 'create_custom_bundle' %}" class="btn btn-outline-secondary">Back to products</a>
+        <button type="submit" class="btn btn-primary">Continue to review <i class="fas fa-arrow-right ml-1"></i></button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+  (function () {
+    const radios = document.querySelectorAll('[data-packaging-radio]');
+    radios.forEach((radio) => radio.addEventListener('change', function () {
+      document.querySelectorAll('[data-packaging-card]').forEach((card) => card.classList.remove('is-selected'));
+      this.closest('[data-packaging-card]').classList.add('is-selected');
+    }));
+  }());
+</script>
+{% endblock %}

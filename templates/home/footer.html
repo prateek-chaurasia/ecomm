@@ -1,0 +1,241 @@
+{% load static %} {% block start %}
+<footer class="bg-dark text-white">
+  <div class="container py-5">
+    <!-- Main Footer Content -->
+    <div class="row g-4">
+
+      <!-- Brand Section -->
+      <div class="col-lg-4 col-md-6 mb-4">
+        <div class="footer-brand">
+          <h3 class="brand-title fw-bold mb-3">Shop Easy</h3>
+          <p class="text-light opacity-75 mb-4">Your one-stop shop for the latest toys and gift items, electronic toys, and
+            more. We are committed to providing you with the best products and a seamless shopping experience. 
+            We are operational in Dehradun only.</p>
+
+          <!-- Social Media Icons -->
+          <div class="social-links">
+            <a href="https://www.linkedin.com/in/atulguptag/" class="social-link me-3" aria-label="LinkedIn">
+              <i class="fab fa-linkedin-in"></i>
+            </a>
+            <a href="https://github.com/atulguptag/" class="social-link me-3" aria-label="GitHub">
+              <i class="fab fa-github"></i>
+            </a>
+            <a href="https://instagram.com/itsatulguptag/" class="social-link me-3" aria-label="Instagram">
+              <i class="fab fa-instagram"></i>
+            </a>
+            <a href="https://facebook.com/itsatulguptag/" class="social-link" aria-label="Facebook">
+              <i class="fab fa-facebook"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Links -->
+      <div class="col-lg-2 col-md-6 col-6 mb-4">
+        <h5 class="section-heading fw-semibold mb-3">Quick Links</h5>
+        <ul class="list-unstyled footer-links">
+          <li class="mb-2"><a href="{% url 'index' %}" class="footer-link">Home</a></li>
+          <li class="mb-2"><a href="{% url 'order_history' %}" class="footer-link">Your Orders</a></li>
+          <li class="mb-2"><a href="{% url 'wishlist' %}" class="footer-link">Wishlist</a></li>
+          <li class="mb-2"><a href="{% url 'contact' %}" class="footer-link">Contact Us</a></li>
+          <li class="mb-2"><a href="{% url 'about' %}" class="footer-link">About Us</a></li>
+        </ul>
+      </div>
+
+      <!-- Categories -->
+      <div class="col-lg-2 col-md-6 col-6 mb-4">
+        <h5 class="section-heading fw-semibold mb-3">Categories</h5>
+        <ul class="list-unstyled footer-links">
+          <li class="mb-2"><a href="#" class="footer-link">Men's Fashion</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Women's Fashion</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Electronics</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Home & Kitchen</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Sports & Outdoors</a></li>
+        </ul>
+      </div>
+
+      <!-- Account & Support -->
+      <div class="col-lg-2 col-md-6 col-6 mb-4">
+        <h5 class="section-heading fw-semibold mb-3">Account</h5>
+        <ul class="list-unstyled footer-links">
+          {% if user.is_authenticated %}
+          <li class="mb-2"><a href="{% url 'profile' username=user.username %}" class="footer-link">My Profile</a></li>
+          {% else %}
+          <li class="mb-2"><a href="{% url 'login' %}" class="footer-link">Sign In</a></li>
+          <li class="mb-2"><a href="{% url 'register' %}" class="footer-link">Register</a></li>
+          {% endif %}
+          <li class="mb-2"><a href="{% url 'shipping-address' %}" class="footer-link">Shipping Info</a></li>
+          <li class="mb-2"><a href="{% url 'product_reviews' %}" class="footer-link">My Reviews</a></li>
+        </ul>
+      </div>
+
+      <!-- Contact Info -->
+      <div class="col-lg-2 col-md-6 col-6 mb-4">
+        <h5 class="section-heading fw-semibold mb-3">Contact</h5>
+        <div class="contact-info">
+          <div class="contact-item mb-2">
+            <i class="fas fa-map-marker-alt contact-icon me-2"></i>
+            <small class="text-light opacity-75">Dehradun, Uttarakhand, India</small>
+          </div>
+          <div class="contact-item mb-2">
+            <i class="fas fa-envelope contact-icon me-2"></i>
+            <small><a href="mailto:prateek.chaurasia2728@gmail.com" class="footer-link">prateek.chaurasia2728@gmail.com</a></small>
+          </div>
+          <div class="contact-item mb-2">
+            <i class="fas fa-phone contact-icon me-2"></i>
+            <small><a href="#" class="footer-link">+91 7000XXXXXX</a></small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Bottom -->
+    <hr class="border-secondary my-4">
+    <div class="row align-items-center">
+      <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
+        <p class="mb-0 text-light opacity-75">
+          © 2026 <span class="brand-highlight fw-semibold">Shop Easy</span>. All rights reserved.
+        </p>
+      </div>
+      <div class="col-md-6 text-center text-md-end">
+        <div class="footer-links d-inline-flex gap-3">
+          <a href="{% url 'privacy-policy' %}" class="footer-link small">Privacy Policy</a>
+          <a href="{% url 'terms-and-conditions' %}" class="footer-link small">Terms of Service</a>
+          <a href="{% url 'contact' %}" class="footer-link small">Support</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style>
+  /* Unified Color System */
+  :root {
+    --primary-color: #6366f1;
+    --primary-dark: #4f46e5;
+    --accent-color: #fbbf24;
+    --accent-dark: #f59e0b;
+    --text-light: rgba(255, 255, 255, 0.75);
+    --text-white: #ffffff;
+  }
+
+  /* Modern Footer Styles */
+  .footer-brand .brand-title {
+    font-size: 1.75rem;
+    letter-spacing: -0.5px;
+    color: var(--primary-color);
+  }
+
+  .section-heading {
+    color: var(--primary-color);
+  }
+
+  .footer-links {
+    line-height: 1.8;
+  }
+
+  .footer-link {
+    color: var(--text-light);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+  }
+
+  .footer-link:hover {
+    color: var(--accent-color);
+    transform: translateX(3px);
+  }
+
+  .contact-icon {
+    color: var(--primary-color);
+  }
+
+  .brand-highlight {
+    color: var(--primary-color);
+  }
+
+  .social-links {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .social-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary-color);
+    border-radius: 50%;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 1.1rem;
+  }
+
+  .social-link:hover {
+    background: var(--accent-color);
+    color: var(--text-white);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  }
+
+  .contact-item {
+    display: flex;
+    align-items: flex-start;
+    font-size: 0.85rem;
+  }
+
+  .contact-item i {
+    margin-top: 2px;
+    font-size: 0.8rem;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .footer-brand {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .social-links {
+      justify-content: center;
+      margin-top: 1rem;
+    }
+
+    .contact-info {
+      text-align: center;
+    }
+
+    .contact-item {
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+
+    footer .col-6 {
+      margin-bottom: 2rem;
+    }
+
+    .footer-links.d-inline-flex {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+
+  @media (max-width: 576px) {
+    .footer-brand h3 {
+      font-size: 1.5rem;
+    }
+
+    .social-link {
+      width: 36px;
+      height: 36px;
+      font-size: 1rem;
+    }
+
+    .contact-item {
+      font-size: 0.8rem;
+    }
+  }
+</style>
+{% endblock %}
