@@ -1,15 +1,5 @@
 # Shop Easy - One Stop Gifting Solution: A Django eCommerce Website
 
-<div align="center">
-
-[![GitHub issues](https://img.shields.io/github/issues/atulguptag/Django-eCommerce-Website?color=pink&logo=github)](https://github.com/atulguptag/Django-eCommerce-Website/issues)
-![GitHub forks](https://img.shields.io/github/forks/atulguptag/Django-eCommerce-Website?logo=git)
-![GitHub Repo stars](https://img.shields.io/github/stars/atulguptag/Django-eCommerce-Website)
-[![Contributors](https://img.shields.io/github/contributors/atulguptag/Django-eCommerce-Website?style=plastic&?color=2b9348)](https://github.com/atulguptag/Django-eCommerce-Website/contributors)
-[![Access Here](https://img.shields.io/badge/Access-Here-brightgreen?style=plastic)](https://shopeasy.pythonanywhere.com/)
-![GitHub License](https://img.shields.io/github/license/atulguptag/Django-eCommerce-Website?style=plastic&link=https%3A%2F%2Fgithub.com%2Fatulguptag%2FDjango-eCommerce-Website%2Fblob%2Fmain%2FLICENSE)
-
-</div>
 
 **Shop Easy - One Stop Gifting Solution** is a full-fledged eCommerce website built with Django, a high-level Python web framework. It provides a robust, scalable, and user-friendly platform for a seamless online shopping experience. The project includes essential features like user authentication, product browsing, cart management, a secure checkout process with payment integration, and more.
 
@@ -49,8 +39,8 @@ To run this project locally, please follow these steps:
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/atulguptag/Django-eCommerce-Website.git
-    cd Django-eCommerce-Website
+    git clone https://github.com/prateek-chaurasia/ecomm
+    cd ecomm
     ```
 
 2.  **Create a virtual environment:**
