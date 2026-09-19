@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 from decouple import config
 
@@ -24,14 +25,27 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 SECRET_KEY = config("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config("DEBUG")
+DEBUG = config("DEBUG", cast=bool)
+TESTING = 'test' in sys.argv
+IS_PRODUCTION = not DEBUG and not TESTING
 
 # Allowed hosts - read from environment variable (comma-separated values)
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
-# Base URL for the website (used in emails and payment callbacks)
-BASE_URL = config("BASE_URL", default="http://127.0.0.1:8000")
+# Orders are currently delivered only within this city.
+SERVICE_CITY = config("SERVICE_CITY", default="Dehradun")
+
+# Public URL used in customer-facing links. Set this per environment, for example:
+# PUBLIC_BASE_URL=http://localhost:8080
+# PUBLIC_BASE_URL=https://bundleofgifts.com
+PUBLIC_BASE_URL = config(
+    "PUBLIC_BASE_URL",
+    default=config("BASE_URL", default="http://localhost:8080"),
+).rstrip("/")
+
+# Kept for existing payment and account-email integrations.
+BASE_URL = PUBLIC_BASE_URL
 
 
 # Application definition
@@ -45,6 +59,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'axes',  # For account lockout after failed login attempts
 
     # Apps
     'products',
@@ -125,7 +140,34 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'axes.middleware.AxesMiddleware',  # For account lockout after failed login attempts
 ]
+
+# Keep local development convenient while requiring secure transport in production.
+SECURE_SSL_REDIRECT = config(
+    'SECURE_SSL_REDIRECT', default=IS_PRODUCTION, cast=bool)
+SESSION_COOKIE_SECURE = config(
+    'SESSION_COOKIE_SECURE', default=IS_PRODUCTION, cast=bool)
+CSRF_COOKIE_SECURE = config(
+    'CSRF_COOKIE_SECURE', default=IS_PRODUCTION, cast=bool)
+SECURE_HSTS_SECONDS = config(
+    'SECURE_HSTS_SECONDS',
+    default=31536000 if IS_PRODUCTION else 0,
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    default=IS_PRODUCTION,
+    cast=bool,
+)
+SECURE_HSTS_PRELOAD = config(
+    'SECURE_HSTS_PRELOAD',
+    default=IS_PRODUCTION,
+    cast=bool,
+)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+X_FRAME_OPTIONS = 'DENY'
 
 ROOT_URLCONF = 'ecomm.urls'
 
@@ -269,9 +311,17 @@ RAZORPAY_SECRET_KEY = RAZORPAY_KEY_SECRET
 
 # Auth Backends Configurations
 AUTHENTICATION_BACKENDS = (
+    # This should be the first backend in the list to ensure it takes precedence over the default ModelBackend
+    "axes.backends.AxesBackend",
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 )
+
+#AXES configurations
+AXES_FAILURE_LIMIT = 5  # Number of allowed login attempts before lockout
+AXES_LOCK_OUT_AT_FAILURE = False  # use FALSE to disable locking completely on local
+# AXES_LOCK_OUT_AT_FAILURE = True  # Lock the account after reaching the failure limit
+AXES_COOLOFF_TIME = 1  # Lockout period in hours
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"

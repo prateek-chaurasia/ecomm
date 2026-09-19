@@ -33,7 +33,6 @@ class ShippingAddressForm(forms.ModelForm):
         fields = '__all__'
         exclude = ['user', 'current_address']
 
-
 class GuestShippingAddressForm(ShippingAddressForm):
     email = forms.EmailField(required=True, label='Email address')
 

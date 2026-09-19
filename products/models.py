@@ -1,7 +1,7 @@
 from django.db import models
 from base.models import BaseModel
 from django.utils.text import slugify
-from django.utils.html import mark_safe
+from django.utils.html import format_html
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -155,9 +155,17 @@ class Product(BaseModel):
 
 
 class ReturnDetails(BaseModel):
+    RETURN_POLICY_CHOICES = [
+        ('returnable', 'Returnable'),
+        ('replaceable', 'Replaceable'),
+        ('non_returnable', 'Non-Returnable'),
+    ]
+
     product = models.OneToOneField(
         Product, on_delete=models.CASCADE, related_name='return_details')
     is_returnable = models.BooleanField(default=True)
+    return_policy = models.CharField(
+        max_length=20, choices=RETURN_POLICY_CHOICES, default='returnable')
     return_window_days = models.PositiveIntegerField(default=7)
     policy = models.TextField(blank=True)
     conditions = models.TextField(blank=True)
@@ -174,7 +182,7 @@ class ProductImage(BaseModel):
     image_url = models.ImageField(upload_to='products/%Y/%m/%d/', blank=True, null=True)
 
     def img_preview(self):
-        return mark_safe(f'<img src="{self.image_url.url}" width="500"/>')
+        return format_html('<img src="{}" width="500"/>', self.image_url.url)
 
 
 class Coupon(BaseModel):

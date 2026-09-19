@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+  <div style="max-width: 600px; margin: 24px auto; padding: 28px; border: 1px solid #e5e7eb; border-radius: 10px;">
+    <p style="margin-top: 0; color: #2563eb; font-size: 20px; font-weight: 700;">BundleofGifts.com</p>
+    <h2>Your order status has been updated</h2>
+    <p>Hello {{ customer_name }},</p>
+    <p>Your order <strong>{{ order.order_id }}</strong> is now:</p>
+    <p style="display: inline-block; padding: 10px 16px; background: #eff6ff; color: #1d4ed8; border-radius: 6px; font-weight: 700;">{{ status_label }}</p>
+    {% if order.additional_delivery_fee %}<p><strong>Additional delivery fee:</strong> INR {{ order.additional_delivery_fee }}</p>{% endif %}
+    <p><a href="{{ tracking_link }}" style="display: inline-block; padding: 12px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 5px;">Track your order</a></p>
+    <p style="color: #6b7280;">Thank you for shopping with BundleofGifts.com.</p>
+  </div>
+</body>
+</html>

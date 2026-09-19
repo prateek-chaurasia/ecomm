@@ -266,10 +266,12 @@
             {% if product.return_details %}
             <section class="return-details-section mt-4 mb-4">
               <h5 class="mb-2"><i class="fas fa-undo mr-2"></i>Return Details</h5>
-              {% if product.return_details.is_returnable %}
-              <p class="mb-2">This product can be returned within {{ product.return_details.return_window_days }} days of delivery.</p>
+              {% if product.return_details.return_policy == 'returnable' %}
+              <p class="mb-2">Returnable within {{ product.return_details.return_window_days }} days of delivery.</p>
+              {% elif product.return_details.return_policy == 'replaceable' %}
+              <p class="mb-2">Replaceable according to the product policy.</p>
               {% else %}
-              <p class="mb-2">This product is not eligible for return.</p>
+              <p class="mb-2">This product is non-returnable.</p>
               {% endif %}
               {% if product.return_details.policy %}<p class="text-muted mb-2">{{ product.return_details.policy }}</p>{% endif %}
               {% if product.return_details.conditions %}<p class="text-muted mb-0"><strong>Conditions:</strong> {{ product.return_details.conditions }}</p>{% endif %}

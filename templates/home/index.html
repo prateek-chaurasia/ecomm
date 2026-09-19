@@ -1,5 +1,82 @@
-{% extends "base/base.html"%} {% block start %}
+{% extends "base/base.html"%}
+{% block title %}BundleofGifts.com | Curated Gifts for Every Occasion{% endblock %}
+{% block meta_description %}Discover thoughtful gifts, curated gift bundles, and memorable surprises at BundleofGifts.com. Find the right gift for every celebration and occasion.{% endblock %}
+{% block social_meta %}
+<meta property="og:type" content="website">
+<meta property="og:title" content="BundleofGifts.com | Curated Gifts for Every Occasion">
+<meta property="og:description" content="Thoughtful gifts, curated bundles, and memorable surprises for every celebration.">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="BundleofGifts.com | Curated Gifts for Every Occasion">
+<meta name="twitter:description" content="Thoughtful gifts, curated bundles, and memorable surprises for every celebration.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "OnlineStore",
+  "name": "BundleofGifts.com",
+  "url": "{{ request.build_absolute_uri }}",
+  "description": "Thoughtful gifts, curated gift bundles, and memorable surprises for every celebration."
+}
+</script>
+{% endblock %}
+{% block start %}
 <style>
+  .brand-masthead {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 24px 4px 22px;
+  }
+
+  .brand-masthead h1 {
+    margin: 0;
+    color: #0f172a;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
+  .brand-masthead h1 span {
+    color: #2563eb;
+  }
+
+  .brand-masthead p {
+    max-width: 560px;
+    margin: 10px 0 0;
+    color: #64748b;
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  .brand-masthead-link {
+    flex: 0 0 auto;
+    border-radius: 10px;
+    padding: 11px 18px;
+    background: #0f172a;
+    color: #fff;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .brand-masthead-link:hover {
+    background: #2563eb;
+    color: #fff;
+  }
+
+  @media (max-width: 767.98px) {
+    .brand-masthead {
+      display: block;
+      padding-top: 18px;
+    }
+
+    .brand-masthead-link {
+      display: inline-block;
+      margin-top: 16px;
+    }
+  }
+
   .filter-section {
     margin-bottom: 18px;
   }
@@ -159,6 +236,13 @@
   }
 </style>
 <div class="container mt-3 pt-3">
+  <section class="brand-masthead" aria-labelledby="brand-heading">
+    <div>
+      <h1 id="brand-heading">BundleofGifts<span>.com</span></h1>
+      <p>Thoughtful gifts and curated bundles for birthdays, celebrations, and every moment worth remembering.</p>
+    </div>
+    <a class="brand-masthead-link" href="#product-grid">Explore gifts <i class="fas fa-arrow-right ml-2" aria-hidden="true"></i></a>
+  </section>
   {% include 'base/alert.html' %}
   {% if banners %}
   <div id="homeBannerCarousel" class="carousel slide mb-4" data-ride="carousel">

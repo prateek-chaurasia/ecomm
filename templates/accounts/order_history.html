@@ -27,8 +27,8 @@
           <td>{{ order.order_id }}</td>
           <td>{{ order.order_date|date:"F j, Y" }}</td>
           <td>
-            <span class="badge {% if order.payment_status == 'Paid' %}badge-success{% else %}badge-warning{% endif %}">
-              {{ order.payment_status }}
+            <span class="badge badge-info">
+              {{ order.get_status_display }}
             </span>
           </td>
           <td>₹{{ order.grand_total }}</td>

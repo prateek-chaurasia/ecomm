@@ -1,7 +1,7 @@
-# Shop Easy - One Stop Gifting Solution: A Django eCommerce Website
+# BundleofGifts.com - One Stop Gifting Solution: A Django eCommerce Website
 
 
-**Shop Easy - One Stop Gifting Solution** is a full-fledged eCommerce website built with Django, a high-level Python web framework. It provides a robust, scalable, and user-friendly platform for a seamless online shopping experience. The project includes essential features like user authentication, product browsing, cart management, a secure checkout process with payment integration, and more.
+**BundleofGifts.com - One Stop Gifting Solution** is a full-fledged eCommerce website built with Django, a high-level Python web framework. It provides a robust, scalable, and user-friendly platform for a seamless online shopping experience. The project includes essential features like user authentication, product browsing, cart management, a secure checkout process with payment integration, and more.
 
 ## Table of Contents
 
@@ -69,15 +69,26 @@ To run this project locally, please follow these steps:
 5.  **Configure environment variables:**
 
     - Before running migrations, create a `.env` file in the project root. You can use `.env.example` as a template.
-    - Add your `SECRET_KEY` and set `DEBUG=True` in the `.env` file.
-    - Configure `BASE_URL` with your website URL (used for emails and payment callbacks):
+    - For local development, set `DEBUG=True`; local HTTP such as `http://localhost:8080` is allowed. For production, set `DEBUG=False`; production HTTPS hardening is then enabled by default.
+    - Configure `PUBLIC_BASE_URL` with the public website URL used in customer-facing emails and tracking links:
       ```
-      BASE_URL=http://127.0.0.1:8000  # For local development
-      BASE_URL=https://yourdomain.com  # For production
+      PUBLIC_BASE_URL=http://localhost:8080  # For local development
+      PUBLIC_BASE_URL=https://bundleofgifts.com  # For production
       ```
+      `BASE_URL` remains supported as a fallback for existing deployments.
+    - Configure the primary delivery city label. It defaults to Dehradun:
+      ```
+      SERVICE_CITY=Dehradun
+      ```
+      Add active serviceable pincodes in the Django admin under `Accounts > Serviceable pincodes`.
+      Orders with listed pincodes start as accepted; other pincodes start as `Pending review` so the team can review the delivery and return-policy SOP before accepting them.
     - Configure `ALLOWED_HOSTS` with your domain names (comma-separated, no spaces):
       ```
       ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
+      ```
+    - Configure the operations recipients for immediate new-order alerts. Multiple addresses can be comma-separated:
+      ```
+      ADMIN_EMAIL=orders@bundleofgifts.com,warehouse@bundleofgifts.com
       ```
     - To generate a `SECRET_KEY`, run the following in your activated virtual environment:
       ```bash

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+  <div style="max-width: 600px; margin: 24px auto; padding: 28px; border: 1px solid #e5e7eb; border-radius: 10px;">
+    <p style="margin-top: 0; color: #2563eb; font-size: 20px; font-weight: 700;">BundleofGifts.com Operations</p>
+    <h2>New order received</h2>
+    <p><strong>Order ID:</strong> {{ order.order_id }}</p>
+    <p><strong>Customer:</strong> {{ customer_name }}</p>
+    <p><strong>Delivery pincode:</strong> {{ order.delivery_pincode|default:"Not provided" }}</p>
+    <p><strong>Initial status:</strong> {{ order.get_status_display }}</p>
+    {% if order.outside_service_area %}<p><strong>Additional delivery fee:</strong> To be decided during review</p>{% endif %}
+    <p><strong>Items:</strong> {{ item_count }}</p>
+    <p><strong>Total:</strong> INR {{ order.grand_total }}</p>
+    <p><strong>Payment:</strong> {{ order.payment_mode }} ({{ order.payment_status }})</p>
+    <p><a href="{{ admin_order_link }}" style="display: inline-block; padding: 12px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 5px;">Open order in admin</a></p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,55 @@
+{% extends 'base/base.html' %}
+{% block title %}Track Order {{ order.order_id }}{% endblock title %}
+{% block start %}
+<section class="section-content padding-y">
+  <div class="container">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4 p-md-5">
+        <p class="text-muted mb-1">Order {{ order.order_id }}</p>
+        <h1 class="h2 mb-2">Track your delivery</h1>
+        <p class="text-muted">Placed on {{ order.order_date|date:"F j, Y" }}</p>
+
+        {% if order.status == 'pending_review' %}
+        <div class="alert alert-warning">
+          We have received your order. Our team is reviewing delivery availability for pincode
+          <strong>{{ order.delivery_pincode|default:"provided" }}</strong> before accepting it.
+          Delivery and return terms may differ for orders outside our regular service area.
+          {% if order.additional_delivery_fee %} An additional delivery fee of <strong>INR {{ order.additional_delivery_fee }}</strong> applies.{% else %} Any additional delivery fee will be decided during review.{% endif %}
+        </div>
+        {% elif order.status == 'cancelled' %}
+        <div class="alert alert-danger">This order has been cancelled.</div>
+        {% else %}
+        <div class="order-progress my-5">
+          {% for value, label in order.Status.choices %}
+          {% if value != 'cancelled' %}
+          <div class="progress-step {% if forloop.counter0 <= order.status_index %}complete{% endif %} {% if value == order.status %}current{% endif %}">
+            <span class="progress-dot">{% if forloop.counter0 < order.status_index %}<i class="fas fa-check"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
+            <span>{{ label }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <div class="alert alert-light border">Current status: <strong>{{ order.get_status_display }}</strong></div>
+        {% endif %}
+
+        <div class="row mt-4">
+          <div class="col-md-6"><strong>Delivery address</strong><p class="text-muted">{{ order.shipping_address|default:"Not provided" }}</p></div>
+          <div class="col-md-6"><strong>Order total</strong><p class="text-muted">INR {{ order.grand_total }}{% if order.additional_delivery_fee %} + INR {{ order.additional_delivery_fee }} delivery fee{% endif %}</p></div>
+        </div>
+        {% if order.user %}<a href="{% url 'order_details' order.order_id %}" class="btn btn-outline-primary">View full order details</a>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+<style>
+  .order-progress { display: flex; justify-content: space-between; gap: 12px; }
+  .progress-step { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #6c757d; text-align: center; font-size: .9rem; }
+  .progress-step:not(:last-child)::after { content: ''; position: absolute; top: 15px; left: calc(50% + 16px); width: calc(100% - 32px); height: 2px; background: #dee2e6; }
+  .progress-step.complete { color: #198754; font-weight: 600; }
+  .progress-step.complete:not(:last-child)::after { background: #198754; }
+  .progress-dot { z-index: 1; width: 32px; height: 32px; display: grid; place-items: center; border: 2px solid #dee2e6; border-radius: 50%; background: #fff; }
+  .complete .progress-dot { border-color: #198754; background: #198754; color: #fff; }
+  .current .progress-dot { box-shadow: 0 0 0 4px rgba(25, 135, 84, .16); }
+  @media (max-width: 575px) { .order-progress { flex-direction: column; align-items: flex-start; gap: 16px; } .progress-step { flex-direction: row; text-align: left; } .progress-step:not(:last-child)::after { top: 32px; left: 15px; width: 2px; height: 16px; } }
+</style>
+{% endblock %}

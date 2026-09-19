@@ -7,10 +7,12 @@
       <!-- Brand Section -->
       <div class="col-lg-4 col-md-6 mb-4">
         <div class="footer-brand">
-          <h3 class="brand-title fw-bold mb-3">Shop Easy</h3>
-          <p class="text-light opacity-75 mb-4">Your one-stop shop for the latest toys and gift items, electronic toys, and
-            more. We are committed to providing you with the best products and a seamless shopping experience. 
-            We are operational in Dehradun only.</p>
+          <h3 class="brand-title fw-bold mb-3">BundleofGifts.com</h3>
+          <p class="text-light opacity-75 mb-4">Dehradun’s premier destination for premium toys,
+            electronic novelties, and curated gifts. We are dedicated to bringing joy straight to
+            your home with a handpicked collection of high-quality products and a seamless,
+            secure shopping experience. Operating exclusively within Dehradun, we combine
+            top-tier retail with personalized, neighborhood-level service you can rely on.</p>
 
           <!-- Social Media Icons -->
           <div class="social-links">
@@ -31,7 +33,7 @@
       </div>
 
       <!-- Quick Links -->
-      <div class="col-lg-2 col-md-6 col-6 mb-4">
+      <div class="col-lg-2 col-md-6 col-12 mb-4 footer-contact-column">
         <h5 class="section-heading fw-semibold mb-3">Quick Links</h5>
         <ul class="list-unstyled footer-links">
           <li class="mb-2"><a href="{% url 'index' %}" class="footer-link">Home</a></li>
@@ -46,9 +48,9 @@
       <div class="col-lg-2 col-md-6 col-6 mb-4">
         <h5 class="section-heading fw-semibold mb-3">Categories</h5>
         <ul class="list-unstyled footer-links">
-          <li class="mb-2"><a href="#" class="footer-link">Men's Fashion</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Women's Fashion</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Electronics</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Trending Toys</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Occasional Gifts</a></li>
+          <li class="mb-2"><a href="#" class="footer-link">Electronics Toys</a></li>
           <li class="mb-2"><a href="#" class="footer-link">Home & Kitchen</a></li>
           <li class="mb-2"><a href="#" class="footer-link">Sports & Outdoors</a></li>
         </ul>
@@ -94,7 +96,7 @@
     <div class="row align-items-center">
       <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
         <p class="mb-0 text-light opacity-75">
-          © 2026 <span class="brand-highlight fw-semibold">Shop Easy</span>. All rights reserved.
+          © 2026 <span class="brand-highlight fw-semibold">BundleofGifts.com</span>. All rights reserved.
         </p>
       </div>
       <div class="col-md-6 text-center text-md-end">
@@ -184,11 +186,20 @@
     display: flex;
     align-items: flex-start;
     font-size: 0.85rem;
+    min-width: 0;
+    width: 100%;
   }
 
   .contact-item i {
+    flex: 0 0 1rem;
     margin-top: 2px;
     font-size: 0.8rem;
+  }
+
+  .contact-item small,
+  .contact-item .footer-link {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   /* Responsive Design */
@@ -223,6 +234,21 @@
   }
 
   @media (max-width: 576px) {
+    .footer-contact-column {
+      text-align: center;
+    }
+
+    .footer-contact-column .contact-info {
+      display: inline-block;
+      max-width: 100%;
+      width: min(100%, 320px);
+      text-align: left;
+    }
+
+    .footer-contact-column .contact-item {
+      justify-content: flex-start;
+    }
+
     .footer-brand h3 {
       font-size: 1.5rem;
     }

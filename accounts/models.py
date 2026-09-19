@@ -114,11 +114,44 @@ class BundleCartProduct(BaseModel):
         constraints = [models.UniqueConstraint(fields=['bundle_item', 'product'], name='unique_bundle_cart_product')]
 
 
+class ServiceablePincode(BaseModel):
+    pincode = models.CharField(max_length=10, unique=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['pincode']
+
+    def save(self, *args, **kwargs):
+        self.pincode = self.pincode.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.pincode
+
+
 class Order(BaseModel):
+    class Status(models.TextChoices):
+        PENDING_REVIEW = 'pending_review', 'Pending review'
+        ACCEPTED = 'accepted', 'Order accepted'
+        PACKING = 'packing', 'Being packed'
+        DISPATCHED = 'dispatched', 'Dispatched'
+        OUT_FOR_DELIVERY = 'out_for_delivery', 'Out for delivery'
+        DELIVERED = 'delivered', 'Delivered'
+        CANCELLED = 'cancelled', 'Cancelled'
+
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="orders", null=True, blank=True)
     order_id = models.CharField(max_length=100, unique=True)
     guest_access_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    status = models.CharField(
+        max_length=30, choices=Status.choices, default=Status.ACCEPTED)
+    delivery_pincode = models.CharField(max_length=10, blank=True)
+    outside_service_area = models.BooleanField(default=False)
+    additional_delivery_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text='Set this during review for non-serviceable pincodes.',
+    )
     guest_name = models.CharField(max_length=200, blank=True)
     guest_email = models.EmailField(blank=True)
     order_date = models.DateTimeField(auto_now_add=True)
@@ -136,6 +169,17 @@ class Order(BaseModel):
 
     def get_order_total_price(self):
         return self.order_total_price
+
+    @property
+    def status_index(self):
+        statuses = [
+            self.Status.ACCEPTED,
+            self.Status.PACKING,
+            self.Status.DISPATCHED,
+            self.Status.OUT_FOR_DELIVERY,
+            self.Status.DELIVERED,
+        ]
+        return statuses.index(self.status) if self.status in statuses else -1
 
 
 class OrderItem(BaseModel):

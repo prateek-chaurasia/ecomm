@@ -3,6 +3,7 @@ import json
 import uuid
 import hmac
 import logging
+import hashlib
 from urllib.parse import urlencode
 import razorpay
 from weasyprint import CSS, HTML
@@ -16,10 +17,10 @@ from django.contrib.auth.models import User
 from django.template.loader import get_template
 from accounts.models import (
     Profile, Cart, CartItem, Order, OrderItem, BundleCartItem,
-    BundleOrderItem, BundleOrderProduct,
+    BundleOrderItem, BundleOrderProduct, ServiceablePincode,
 )
 from base.emails import send_account_activation_email
-from base.emails import send_order_confirmation_email
+from base.emails import send_order_confirmation_email, send_admin_new_order_email
 from django.views.decorators.http import require_POST
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -27,7 +28,9 @@ from django.db import transaction
 from django.db.models import F
 from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib.auth import authenticate, login, logout
+from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils import timezone
 from django.shortcuts import redirect, render, get_object_or_404
 from accounts.forms import (
     UserUpdateForm, UserProfileForm, ShippingAddressForm,
@@ -36,37 +39,57 @@ from accounts.forms import (
 
 logger = logging.getLogger(__name__)
 
+LOGIN_FAILURE_LIMIT = 5
+LOGIN_THROTTLE_SECONDS = 15 * 60
+
+
+def generate_order_id():
+    return f'BOG-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
+
+
 # Create your views here.
 
 
 def login_page(request):
-    # Get the next URL from the query parameter
     next_url = request.GET.get('next')
     if request.method == 'POST':
-        username = request.POST.get('username')
+        username = (request.POST.get('username') or '').strip()
         password = request.POST.get('password')
-        user_obj = User.objects.filter(username=username)
+        client_ip = request.META.get('REMOTE_ADDR', 'unknown')
+        throttle_digest = hashlib.sha256(
+            f'{client_ip}:{username.casefold()}'.encode()
+        ).hexdigest()
+        failure_key = f'login-failures:{throttle_digest}'
+        lock_key = f'login-lock:{throttle_digest}'
 
-        if not user_obj.exists():
-            messages.warning(request, 'Account not found!')
+        if cache.get(lock_key):
+            messages.warning(
+                request,
+                'Too many unsuccessful attempts. Please try again later.',
+            )
             return HttpResponseRedirect(request.path_info)
 
-        if not user_obj[0].profile.is_email_verified:
-            messages.error(request, 'Account not verified!')
-            return HttpResponseRedirect(request.path_info)
-
-        user_obj = authenticate(username=username, password=password)
-        if user_obj:
+        user_obj = authenticate(request, username=username, password=password)
+        if user_obj and getattr(user_obj.profile, 'is_email_verified', False):
+            cache.delete(failure_key)
+            cache.delete(lock_key)
             login(request, user_obj)
             messages.success(request, 'Login Successfull.')
 
-            # Check if the next URL is safe
-            if url_has_allowed_host_and_scheme(url=next_url, allowed_hosts=request.get_host()):
+            if url_has_allowed_host_and_scheme(
+                url=next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
                 return redirect(next_url)
             else:
                 return redirect('index')
 
-        messages.warning(request, 'Invalid credentials.')
+        failures = cache.get(failure_key, 0) + 1
+        cache.set(failure_key, failures, LOGIN_THROTTLE_SECONDS)
+        if failures >= LOGIN_FAILURE_LIMIT:
+            cache.set(lock_key, True, LOGIN_THROTTLE_SECONDS)
+        messages.warning(request, 'Invalid username or password.')
         return HttpResponseRedirect(request.path_info)
 
     return render(request, 'accounts/login.html')
@@ -396,6 +419,10 @@ def verify_payment(request):
         send_order_confirmation_email(order)
     except Exception as error:
         logger.exception("Order email failed for order %s", order.order_id)
+    try:
+        send_admin_new_order_email(order)
+    except Exception:
+        logger.exception("Admin order notification failed for order %s", order.order_id)
     return JsonResponse({
         'success': True,
         'redirect_url': f'{reverse("success")}?order_id={order.order_id}',
@@ -457,7 +484,7 @@ def place_cod_order(request):
     try:
         order = create_order(
             cart_obj,
-            order_id=f'COD-{uuid.uuid4().hex[:20].upper()}',
+            order_id=generate_order_id(),
             payment_status='Pending',
             payment_mode='Cash on Delivery',
             shipping_address=shipping_address,
@@ -470,6 +497,10 @@ def place_cod_order(request):
         send_order_confirmation_email(order)
     except Exception as error:
         logger.exception("Order email failed for order %s", order.order_id)
+    try:
+        send_admin_new_order_email(order)
+    except Exception:
+        logger.exception("Admin order notification failed for order %s", order.order_id)
 
     return JsonResponse({
         'success': True,
@@ -495,12 +526,14 @@ def guest_checkout(request):
         form = GuestShippingAddressForm(request.POST)
         if form.is_valid():
             try:
+                guest_address = form.save(commit=False)
                 order = create_order(
                     cart_obj,
-                    order_id=f'COD-{uuid.uuid4().hex[:20].upper()}',
+                    order_id=generate_order_id(),
                     payment_status='Pending',
                     payment_mode='Cash on Delivery',
-                    shipping_address=str(form.save(commit=False)),
+                    shipping_address=guest_address,
+                    delivery_pincode=guest_address.zip_code,
                     guest_access_token=uuid.uuid4().hex,
                     guest_name=f'{form.cleaned_data["first_name"]} {form.cleaned_data["last_name"]}'.strip(),
                     guest_email=form.cleaned_data['email'],
@@ -515,6 +548,10 @@ def guest_checkout(request):
                 send_order_confirmation_email(order)
             except Exception as error:
                 logger.exception("Guest order email failed for order %s", order.order_id)
+            try:
+                send_admin_new_order_email(order)
+            except Exception:
+                logger.exception("Admin order notification failed for order %s", order.order_id)
             request.session.flush()
             return redirect(
                 f'{reverse("success")}?order_id={order.order_id}'
@@ -758,10 +795,20 @@ def order_history(request):
     return render(request, 'accounts/order_history.html', {'orders': orders})
 
 
+def track_order(request, order_id, access_token):
+    order = get_object_or_404(
+        Order.objects.prefetch_related('order_items__product', 'bundle_items'),
+        order_id=order_id,
+        guest_access_token=access_token,
+    )
+    return render(request, 'accounts/order_tracking.html', {'order': order})
+
+
 # Create an order view
 def create_order(
     cart, order_id=None, payment_status='Paid', payment_mode='Razorpay',
-    shipping_address=None, guest_access_token=None, guest_name='', guest_email='',
+    shipping_address=None, delivery_pincode='', guest_access_token=None,
+    guest_name='', guest_email='',
 ):
     with transaction.atomic():
         cart_items = list(CartItem.objects.select_related(
@@ -789,12 +836,23 @@ def create_order(
         selected_address = shipping_address or (
             getattr(cart.user.profile, 'shipping_address', None) if cart.user else None
         )
+        delivery_pincode = (
+            delivery_pincode or getattr(selected_address, 'zip_code', '')
+        ).strip()
+        is_serviceable = ServiceablePincode.objects.filter(
+            pincode=delivery_pincode, is_active=True).exists()
         order, created = Order.objects.get_or_create(
             user=cart.user,
-            order_id=order_id or cart.razorpay_order_id,
-            guest_access_token=guest_access_token,
+            order_id=order_id or generate_order_id(),
+            guest_access_token=guest_access_token or uuid.uuid4().hex,
             guest_name=guest_name,
             guest_email=guest_email,
+            status=(
+                Order.Status.ACCEPTED
+                if is_serviceable else Order.Status.PENDING_REVIEW
+            ),
+            delivery_pincode=delivery_pincode,
+            outside_service_area=not is_serviceable,
             payment_status=payment_status,
             shipping_address=str(selected_address) if selected_address else '',
             payment_mode=payment_mode,
@@ -845,6 +903,9 @@ def create_order(
 @login_required
 def order_details(request, order_id):
     order = get_object_or_404(Order, order_id=order_id, user=request.user)
+    if not order.guest_access_token:
+        order.guest_access_token = uuid.uuid4().hex
+        order.save(update_fields=['guest_access_token', 'updated_at'])
     order_items = OrderItem.objects.filter(order=order)
     bundle_items = order.bundle_items.prefetch_related('selected_products__product')
     context = {

@@ -28,6 +28,12 @@
   <p><strong>Total:</strong> INR {{ order.grand_total }}</p>
   <p><strong>Payment mode:</strong> {{ order.payment_mode }}</p>
   <p><strong>Shipping address:</strong> {{ order.shipping_address }}</p>
+  {% if order.status == 'pending_review' %}
+  <p style="padding: 12px; background: #fff3cd;">We have received your order. Our team is reviewing delivery availability for your pincode before accepting it. Delivery and return terms may differ for orders outside our regular service area.</p>
+  {% endif %}
+  <p><a href="{{ tracking_link }}" style="display: inline-block; padding: 12px 20px; background: #0d6efd; color: #fff; text-decoration: none; border-radius: 4px;">Track your order</a></p>
+  <p>You can use this link to check delivery progress at any time.</p>
+  {% if order.status == 'pending_review' %}<p>Any additional delivery fee will be decided by our team during review and shared with you before acceptance.</p>{% endif %}
   {% if order.payment_mode == 'Cash on Delivery' %}
   <p>Please pay when your order is delivered.</p>
   {% endif %}

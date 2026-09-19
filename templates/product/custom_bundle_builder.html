@@ -363,9 +363,24 @@
       const selected = checks.filter((check) => check.checked);
       count.textContent = selected.length;
       submit.disabled = selected.length < 1 || selected.length > maxProducts;
-      summary.innerHTML = selected.length ? selected.map((check) => `
-        <div class="bundle-summary-item"><span>${check.dataset.productName}</span><span>₹${check.dataset.productPrice}</span></div>
-      `).join('') : '<div class="bundle-summary-empty">Nothing selected yet</div>';
+      summary.replaceChildren();
+      if (selected.length) {
+        selected.forEach((check) => {
+          const row = document.createElement('div');
+          row.className = 'bundle-summary-item';
+          const name = document.createElement('span');
+          name.textContent = check.dataset.productName;
+          const price = document.createElement('span');
+          price.textContent = `₹${check.dataset.productPrice}`;
+          row.append(name, price);
+          summary.appendChild(row);
+        });
+      } else {
+        const empty = document.createElement('div');
+        empty.className = 'bundle-summary-empty';
+        empty.textContent = 'Nothing selected yet';
+        summary.appendChild(empty);
+      }
       const unitTotal = selected.reduce((sum, check) => sum + Number(check.dataset.productPrice), 0);
       total.textContent = unitTotal * Math.max(1, Number(quantity.value) || 1);
       selected.forEach((check) => check.closest('[data-product-card]').classList.add('is-selected'));

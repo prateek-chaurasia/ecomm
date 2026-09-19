@@ -64,14 +64,14 @@
   <section class="header-main border-bottom">
     <div class="container">
       <div class="row align-items-center">
-        <div class="col-lg-2 col-4">
+        <div class="col-lg-3 col-4">
           <div class="brand-wrap">
             <a href="{% url 'index' %}" class="brand-link" style="text-decoration: none;">
-              <h2 class="logo-text">Shop Easy</h2>
+              <h2 class="logo-text">BundleofGifts</h2>
             </a>
           </div>
         </div>
-        <div class="col-lg-6 col-sm-12">
+        <div class="col-lg-5 col-sm-12">
           <form method="GET" action="{% url 'product_search' %}" class="search" id="globalSearchForm">
             <div class="input-group w-100" style="position: relative;">
               <input type="text" class="form-control" name="q" id="globalSearchInput" placeholder="Search products" value="{{ query|default:"" }}" autocomplete="off" />
@@ -166,9 +166,15 @@
         return;
       }
 
-      suggestionsBox.innerHTML = items.map((item) => `
-        <button type="button" class="list-group-item list-group-item-action" data-value="${item}">${item}</button>
-      `).join('');
+      suggestionsBox.replaceChildren();
+      items.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action';
+        button.dataset.value = item;
+        button.textContent = item;
+        suggestionsBox.appendChild(button);
+      });
 
       suggestionsBox.style.display = 'block';
 
@@ -219,9 +225,20 @@
   .brand-link .logo-text {
     color: var(--primary-color);
     font-weight: 800;
-    font-size: 1.75rem;
+    font-size: 1.6rem;
     margin: 0;
+    white-space: nowrap;
     transition: all 0.3s ease;
+  }
+
+  .brand-wrap {
+    min-width: 0;
+  }
+
+  .brand-link .logo-domain {
+    color: var(--accent-dark);
+    font-size: 0.72em;
+    font-weight: 700;
   }
 
   .brand-link:hover .logo-text {
@@ -302,7 +319,7 @@
   /* Responsive adjustments */
   @media (max-width: 768px) {
     .brand-link .logo-text {
-      font-size: 1.5rem;
+      font-size: 1.35rem;
     }
   }
 </style>

@@ -1,17 +1,22 @@
 import json
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.core import mail
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from accounts.models import Cart, CartItem, Order
+from accounts.models import Cart, CartItem, Order, ServiceablePincode
+from accounts.forms import GuestShippingAddressForm
 from accounts.views import create_order
+from base.emails import send_admin_new_order_email
 from home.models import ShippingAddress
 from products.models import Category, Product
 
 
 class UserShippingAddressTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user(
             username='alice',
             email='alice@example.com',
@@ -28,6 +33,26 @@ class UserShippingAddressTests(TestCase):
         self.cart = Cart.objects.create(user=self.user)
         CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
 
+    def test_login_throttles_repeated_invalid_credentials(self):
+        self.user.profile.is_email_verified = True
+        self.user.profile.save(update_fields=['is_email_verified', 'updated_at'])
+
+        for _ in range(5):
+            response = self.client.post(reverse('login'), {
+                'username': 'alice',
+                'password': 'wrong-password',
+            })
+            self.assertEqual(response.status_code, 302)
+
+        response = self.client.post(reverse('login'), {
+            'username': 'alice',
+            'password': 'secret123',
+        }, follow=True)
+        self.assertContains(
+            response,
+            'Too many unsuccessful attempts',
+        )
+
     def test_user_can_save_multiple_addresses_and_set_default(self):
         self.client.force_login(self.user)
 
@@ -37,7 +62,7 @@ class UserShippingAddressTests(TestCase):
             'street': 'Main Street',
             'street_number': '12',
             'zip_code': '110001',
-            'city': 'New Delhi',
+            'city': 'Dehradun',
             'country': 'IN',
             'phone': '9999999999',
             'is_default': 'on',
@@ -56,7 +81,7 @@ class UserShippingAddressTests(TestCase):
             'street': 'Market Road',
             'street_number': '43',
             'zip_code': '110002',
-            'city': 'Mumbai',
+            'city': 'Dehradun',
             'country': 'IN',
             'phone': '8888888888',
             'is_default': 'on',
@@ -81,7 +106,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='New Delhi',
+            city='Dehradun',
             country='IN',
             phone='9999999999',
             is_default=True,
@@ -94,7 +119,7 @@ class UserShippingAddressTests(TestCase):
             street='Park Lane',
             street_number='7',
             zip_code='110002',
-            city='Mumbai',
+            city='Dehradun',
             country='IN',
             phone='8888888888',
             is_default=False,
@@ -129,7 +154,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='New Delhi',
+            city='Dehradun',
             country='IN',
             phone='9999999999',
             is_default=True,
@@ -142,7 +167,7 @@ class UserShippingAddressTests(TestCase):
             street='Park Lane',
             street_number='7',
             zip_code='110002',
-            city='Mumbai',
+            city='Dehradun',
             country='IN',
             phone='8888888888',
             is_default=False,
@@ -201,3 +226,134 @@ class UserShippingAddressTests(TestCase):
                 payment_mode='Cash on Delivery',
             )
         self.assertFalse(Order.objects.filter(order_id='ORDER-STOCK-2').exists())
+
+    def test_guest_address_outside_service_city_can_enter_review(self):
+        form = GuestShippingAddressForm(data={
+            'first_name': 'Alice',
+            'last_name': 'Smith',
+            'street': 'Main Street',
+            'street_number': '12',
+            'zip_code': '110001',
+            'city': 'New Delhi',
+            'country': 'IN',
+            'phone': '9999999999',
+            'email': 'alice@example.com',
+        })
+
+        self.assertTrue(form.is_valid())
+
+    def test_unlisted_pincode_starts_order_in_pending_review(self):
+        outside_address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Alice',
+            last_name='Smith',
+            street='Main Street',
+            street_number='12',
+            zip_code='110001',
+            city='New Delhi',
+            country='IN',
+            phone='9999999999',
+        )
+
+        order = create_order(
+            self.cart,
+            order_id='ORDER-OUTSIDE-CITY',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            shipping_address=outside_address,
+        )
+
+        self.assertEqual(order.status, Order.Status.PENDING_REVIEW)
+        self.assertTrue(order.outside_service_area)
+        self.assertEqual(order.delivery_pincode, '110001')
+
+    def test_listed_pincode_starts_order_as_accepted(self):
+        ServiceablePincode.objects.create(pincode='248001')
+        address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Alice',
+            last_name='Smith',
+            street='Main Street',
+            street_number='12',
+            zip_code='248001',
+            city='Dehradun',
+            country='IN',
+            phone='9999999999',
+        )
+
+        order = create_order(
+            self.cart,
+            order_id='ORDER-SERVICEABLE',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            shipping_address=address,
+        )
+
+        self.assertEqual(order.status, Order.Status.ACCEPTED)
+        self.assertFalse(order.outside_service_area)
+
+    def test_order_tracking_requires_matching_access_token(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-TRACK-1',
+            guest_access_token='tracking-token-123',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=800,
+            grand_total=800,
+        )
+
+        response = self.client.get(reverse('track_order', args=[
+            order.order_id, order.guest_access_token,
+        ]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Order accepted')
+
+        response = self.client.get(reverse('track_order', args=[
+            order.order_id, 'wrong-token',
+        ]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_order_status_change_emails_customer_once(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-STATUS-1',
+            guest_access_token='status-token-123',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=800,
+            grand_total=800,
+        )
+        self.assertEqual(len(mail.outbox), 0)
+
+        order.status = Order.Status.DISPATCHED
+        order.save(update_fields=['status', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('Dispatched', mail.outbox[0].body)
+        self.assertIn('ORDER-STATUS-1', mail.outbox[0].subject)
+        self.assertIn('status-token-123', mail.outbox[0].body)
+
+        order.save(update_fields=['status', 'updated_at'])
+        self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(ADMIN_EMAIL='ops@example.com, warehouse@example.com')
+    def test_new_order_notification_reaches_admin_team(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='BOG-20260919-ABC123',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=800,
+            grand_total=800,
+        )
+
+        send_admin_new_order_email(order)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            mail.outbox[0].to,
+            ['ops@example.com', 'warehouse@example.com'],
+        )
+        self.assertIn('BOG-20260919-ABC123', mail.outbox[0].subject)
+        self.assertIn('/admin/accounts/order/', mail.outbox[0].body)
