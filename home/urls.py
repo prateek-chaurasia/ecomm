@@ -8,4 +8,5 @@ urlpatterns = [
     path('about/', about, name='about'),
     path('terms-and-conditions/', terms_and_conditions, name='terms-and-conditions'),
     path('privacy-policy/', privacy_policy, name='privacy-policy'),
+    path('webhook/whatsapp/', whatsapp_webhook, name='whatsapp_webhook'),
 ]

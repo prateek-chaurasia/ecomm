@@ -1,17 +1,22 @@
+import json
 import logging
+from decouple import config
 
 from django.db.models import Q, Avg
 from django.db.models.functions import Coalesce
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.conf import settings
 from products.models import Product, Category, Tag
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from home.models import HomeBanner
 
 logger = logging.getLogger(__name__)
 
+VERIFY_TOKEN = config("WHATSAPP_VERIFY_TOKEN")
 
 def _product_search_queryset(search_term):
     term = (search_term or '').strip()
@@ -145,3 +150,75 @@ def terms_and_conditions(request):
 
 def privacy_policy(request):
     return render(request, 'home/privacy_policy.html')
+
+
+@csrf_exempt
+def whatsapp_webhook(request):
+    # 1. Verification Handshake (GET Request)
+    if request.method == "GET":
+        mode = request.GET.get("hub.mode")
+        token = request.GET.get("hub.verify_token")
+        challenge = request.GET.get("hub.challenge")
+
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            logger.info("Webhook verified successfully!")
+            return HttpResponse(challenge, status=200)
+        else:
+            logger.warning("Webhook verification failed. Token mismatch.")
+            return HttpResponse("Forbidden", status=403)
+
+    # 2. Receiving Webhook Data (POST Request)
+    elif request.method == "POST":
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+
+            # Print payload or pass it to an asynchronous task queue (like Celery)
+            logger.info(f"Incoming WhatsApp payload: {payload}")
+
+            # Safe navigation to extract the actual message array
+            # Note: Meta can send statuses (sent, delivered, read) or actual messages
+            entry = payload.get("entry", [])[0]
+            changes = entry.get("changes", [])[0]
+            value = changes.get("value", {})
+
+            if "messages" in value:
+                message_data = value["messages"][0]
+                sender_phone = message_data.get("from")
+                message_text = message_data.get("text", {}).get("body")
+
+                print(f"Received message from {sender_phone}: {message_text}")
+                # TODO: Process the business logic / generate a response here
+
+            # Meta requires a rapid 200 OK response to prevent event retries
+            return HttpResponse("EVENT_RECEIVED", status=200)
+
+        except (IndexError, KeyError, json.JSONDecodeError) as e:
+            logger.error(f"Error parsing payload: {str(e)}")
+            # Still return 200 to prevent Meta from retrying broken payloads repeatedly
+            return HttpResponse("Payload processed with errors", status=200)
+
+    # Catch-all for unsupported methods
+    return HttpResponse("Method Not Allowed", status=405)
+
+
+def send_whatsapp_message(phone_number, message_text):
+    import requests
+
+    headers = {
+        "Authorization": f"Bearer {settings.WHATSAPP_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": phone_number,
+        "type": "text",
+        "text": {"body": message_text},
+    }
+
+    response = requests.post(settings.WHATSAPP_URL, headers=headers, json=payload)
+    if response.status_code == 200:
+        logger.info(f"Message sent successfully to {phone_number}")
+    else:
+        logger.error(f"Failed to send message to {phone_number}: {response.text}")

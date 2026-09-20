@@ -33,6 +33,11 @@ IS_PRODUCTION = not DEBUG and not TESTING
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
+# Allowed hosts for production environment
+if IS_PRODUCTION:
+    ALLOWED_HOSTS = config(
+        "ALLOWED_HOSTS", default="bundleofgifts.com,www.bundleofgifts.com,187.127.180.137").split(",")
+
 # Orders are currently delivered only within this city.
 SERVICE_CITY = config("SERVICE_CITY", default="Dehradun")
 
@@ -317,14 +322,34 @@ AUTHENTICATION_BACKENDS = (
     "allauth.account.auth_backends.AuthenticationBackend",
 )
 
-#AXES configurations
+# #AXES configurations for local
 AXES_FAILURE_LIMIT = 3  # Number of allowed login attempts before lockout
 # AXES_LOCK_OUT_AT_FAILURE = False  # use FALSE to disable locking completely on local
 AXES_LOCK_OUT_AT_FAILURE = True  # Lock the account after reaching the failure limit
-AXES_COOLOFF_TIME = 1  # Lockout period in hours
+AXES_COOLOFF_TIME = 1 # Lockout period in hours
 AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
 AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
 AXES_LOCKOUT_TEMPLATE = 'accounts/lockout.html'
+
+
+#AXES configurations for PROD
+if IS_PRODUCTION:
+    AXES_FAILURE_LIMIT = 3  # Number of allowed login attempts before lockout
+    AXES_LOCK_OUT_AT_FAILURE = True  # Lock the account after reaching the failure limit
+    AXES_COOLOFF_TIME = 1  # Lockout period in hours
+    AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
+    AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True
+    AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
+    AXES_LOCKOUT_TEMPLATE = 'accounts/lockout.html'
+    # The number of reverse proxies in front of your Django app (e.g., 1 for Nginx)
+    AXES_IPWARE_PROXY_COUNT = 1
+    # The header order to look for the real client IP address
+    AXES_IPWARE_META_PRECEDENCE_ORDER = [
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_X_REAL_IP',
+        'REMOTE_ADDR',
+    ]
+
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
@@ -336,3 +361,10 @@ SOCIALACCOUNT_LOGIN_ON_GET = True
 
 DEFAULT_DOMAIN = '127.0.0.1:8000'
 DEFAULT_HTTP_PROTOCOL = 'http'
+
+# Load variables from environment or a package like python-decouple
+WHATSAPP_PHONE_NUMBER_ID = config("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_API_TOKEN = config("WHATSAPP_API_TOKEN")
+WHATSAPP_API_VERSION = "v25.0"
+WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+WHATSAPP_TOKEN = f"Bearer {config('WHATSAPP_API_TOKEN')}"
