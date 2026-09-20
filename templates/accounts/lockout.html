@@ -1,0 +1,14 @@
+{% extends "base/base.html" %}
+{% block title %}Account Temporarily Locked{% endblock %}
+{% block start %}
+<section class="section-content padding-y">
+  <div class="container">
+    <div class="alert alert-danger text-center" role="alert">
+      Too many unsuccessful attempts. Please try again later.
+    </div>
+    <div class="text-center">
+      <a href="{% url 'login' %}" class="btn btn-primary">Return to login</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

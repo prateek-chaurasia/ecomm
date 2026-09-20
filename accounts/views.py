@@ -3,7 +3,6 @@ import json
 import uuid
 import hmac
 import logging
-import hashlib
 from urllib.parse import urlencode
 import razorpay
 from weasyprint import CSS, HTML
@@ -28,7 +27,6 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib.auth import authenticate, login, logout
-from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.shortcuts import redirect, render, get_object_or_404
@@ -38,10 +36,6 @@ from accounts.forms import (
 )
 
 logger = logging.getLogger(__name__)
-
-LOGIN_FAILURE_LIMIT = 5
-LOGIN_THROTTLE_SECONDS = 15 * 60
-
 
 def generate_order_id():
     return f'BOG-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
@@ -55,24 +49,9 @@ def login_page(request):
     if request.method == 'POST':
         username = (request.POST.get('username') or '').strip()
         password = request.POST.get('password')
-        client_ip = request.META.get('REMOTE_ADDR', 'unknown')
-        throttle_digest = hashlib.sha256(
-            f'{client_ip}:{username.casefold()}'.encode()
-        ).hexdigest()
-        failure_key = f'login-failures:{throttle_digest}'
-        lock_key = f'login-lock:{throttle_digest}'
-
-        if cache.get(lock_key):
-            messages.warning(
-                request,
-                'Too many unsuccessful attempts. Please try again later.',
-            )
-            return HttpResponseRedirect(request.path_info)
 
         user_obj = authenticate(request, username=username, password=password)
         if user_obj and getattr(user_obj.profile, 'is_email_verified', False):
-            cache.delete(failure_key)
-            cache.delete(lock_key)
             login(request, user_obj)
             messages.success(request, 'Login Successfull.')
 
@@ -85,11 +64,7 @@ def login_page(request):
             else:
                 return redirect('index')
 
-        failures = cache.get(failure_key, 0) + 1
-        cache.set(failure_key, failures, LOGIN_THROTTLE_SECONDS)
-        if failures >= LOGIN_FAILURE_LIMIT:
-            cache.set(lock_key, True, LOGIN_THROTTLE_SECONDS)
-        messages.warning(request, 'Invalid username or password.')
+        messages.error(request, 'Invalid username or password.')
         return HttpResponseRedirect(request.path_info)
 
     return render(request, 'accounts/login.html')
@@ -221,7 +196,7 @@ def add_to_cart(request, uid):
 
     except Exception as e:
         logger.exception("Add to cart failed for product %s", uid)
-        messages.error(request, 'Error adding item to cart.', str(e))
+        messages.error(request, 'Error adding item to cart.')
 
     return redirect(reverse('cart'))
 
@@ -240,19 +215,19 @@ def cart(request):
         coupon_obj = Coupon.objects.filter(coupon_code__exact=coupon).first()
 
         if not coupon_obj:
-            messages.warning(request, 'Invalid coupon code.')
+            messages.error(request, 'Invalid coupon code.')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if cart_obj and cart_obj.coupon:
-            messages.warning(request, 'Coupon already exists.')
+            messages.error(request, 'Coupon already exists.')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if coupon_obj and coupon_obj.is_expired:
-            messages.warning(request, 'Coupon code expired.')
+            messages.error(request, 'Coupon code expired.')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if cart_obj and coupon_obj and cart_obj.get_cart_total() < coupon_obj.minimum_amount:
-            messages.warning(
+            messages.error(
                 request, f'Amount should be greater than {coupon_obj.minimum_amount}')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
@@ -596,7 +571,7 @@ def remove_cart(request, uid):
 
     except Exception as e:
         logger.exception("Cart item removal failed for item %s", uid)
-        messages.warning(request, 'Error removing item from cart.')
+        messages.error(request, 'Error removing item from cart.')
 
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
@@ -712,7 +687,7 @@ def change_password(request):
                 request, 'Your password was successfully updated!')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
         else:
-            messages.warning(request, 'Please correct the error below.')
+            messages.error(request, 'Please correct the error below.')
     else:
         form = CustomPasswordChangeForm(request.user)
     return render(request, 'accounts/change_password.html', {'form': form})

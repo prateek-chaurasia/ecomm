@@ -318,10 +318,13 @@ AUTHENTICATION_BACKENDS = (
 )
 
 #AXES configurations
-AXES_FAILURE_LIMIT = 5  # Number of allowed login attempts before lockout
-AXES_LOCK_OUT_AT_FAILURE = False  # use FALSE to disable locking completely on local
-# AXES_LOCK_OUT_AT_FAILURE = True  # Lock the account after reaching the failure limit
+AXES_FAILURE_LIMIT = 3  # Number of allowed login attempts before lockout
+# AXES_LOCK_OUT_AT_FAILURE = False  # use FALSE to disable locking completely on local
+AXES_LOCK_OUT_AT_FAILURE = True  # Lock the account after reaching the failure limit
 AXES_COOLOFF_TIME = 1  # Lockout period in hours
+AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
+AXES_RESET_COOL_OFF_ON_FAILURE_DURING_LOCKOUT = False
+AXES_LOCKOUT_TEMPLATE = 'accounts/lockout.html'
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"

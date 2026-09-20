@@ -80,20 +80,24 @@ class UserShippingAddressTests(TestCase):
         self.user.profile.is_email_verified = True
         self.user.profile.save(update_fields=['is_email_verified', 'updated_at'])
 
-        for _ in range(5):
+        for attempt in range(3):
             response = self.client.post(reverse('login'), {
                 'username': 'alice',
                 'password': 'wrong-password',
             })
-            self.assertEqual(response.status_code, 302)
+            expected_status = 429 if attempt == 2 else 302
+            self.assertEqual(response.status_code, expected_status)
 
         response = self.client.post(reverse('login'), {
             'username': 'alice',
             'password': 'secret123',
-        }, follow=True)
+        })
+        self.assertEqual(response.status_code, 429)
+        self.assertContains(response, 'alert-danger', status_code=429)
         self.assertContains(
             response,
             'Too many unsuccessful attempts',
+            status_code=429,
         )
 
     def test_user_can_save_multiple_addresses_and_set_default(self):
