@@ -70,7 +70,7 @@
                         Color: N/A<br />
                         {% endif %}
 
-                        Brand: Nike
+                        <!-- Brand: Nike -->
                         {% if cart_item.gift_wrap %}<br /><span class="text-success"><i class="fas fa-gift mr-1"></i>Gift wrapped (+₹{{ cart_item.product.gift_wrap_price }} per item)</span>{% endif %}
                       </p>
                     </figcaption>
@@ -132,13 +132,16 @@
               {% endfor %}
             </select>
           </div>
+          <p class="text-center mb-0 pb-3">
+            <a href="{% url 'shipping-address' %}" class="text-decoration-underline">Add delivery address</a>
+          </p>
         </div>
         {% endif %}
 
         <div class="alert delivery-alert mt-3">
           <p class="icontext">
             <i class="icon delivery-icon fa fa-truck"></i> Free Delivery within
-            1-2 weeks
+              4-5 hours.
           </p>
         </div>
       </main>
@@ -424,6 +427,36 @@
   }
 
   @media (max-width: 575px) {
+    .table-shopping-cart,
+    .table-shopping-cart tbody,
+    .table-shopping-cart tr,
+    .table-shopping-cart td {
+      display: block;
+      width: 100% !important;
+    }
+
+    .table-shopping-cart thead {
+      display: none;
+    }
+
+    .table-shopping-cart tr {
+      border-bottom: 1px solid #dee2e6;
+      padding: 1rem 0;
+    }
+
+    .table-shopping-cart td {
+      padding: 0.35rem 0;
+      text-align: left !important;
+    }
+
+    .table-shopping-cart td:last-child {
+      padding-top: 0.75rem;
+    }
+
+    .cart-remove-btn {
+      white-space: nowrap;
+    }
+
     .checkout-actions {
       float: none;
       display: grid;

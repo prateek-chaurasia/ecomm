@@ -25,7 +25,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.core.cache import cache
@@ -103,10 +103,10 @@ def register_page(request):
         email = request.POST.get('email')
         password = request.POST.get('password')
 
-        user_obj = User.objects.filter(username=username, email=email)
+        user_obj = User.objects.filter(Q(username=username) | Q(email=email))
 
         if user_obj.exists():
-            messages.info(request, 'Username or email already exists!')
+            messages.error(request, 'Username or email already exists!')
             return HttpResponseRedirect(request.path_info)
 
         user_obj = User.objects.create(

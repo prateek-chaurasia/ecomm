@@ -14,6 +14,49 @@ from home.models import ShippingAddress
 from products.models import Category, Product
 
 
+class RegistrationTests(TestCase):
+    def register(self, username, email):
+        return self.client.post(
+            reverse('register'),
+            {
+                'username': username,
+                'first_name': 'Test',
+                'last_name': 'User',
+                'email': email,
+                'password': 'secret123',
+            },
+            follow=True,
+        )
+
+    def test_existing_username_does_not_send_verification_email(self):
+        User.objects.create_user(
+            username='existing-user',
+            email='existing@example.com',
+            password='secret123',
+        )
+
+        response = self.register('existing-user', 'new@example.com')
+
+        self.assertEqual(mail.outbox, [])
+        self.assertContains(response, 'Username or email already exists!')
+        self.assertContains(response, 'alert-danger')
+        self.assertFalse(User.objects.filter(email='new@example.com').exists())
+
+    def test_existing_email_does_not_send_verification_email(self):
+        User.objects.create_user(
+            username='existing-user',
+            email='existing@example.com',
+            password='secret123',
+        )
+
+        response = self.register('new-user', 'existing@example.com')
+
+        self.assertEqual(mail.outbox, [])
+        self.assertContains(response, 'Username or email already exists!')
+        self.assertContains(response, 'alert-danger')
+        self.assertFalse(User.objects.filter(username='new-user').exists())
+
+
 class UserShippingAddressTests(TestCase):
     def setUp(self):
         cache.clear()

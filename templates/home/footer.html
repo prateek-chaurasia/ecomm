@@ -16,12 +16,12 @@
 
           <!-- Social Media Icons -->
           <div class="social-links">
-            <a href="https://www.linkedin.com/in/atulguptag/" class="social-link me-3" aria-label="LinkedIn">
+            <!-- <a href="https://www.linkedin.com/in/atulguptag/" class="social-link me-3" aria-label="LinkedIn">
               <i class="fab fa-linkedin-in"></i>
             </a>
             <a href="https://github.com/atulguptag/" class="social-link me-3" aria-label="GitHub">
               <i class="fab fa-github"></i>
-            </a>
+            </a> -->
             <a href="https://instagram.com/itsatulguptag/" class="social-link me-3" aria-label="Instagram">
               <i class="fab fa-instagram"></i>
             </a>
@@ -33,7 +33,7 @@
       </div>
 
       <!-- Quick Links -->
-      <div class="col-lg-2 col-md-6 col-12 mb-4 footer-contact-column">
+      <div class="col-lg-2 col-md-6 col-6 mb-4 footer-contact-column">
         <h5 class="section-heading fw-semibold mb-3">Quick Links</h5>
         <ul class="list-unstyled footer-links">
           <li class="mb-2"><a href="{% url 'index' %}" class="footer-link">Home</a></li>
@@ -72,7 +72,7 @@
       </div>
 
       <!-- Contact Info -->
-      <div class="col-lg-2 col-md-6 col-6 mb-4">
+      <div class="col-lg-2 col-md-6 col-6 mb-4 contact-info-column">
         <h5 class="section-heading fw-semibold mb-3">Contact</h5>
         <div class="contact-info">
           <div class="contact-item mb-2">
@@ -199,7 +199,8 @@
   .contact-item small,
   .contact-item .footer-link {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   /* Responsive Design */
@@ -234,19 +235,30 @@
   }
 
   @media (max-width: 576px) {
-    .footer-contact-column {
-      text-align: center;
+    footer .row > [class*="col-"] {
+      padding-left: 12px;
+      padding-right: 12px;
     }
 
-    .footer-contact-column .contact-info {
-      display: inline-block;
-      max-width: 100%;
-      width: min(100%, 320px);
+    .contact-info-column {
       text-align: left;
     }
 
-    .footer-contact-column .contact-item {
+    .contact-info-column .contact-info {
+      display: block;
+      max-width: 100%;
+      width: 100%;
+      text-align: left;
+    }
+
+    .contact-info-column .contact-item {
       justify-content: flex-start;
+    }
+
+    .contact-info-column .contact-item small,
+    .contact-info-column .contact-item .footer-link {
+      font-size: 0.75rem;
+      overflow-wrap: anywhere;
     }
 
     .footer-brand h3 {
