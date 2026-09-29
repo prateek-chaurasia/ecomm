@@ -1,0 +1,173 @@
+<dialog class="delivery-option-dialog" id="delivery-option-modal" aria-labelledby="delivery-option-title" aria-describedby="delivery-option-status" data-options-url="{% url 'delivery-options' %}">
+  <div class="delivery-option-dialog-body">
+    <h2 class="h5" id="delivery-option-title">Choose a delivery option</h2>
+    <p id="delivery-option-status" class="text-muted" role="status" aria-live="polite">Checking delivery options...</p>
+    <div id="delivery-option-charge-note" class="alert alert-warning py-2" hidden></div>
+    <div id="delivery-option-choices" class="delivery-option-choices"></div>
+  </div>
+</dialog>
+
+<style>
+  .delivery-option-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(34rem, calc(100% - 2rem));
+    max-width: none;
+    max-height: min(90vh, 42rem);
+    overflow-y: auto;
+    border: 1px solid #d9e3dd;
+    border-radius: 8px;
+    padding: 0;
+    box-shadow: 0 18px 50px rgba(20, 40, 30, 0.24);
+  }
+
+  .delivery-option-dialog::backdrop {
+    background: rgba(18, 27, 23, 0.56);
+  }
+
+  .delivery-option-dialog-body {
+    padding: 1.5rem;
+  }
+
+  .delivery-option-choices {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .delivery-option-choice {
+    display: block;
+    width: 100%;
+    border: 1px solid #d7e2dc;
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    color: #24372d;
+    text-align: left;
+  }
+
+  .delivery-option-choice:hover,
+  .delivery-option-choice:focus-visible {
+    border-color: #478363;
+    background: #f2f7f4;
+    outline: 2px solid #478363;
+    outline-offset: 1px;
+  }
+
+  .delivery-option-choice strong,
+  .delivery-option-choice span {
+    display: block;
+  }
+
+  .delivery-option-choice span {
+    margin-top: 0.2rem;
+    color: #64736b;
+    font-size: 0.875rem;
+  }
+</style>
+
+<script>
+  (function () {
+    var dialog = document.getElementById('delivery-option-modal');
+    if (!dialog) return;
+
+    var status = document.getElementById('delivery-option-status');
+    var choices = document.getElementById('delivery-option-choices');
+    var chargeNote = document.getElementById('delivery-option-charge-note');
+
+    dialog.addEventListener('cancel', function (event) {
+      event.preventDefault();
+    });
+
+    function locateCustomer() {
+      return new Promise(function (resolve) {
+        if (!navigator.geolocation) {
+          resolve(null);
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(function (position) {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy_meters: position.coords.accuracy,
+          });
+        }, function () {
+          resolve(null);
+        }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+      });
+    }
+
+    function csrfToken() {
+      var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return input ? input.value : '';
+    }
+
+    window.promptDeliveryOption = async function (context) {
+      choices.replaceChildren();
+      chargeNote.hidden = true;
+      status.textContent = 'Checking delivery options...';
+      dialog.showModal();
+
+      var location = await locateCustomer();
+      var payload = {
+        selected_address_id: context.addressId || null,
+        city: context.city || '',
+        latitude: location ? location.latitude : null,
+        longitude: location ? location.longitude : null,
+        accuracy_meters: location ? location.accuracy_meters : null,
+      };
+
+      try {
+        var response = await fetch(dialog.dataset.optionsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken(),
+          },
+          body: JSON.stringify(payload),
+        });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Unable to check delivery options.');
+
+        status.textContent = data.free_delivery_available
+          ? 'Your location is within the free local delivery radius.'
+          : location
+            ? 'Free local delivery is not available for this address.'
+            : 'Location could not be verified. Choose another available option.';
+
+        if (data.below_delivery_charge_threshold) {
+          chargeNote.textContent = 'Delivery charges may apply to orders below ₹' + data.delivery_charge_threshold + '. Any applicable fee will be confirmed before order acceptance.';
+          chargeNote.hidden = false;
+        }
+
+        data.options.forEach(function (option) {
+          var button = document.createElement('button');
+          var title = document.createElement('strong');
+          var description = document.createElement('span');
+          button.type = 'button';
+          button.className = 'delivery-option-choice';
+          title.textContent = option.label;
+          description.textContent = option.description;
+          button.append(title, description);
+          button.addEventListener('click', function () {
+            dialog.close();
+            context.onSelect({
+              delivery_option: option.value,
+              delivery_latitude: payload.latitude,
+              delivery_longitude: payload.longitude,
+              delivery_accuracy_meters: payload.accuracy_meters,
+            });
+          });
+          choices.appendChild(button);
+        });
+
+        if (!data.options.length) {
+          status.textContent = 'No delivery options are configured. Please contact us for assistance.';
+        }
+      } catch (error) {
+        status.textContent = error.message;
+      }
+    };
+  }());
+</script>

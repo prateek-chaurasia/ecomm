@@ -71,19 +71,17 @@ def send_order_confirmation_email(order):
         )
     plain_lines.extend([
         '',
+        f'Delivery charges: INR {order.additional_delivery_fee}' if order.additional_delivery_fee else 'Delivery charges: Free',
+        'Delivery area: Outside Standard Service Area (estimated 4-6 days)' if order.outside_service_area else '',
         f'Total: INR {order.grand_total}',
         f'Payment mode: {order.payment_mode}',
+        f'Delivery option: {order.get_delivery_option_display()}' if order.delivery_option else '',
         f'Shipping address: {order.shipping_address}',
         f'Order status: {order.get_status_display()}',
         '',
         f'Track your order: {tracking_link}',
     ])
-    if order.status == order.Status.PENDING_REVIEW:
-        plain_lines.extend([
-            '',
-            'Our team is reviewing delivery availability for your pincode before accepting this order.',
-            'Delivery and return terms may differ for orders outside our regular service area.',
-        ])
+    plain_lines = [line for line in plain_lines if line]
     if order.payment_mode == 'Cash on Delivery':
         plain_lines.extend(['', 'Please pay when your order is delivered.'])
 
@@ -126,15 +124,22 @@ def send_admin_new_order_email(order):
     order_items = list(order.order_items.all())
     item_count = sum(item.quantity for item in order_items)
     subject = f'New BundleofGifts.com order - {order.order_id}'
-    plain_message = (
+    plain_lines = [
         f'New order received: {order.order_id}\n\n'
         f'Customer: {customer_name}\n'
         f'Email: {order.guest_email or (order.user.email if order.user else "Not provided")}\n'
         f'Items: {item_count}\n'
-        f'Total: INR {order.grand_total}\n'
-        f'Payment: {order.payment_mode} ({order.payment_status})\n\n'
-        f'Open this order in admin: {admin_order_link}'
-    )
+        f'Delivery charges: INR {order.additional_delivery_fee if order.additional_delivery_fee else 0}',
+    ]
+    if order.outside_service_area:
+        plain_lines.append('Delivery area: Outside Standard Service Area (estimated 4-6 days)')
+    plain_lines.extend([
+        f'Total: INR {order.grand_total}',
+        f'Payment: {order.payment_mode} ({order.payment_status})',
+        '',
+        f'Open this order in admin: {admin_order_link}',
+    ])
+    plain_message = '\n'.join(plain_lines)
     html_message = render_to_string(
         'emails/admin_new_order.html',
         {
@@ -204,3 +209,82 @@ def send_order_status_update_email(order):
     email.send()
     logger.info(
         'Order status email sent for order %s to %s', order.order_id, recipient)
+
+
+def send_order_cancelled_customer_email(order):
+    recipient = order.guest_email or (order.user.email if order.user else '')
+    if not recipient:
+        logger.warning(
+            'Cancelled order %s has no customer email address', order.order_id)
+        return
+
+    tracking_link = (
+        f'{settings.PUBLIC_BASE_URL}{reverse("track_order", kwargs={"order_id": order.order_id, "access_token": order.guest_access_token})}'
+    )
+    customer_name = order.guest_name or (
+        order.user.get_full_name() if order.user else 'Customer'
+    )
+    refund_note = (
+        'Our team will review any applicable refund.'
+        if order.payment_status == 'Refund pending'
+        else 'No payment refund is due for this order.'
+    )
+    subject = f'Order cancelled - {order.order_id}'
+    message = (
+        f'Hello {customer_name},\n\n'
+        f'Your order {order.order_id} has been cancelled.\n'
+        f'{refund_note}\n\n'
+        f'Order total: INR {order.grand_total}\n'
+        f'Track your order: {tracking_link}\n\n'
+        'Thank you for shopping with BundleofGifts.com.'
+    )
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [recipient],
+        fail_silently=False,
+    )
+    logger.info(
+        'Cancellation email sent for order %s to %s', order.order_id, recipient)
+
+
+def send_admin_order_cancelled_email(order):
+    admin_recipients = [
+        address.strip()
+        for address in settings.ADMIN_EMAIL.split(',')
+        if address.strip()
+    ]
+    if not admin_recipients:
+        logger.warning(
+            'Cancelled order %s has no configured admin recipients', order.order_id)
+        return
+
+    customer_name = order.guest_name or (
+        order.user.get_full_name() or order.user.username
+        if order.user else 'Guest customer'
+    )
+    customer_email = order.guest_email or (
+        order.user.email if order.user else 'Not provided'
+    )
+    admin_order_link = (
+        f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_order_change", args=[order.pk])}'
+    )
+    subject = f'Order cancelled - {order.order_id}'
+    message = (
+        f'Order {order.order_id} was cancelled by the customer.\n\n'
+        f'Customer: {customer_name}\n'
+        f'Email: {customer_email}\n'
+        f'Total: INR {order.grand_total}\n'
+        f'Payment mode: {order.payment_mode}\n'
+        f'Payment status: {order.payment_status}\n\n'
+        f'Open order in admin: {admin_order_link}'
+    )
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        admin_recipients,
+        fail_silently=False,
+    )
+    logger.info('Admin cancellation notification sent for order %s', order.order_id)

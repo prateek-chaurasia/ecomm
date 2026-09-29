@@ -197,17 +197,23 @@
                             <div class="order-info-item">
                                 <i class="fas fa-undo"></i>
                                 <h6>Order Cancellation</h6>
-                                <p>Orders can be cancelled within 24 hours of placement.</p>
+                                <p>Orders may be cancelled within {{ return_refund_policy.cancellation_window_hours }} hours of placement, provided they have not been dispatched.</p>
+                                <p>{{ return_refund_policy.cancellation_policy|linebreaksbr }}</p>
                             </div>
                             <div class="order-info-item">
                                 <i class="fas fa-truck"></i>
                                 <h6>Shipping</h6>
-                                <p>Delivery times may vary based on location and product availability.</p>
+                                <p>{{ delivery_guideline.details|linebreaksbr }}</p>
                             </div>
                             <div class="order-info-item">
                                 <i class="fas fa-exchange-alt"></i>
-                                <h6>Returns</h6>
-                                <p>Products can be returned within 7 days in original condition.</p>
+                                <h6>{{ return_refund_policy.return_title }}</h6>
+                                <p>{{ return_refund_policy.return_details|linebreaksbr }}</p>
+                            </div>
+                            <div class="order-info-item">
+                                <i class="fas fa-money-bill-wave"></i>
+                                <h6>{{ return_refund_policy.refund_title }}</h6>
+                                <p>{{ return_refund_policy.refund_details|linebreaksbr }}</p>
                             </div>
                         </div>
                     </div>

@@ -10,7 +10,7 @@
         <div class="card mb-4">
           <div class="card-header" style="text-align: center; font-size: 25px;">Sign Up</div>
           <div class="card-body">
-            <form method="POST">
+            <form method="POST" data-validate-on-blur>
               {% csrf_token %} {% include "base/alert.html" %}
 
               <!-- form-group// -->
@@ -31,7 +31,10 @@
                   placeholder="First Name"
                   name="first_name"
                   type="text"
+                  maxlength="150"
+                  value="{{ registration_form.first_name.value|default:'' }}"
                   autocomplete="given-name"/>
+                {% for error in registration_form.first_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
               </div>
 
               <div class="form-group">
@@ -41,7 +44,10 @@
                   placeholder="Last Name"
                   name="last_name"
                   type="text"
+                  maxlength="150"
+                  value="{{ registration_form.last_name.value|default:'' }}"
                   autocomplete="family-name"/>
+                {% for error in registration_form.last_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
               </div>
 
               <div class="form-group">
@@ -50,8 +56,11 @@
                   required
                   placeholder="Email"
                   name="email"
-                  type="text"
+                  type="email"
+                  value="{{ registration_form.email.value|default:'' }}"
+                  aria-invalid="{% if registration_form.email.errors %}true{% else %}false{% endif %}"
                   autocomplete="email"/>
+                {% for error in registration_form.email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
               </div>
               
               <div class="form-group">
@@ -61,7 +70,13 @@
                   placeholder="Password"
                   name="password"
                   type="password"
+                  minlength="8"
+                  maxlength="10"
+                  aria-describedby="password-requirements"
+                  autocomplete="new-password"
                 />
+                <small id="password-requirements" class="form-text text-muted">Use 8 to 10 characters, including at least one number and one special character.</small>
+                {% for error in registration_form.password.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
               </div>
               
               <div class="form-group">
@@ -100,4 +115,5 @@
 </section>
 <!-- ============================ COMPONENT Sign-Up END ================================= -->
 
+<script src="{% static 'js/form-validation.js' %}" defer></script>
 {% endblock %}

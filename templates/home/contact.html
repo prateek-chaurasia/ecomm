@@ -2,6 +2,7 @@
 {% load static %}
 {% block title %}Contact BundleofGifts.com - One Stop Gifting Solution{% endblock %}
 {% block start %}
+<script src="{% static 'js/form-validation.js' %}" defer></script>
 
 <!-- Hero Section -->
 <section class="contact-hero position-relative overflow-hidden">
@@ -174,7 +175,7 @@
             <p class="form-subtitle">Fill out the form below and we'll get back to you within 24 hours</p>
           </div>
 
-          <form method="POST" action="https://formspree.io/f/{{ form_id }}" class="modern-contact-form" id="contactForm"
+          <form method="POST" action="{% url 'contact' %}" class="modern-contact-form" id="contactForm" data-validate-on-blur
             autocomplete="off">
             {% csrf_token %}
             {% include "base/alert.html" %}
@@ -183,43 +184,44 @@
               <div class="col-md-6">
                 <div class="form-group">
                   <label for="firstName" class="form-label">First Name *</label>
-                  <input type="text" class="form-control" id="firstName" name="first-name" required>
+                  <input type="text" class="form-control" id="firstName" name="first_name" maxlength="100" value="{{ form.first_name.value|default:'' }}" required>
+                  {% for error in form.first_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="form-group">
                   <label for="lastName" class="form-label">Last Name</label>
-                  <input type="text" class="form-control" id="lastName" name="last-name">
+                  <input type="text" class="form-control" id="lastName" name="last_name" maxlength="100" value="{{ form.last_name.value|default:'' }}">
+                  {% for error in form.last_name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
                 </div>
               </div>
             </div>
 
             <div class="form-group">
               <label for="email" class="form-label">Email Address *</label>
-              <input type="email" class="form-control" id="email" name="email" required>
+              <input type="email" class="form-control" id="email" name="email" value="{{ form.email.value|default:'' }}" required>
+              {% for error in form.email.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
 
             <div class="form-group">
               <label for="subject" class="form-label">Subject *</label>
               <select class="form-select" id="subject" name="subject" required>
                 <option value="">Choose a subject</option>
-                <option value="general">General Inquiry</option>
-                <option value="order">Order Support</option>
-                <option value="product">Product Question</option>
-                <option value="return">Return/Exchange</option>
-                <option value="technical">Technical Support</option>
-                <option value="partnership">Partnership</option>
-                <option value="feedback">Feedback</option>
+                {% for value, label in form.fields.subject.choices %}
+                <option value="{{ value }}" {% if form.subject.value == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
               </select>
+              {% for error in form.subject.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
 
             <div class="form-group">
               <label for="message" class="form-label">Your Message *</label>
-              <textarea class="form-control" id="message" name="message" rows="5" required></textarea>
+              <textarea class="form-control" id="message" name="message" rows="5" required>{{ form.message.value|default:'' }}</textarea>
+              {% for error in form.message.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
             </div>
 
             <div class="form-check mb-4">
-              <input class="form-check-input" type="checkbox" id="newsletter" name="newsletter">
+              <input class="form-check-input" type="checkbox" id="newsletter" name="newsletter" {% if form.newsletter.value %}checked{% endif %}>
               <label class="form-check-label" for="newsletter">
                 I'd like to receive updates and promotional emails from BundleofGifts.com
               </label>
@@ -278,13 +280,12 @@
             </div>
             <div id="faq2" class="accordion-collapse collapse">
               <div class="accordion-body">
-                <p>Instant Verification & Zero-Risk Delivery. </p>
-                <p>We believe you should only pay for what you absolutely love.
-                  To keep things fast and sustainable in our city, we invite you to open and inspect your items right when
-                  our delivery executive arrives. If the product doesn’t match your expectations, simply hand it back to our
-                  executive on the spot, and we will cancel the order immediately.
-                  Because we verify everything at your doorstep, we do not require a standard return window—giving you
-                  complete peace of mind instantly.</p>
+                <p><strong>{{ return_refund_policy.return_title }}</strong></p>
+                <p>{{ return_refund_policy.return_summary|linebreaksbr }}</p>
+                <p>{{ return_refund_policy.return_details|linebreaksbr }}</p>
+                <p><strong>{{ return_refund_policy.refund_title }}</strong></p>
+                <p>{{ return_refund_policy.refund_summary|linebreaksbr }}</p>
+                <p>{{ return_refund_policy.refund_details|linebreaksbr }}</p>
               </div>
             </div>
           </div>
@@ -300,11 +301,8 @@
             </div>
             <div id="faq3" class="accordion-collapse collapse">
               <div class="accordion-body">
-                <p>Hyper-Local Lightning Delivery</p>
-                <p>We bring your orders straight to your doorstep in record time! Place your order before 6:00 PM and
-                  enjoy lightning-fast delivery within just 4 to 5 hours.
-                  Any orders placed after 6:00 PM will be prioritized for delivery the very next morning.
-                  Please note: To ensure the safety of our delivery team, these timelines may vary slightly during heavy rains or the monsoon season.</p>
+                <p>{{ delivery_guideline.title }}</p>
+                <p>{{ delivery_guideline.details|linebreaksbr }}</p>
               </div>
             </div>
           </div>
@@ -1020,43 +1018,6 @@
     offset: 100
   });
 
-  // Clear form data when page loads (handles back button from Formspree)
-  window.addEventListener('load', function () {
-    // Check if we're coming back from a form submission
-    if (document.referrer.includes('formspree.io') ||
-      performance.navigation.type === performance.navigation.TYPE_BACK_FORWARD) {
-      const form = document.querySelector('.modern-contact-form');
-      if (form) {
-        form.reset();
-
-        // Also clear any custom styling that might persist
-        const inputs = form.querySelectorAll('input, textarea, select');
-        inputs.forEach(input => {
-          input.value = '';
-          input.classList.remove('is-valid', 'is-invalid');
-        });
-
-        // Clear checkbox
-        const checkbox = form.querySelector('#newsletter');
-        if (checkbox) {
-          checkbox.checked = false;
-        }
-      }
-    }
-  });
-
-  // Optional: Clear form on successful submission (before redirect)
-  document.addEventListener('DOMContentLoaded', function () {
-    const form = document.querySelector('.modern-contact-form');
-    if (form) {
-      form.addEventListener('submit', function () {
-        // Small delay to ensure form submission, then clear
-        setTimeout(() => {
-          form.reset();
-        }, 100);
-      });
-    }
-  });
 </script>
 
 {% endblock %}

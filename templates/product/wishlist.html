@@ -46,6 +46,7 @@
                     <form class="mb-2 mb-sm-0 mr-0 mr-sm-3" method="POST"
                       action="{% url 'move_to_cart' item.product.uid %}">
                       {% csrf_token %}
+                      <input type="hidden" name="size" value="{{ item.size_variant.size_name|default:'' }}">
                       <button type="submit" class="btn btn-primary">Move to Cart</button>
                     </form>
 

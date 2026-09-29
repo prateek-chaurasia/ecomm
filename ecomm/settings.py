@@ -28,6 +28,8 @@ SECRET_KEY = config("SECRET_KEY")
 DEBUG = config("DEBUG", cast=bool)
 TESTING = 'test' in sys.argv
 IS_PRODUCTION = not DEBUG and not TESTING
+ONLINE_PAYMENT_ENABLED = config(
+    "ONLINE_PAYMENT_ENABLED", default=not IS_PRODUCTION, cast=bool)
 
 # Allowed hosts - read from environment variable (comma-separated values)
 ALLOWED_HOSTS = config(
@@ -187,6 +189,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'django.template.context_processors.request',
+                'home.context_processors.delivery_guideline',
             ],
         },
     },

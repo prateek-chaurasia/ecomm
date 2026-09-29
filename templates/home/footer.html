@@ -48,11 +48,9 @@
       <div class="col-lg-2 col-md-6 col-6 mb-4">
         <h5 class="section-heading fw-semibold mb-3">Categories</h5>
         <ul class="list-unstyled footer-links">
-          <li class="mb-2"><a href="#" class="footer-link">Trending Toys</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Occasional Gifts</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Electronics Toys</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Home & Kitchen</a></li>
-          <li class="mb-2"><a href="#" class="footer-link">Sports & Outdoors</a></li>
+          {% for category in footer_categories %}
+          <li class="mb-2"><a href="{% url 'category_products' category.slug %}" class="footer-link">{{ category.category_name }}</a></li>
+          {% endfor %}
         </ul>
       </div>
 

@@ -101,15 +101,36 @@
             </tbody>
           </table>
 
+          {% if cart_has_items and delivery_fee %}
+          <div class="cart-delivery-summary border-top px-3 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+              <strong>Delivery fee</strong>
+              <strong>{% if delivery_fee %}₹{{ delivery_fee }}{% else %}Free{% endif %}</strong>
+            </div>
+            <small class="text-muted">{{ delivery_fee_reason }}</small>
+          </div>
+          {% endif %}
+
           <div class="card-body border-top">
             <div class="float-md-right checkout-actions">
-              <button id="cod-button" class="btn btn-outline-primary">
-                Cash on Delivery
+              <button id="cod-button" class="btn btn-outline-primary" type="button" aria-busy="false">
+                <span class="cod-button-label">Cash on Delivery</span>
+                <span class="cod-button-progress" hidden>
+                  <span class="cod-button-spinner" aria-hidden="true"></span>
+                  <span>Processing order...</span>
+                </span>
               </button>
+              <span id="cod-order-status" class="sr-only" role="status" aria-live="polite"></span>
               {% if user.is_authenticated %}
+              {% if online_payment_enabled %}
               <button id="rzp-button1" class="btn btn-primary">
                 Pay Online <i class="fa fa-chevron-right"></i>
               </button>
+              {% else %}
+              <button class="btn btn-primary" type="button" disabled aria-disabled="true">
+                Pay Online - Coming Soon
+              </button>
+              {% endif %}
               {% endif %}
             </div>
 
@@ -121,28 +142,56 @@
         <!-- card.// -->
 
         {% if user.is_authenticated and saved_addresses %}
-        <div class="card mt-3 mb-3">
+        <section class="card mt-3 mb-3 delivery-address-panel" aria-labelledby="delivery-address-heading">
           <div class="card-body">
-            <label for="delivery-address-select" class="font-weight-bold mb-2 d-block">Choose delivery address</label>
-            <select id="delivery-address-select" class="form-control" onchange="saveSelectedAddress(this.value)">
+            <div class="delivery-address-heading">
+              <div>
+                <h2 id="delivery-address-heading" class="h6 font-weight-bold mb-1">Choose delivery address</h2>
+                <p class="text-muted small mb-0">Select where you would like your order delivered.</p>
+              </div>
+              <a href="{% url 'shipping-address' %}?new=1" class="btn btn-outline-primary btn-sm delivery-address-add">
+                <i class="fas fa-plus mr-1" aria-hidden="true"></i>Add address
+              </a>
+            </div>
+            <div class="row mt-3">
               {% for address in saved_addresses %}
-              <option value="{{ address.uid }}" {% if selected_address_id == address.uid|stringformat:'s' %}selected{% endif %}>
-                {{ address.first_name }} {{ address.last_name }} - {{ address.street }}, {{ address.city }} ({{ address.country }})
-              </option>
+              <label class="col-md-6 mb-3 delivery-address-option">
+                <input
+                  type="radio"
+                  name="selected_delivery_address"
+                  class="delivery-address-radio"
+                  value="{{ address.uid }}"
+                  {% if selected_address_id == address.uid|stringformat:'s' %}checked{% endif %}>
+                <span class="card delivery-address-card h-100 mb-0">
+                  <span class="card-body">
+                    <span class="delivery-address-card-heading">
+                      <strong>{{ address.first_name }} {{ address.last_name }}</strong>
+                      <i class="fas fa-check-circle text-success delivery-address-check" aria-label="Selected for delivery"></i>
+                    </span>
+                    {% if address.is_default %}<span class="badge badge-success mb-2">Default</span>{% endif %}
+                    <span class="delivery-address-line">{{ address.street }}</span>
+                    <span class="delivery-address-line">{{ address.street_number }}</span>
+                    <span class="delivery-address-line">{{ address.city }}, {{ address.state }} {{ address.zip_code }}</span>
+                    <span class="delivery-address-line">{{ address.country.name }}</span>
+                    <span class="delivery-address-line text-muted small mt-1">Phone: {{ address.phone }}</span>
+                  </span>
+                </span>
+              </label>
               {% endfor %}
-            </select>
+            </div>
           </div>
-          <p class="text-center mb-0 pb-3">
-            <a href="{% url 'shipping-address' %}" class="text-decoration-underline">Add delivery address</a>
-          </p>
-        </div>
+        </section>
         {% endif %}
 
-        <div class="alert delivery-alert mt-3">
-          <p class="icontext">
-            <i class="icon delivery-icon fa fa-truck"></i> Free Delivery within
-              4-5 hours.
-          </p>
+        <div class="alert delivery-alert mt-3" role="note">
+          <p class="font-weight-bold mb-2"><i class="delivery-icon fa fa-truck mr-2"></i>Delivery estimates</p>
+          <ul class="mb-0 pl-4">
+            {% if delivery_guideline.express_delivery_enabled %}
+            <li>Express delivery in {{ delivery_guideline.express_delivery_min_hours }}–{{ delivery_guideline.express_delivery_max_hours }} hours is available within {{ delivery_guideline.free_delivery_radius_km }} km{% if delivery_guideline.operational_office_city %} of {{ delivery_guideline.operational_office_city }}{% endif %}.</li>
+            {% endif %}
+            {% if delivery_guideline.next_day_delivery_enabled %}<li>Other serviceable PIN codes are delivered the next day.</li>{% endif %}
+            <li>Outside Standard Service Area: delivery in 4–6 days.</li>
+          </ul>
         </div>
       </main>
       <!-- col.// -->
@@ -177,21 +226,15 @@
         <div class="card">
           <div class="card-body">
             <dl class="dlist-align">
-              <dt>Total price:</dt>
+              <dt>Subtotal:</dt>
               <dd class="text-right">
-                <strong>₹{{ cart.get_cart_total }}</strong>
+                <strong>₹{{ cart_subtotal }}</strong>
               </dd>
             </dl>
-            {% if cart.coupon %}
+            {% if cart_discount %}
             <dl class="dlist-align">
               <dt>Discount:</dt>
-              <dd class="text-right">₹{{ cart.coupon.discount_amount }}</dd>
-            </dl>
-            <dl class="dlist-align">
-              <dt>Total:</dt>
-              <dd class="text-right h5">
-                <strong>₹{{ cart.get_cart_total_price_after_coupon }}</strong>
-              </dd>
+              <dd class="text-right">-₹{{ cart_discount }}</dd>
             </dl>
             {% endif %}
             <hr />
@@ -209,7 +252,9 @@
   <!-- container .//  -->
 </section>
 
+{% if online_payment_enabled %}
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+{% endif %}
 
 <script>
   function getCookie(name) {
@@ -221,13 +266,53 @@
     return null;
   }
 
-  {% if user.is_authenticated %}
-  let paymentOrderPromise;
+  var isAuthenticated = {% if user.is_authenticated %}true{% else %}false{% endif %};
 
-  function createPaymentOrder() {
+  function getSelectedDeliveryAddress() {
+    return document.querySelector('input[name="selected_delivery_address"]:checked');
+  }
+
+  function requireDeliveryAddress() {
+    if (!isAuthenticated) {
+      window.location.href = "{% url 'guest-checkout' %}?next={% url 'cart' %}";
+      return null;
+    }
+    var address = getSelectedDeliveryAddress();
+    if (!address) {
+      window.location.href = "{% url 'shipping-address' %}?new=1&next={% url 'cart' %}";
+      return null;
+    }
+    return address;
+  }
+
+  function getDeliveryLocation() {
+    return new Promise(function (resolve) {
+      if (!navigator.geolocation) {
+        resolve({});
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(function (position) {
+        resolve({
+          delivery_latitude: position.coords.latitude,
+          delivery_longitude: position.coords.longitude,
+          delivery_accuracy_meters: position.coords.accuracy,
+        });
+      }, function () {
+        resolve({});
+      }, { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 });
+    });
+  }
+
+  {% if user.is_authenticated %}
+  {% if online_payment_enabled %}
+  function createPaymentOrder(addressId) {
     return fetch("{% url 'create_payment_order' %}", {
       method: "POST",
-      headers: { "X-CSRFToken": getCookie("csrftoken") },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify({ selected_address_id: addressId }),
     }).then(async response => {
       const order = await response.json();
       if (!response.ok) {
@@ -237,121 +322,115 @@
     });
   }
 
-  paymentOrderPromise = createPaymentOrder();
-
-  document.getElementById("rzp-button1").onclick = async function (e) {
+  document.getElementById("rzp-button1").onclick = function (e) {
     e.preventDefault();
     const button = e.currentTarget;
+    const address = requireDeliveryAddress();
+    if (!address) return;
     button.disabled = true;
+    getDeliveryLocation().then(async function (location) {
+      try {
+        const order = await createPaymentOrder(address.value);
 
-    try {
-      const order = await paymentOrderPromise;
-
-      const selectedAddressId = document.getElementById("delivery-address-select")?.value || null;
-
-      const razorpay = new Razorpay({
-        key: "{{ razorpay_key_id }}",
-        amount: order.amount,
-        currency: order.currency,
-        name: "BundleofGifts.com",
-        description: "Purchased",
-        order_id: order.order_id,
-        handler: async function (response) {
-          try {
-            const verificationResponse = await fetch("{% url 'verify_payment' %}", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCookie("csrftoken"),
-              },
-              body: JSON.stringify({
-                ...response,
-                selected_address_id: selectedAddressId,
-              }),
-            });
-            const verification = await verificationResponse.json();
-            if (!verificationResponse.ok) {
-              throw new Error(verification.error || "Payment verification failed.");
+        const razorpay = new Razorpay({
+          key: "{{ razorpay_key_id }}",
+          amount: order.amount,
+          currency: order.currency,
+          name: "BundleofGifts.com",
+          description: "Purchased",
+          order_id: order.order_id,
+          handler: async function (response) {
+            try {
+              const verificationResponse = await fetch("{% url 'verify_payment' %}", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-CSRFToken": getCookie("csrftoken"),
+                },
+                body: JSON.stringify({
+                  ...response,
+                  selected_address_id: address.value,
+                  ...location,
+                }),
+              });
+              const verification = await verificationResponse.json();
+              if (!verificationResponse.ok) {
+                throw new Error(verification.error || "Payment verification failed.");
+              }
+              window.location.href = verification.redirect_url;
+            } catch (error) {
+              alert(error.message);
+              button.disabled = false;
             }
-            window.location.href = verification.redirect_url;
-          } catch (error) {
-            alert(error.message);
-            button.disabled = false;
-          }
-        },
-        prefill: {
-          name: "{{ request.user.get_full_name|escapejs }}",
-          email: "{{ request.user.email|escapejs }}",
-        },
-        theme: { color: "#3399cc" },
-      });
+          },
+          prefill: {
+            name: "{{ request.user.get_full_name|escapejs }}",
+            email: "{{ request.user.email|escapejs }}",
+          },
+          theme: { color: "#3399cc" },
+        });
 
-      razorpay.on("payment.failed", function (response) {
-        const paymentError = response.error || {};
-        const errorDetails = [
-          paymentError.description || "Payment failed.",
-          paymentError.code ? `code: ${paymentError.code}` : "",
-          paymentError.reason ? `reason: ${paymentError.reason}` : "",
-        ].filter(Boolean).join(" | ");
-        alert(errorDetails);
+        razorpay.on("payment.failed", function (response) {
+          const paymentError = response.error || {};
+          const errorDetails = [
+            paymentError.description || "Payment failed.",
+            paymentError.code ? `code: ${paymentError.code}` : "",
+            paymentError.reason ? `reason: ${paymentError.reason}` : "",
+          ].filter(Boolean).join(" | ");
+          alert(errorDetails);
+          button.disabled = false;
+        });
+        razorpay.on("modal.close", function () {
+          button.disabled = false;
+        });
+        razorpay.open();
+      } catch (error) {
+        alert(error.message);
         button.disabled = false;
-      });
-      razorpay.on("modal.close", function () {
-        button.disabled = false;
-      });
-      razorpay.open();
-    } catch (error) {
-      alert(error.message);
-      button.disabled = false;
-    }
+      }
+    });
   };
   {% endif %}
+  {% endif %}
 
-  function saveSelectedAddress(addressId) {
-    if (!addressId) return;
-    fetch("{% url 'create_payment_order' %}", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": getCookie("csrftoken"),
-      },
-      body: JSON.stringify({ selected_address_id: addressId }),
-    }).catch(() => {});
-  }
-
-  document.getElementById("cod-button").onclick = async function (e) {
+  document.getElementById("cod-button").onclick = function (e) {
     e.preventDefault();
     const button = e.currentTarget;
-    button.disabled = true;
-
-    try {
-      const selectedAddressId = document.getElementById("delivery-address-select")?.value || null;
-      const response = await fetch("{% url 'place_cod_order' %}", {
-        method: "POST",
-        headers: {
-          "X-CSRFToken": getCookie("csrftoken"),
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ selected_address_id: selectedAddressId }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        if (result.shipping_address_url) {
-          if (window.confirm(result.error)) {
-            window.location.href = result.shipping_address_url;
-            return;
-          }
-          button.disabled = false;
-          return;
-        }
-        throw new Error(result.error || "Unable to place order.");
+    const address = requireDeliveryAddress();
+    if (!address) return;
+    setCodButtonLoading(button, true);
+    getDeliveryLocation().then(async function (location) {
+      try {
+        const response = await fetch("{% url 'place_cod_order' %}", {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": getCookie("csrftoken"),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            selected_address_id: address.value,
+            ...location,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Unable to place order.");
+        window.location.href = result.redirect_url;
+      } catch (error) {
+        alert(error.message);
+        setCodButtonLoading(button, false);
       }
-      window.location.href = result.redirect_url;
-    } catch (error) {
-      alert(error.message);
-      button.disabled = false;
-    }
+    });
   };
+
+  function setCodButtonLoading(button, isLoading) {
+    button.disabled = isLoading;
+    button.setAttribute("aria-busy", String(isLoading));
+    button.querySelector(".cod-button-label").hidden = isLoading;
+    button.querySelector(".cod-button-progress").hidden = !isLoading;
+    document.getElementById("cod-order-status").textContent = isLoading
+      ? "Processing order..."
+      : "";
+  }
 
   function updateCartItem(selectElement, cartItemId) {
     const quantity = selectElement.value;
@@ -426,7 +505,100 @@
     gap: 0.5rem;
   }
 
+  .cod-button-progress {
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .cod-button-progress:not([hidden]) {
+    display: inline-flex;
+  }
+
+  .cod-button-spinner {
+    width: 0.9rem;
+    height: 0.9rem;
+    flex: 0 0 auto;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: cod-button-spin 0.75s linear infinite;
+  }
+
+  @keyframes cod-button-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cod-button-spinner {
+      animation-duration: 2s;
+    }
+  }
+
+  .delivery-address-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .delivery-address-add {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .delivery-address-option {
+    position: relative;
+    cursor: pointer;
+  }
+
+  .delivery-address-radio {
+    position: absolute;
+    opacity: 0;
+  }
+
+  .delivery-address-card {
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .delivery-address-radio:checked + .delivery-address-card {
+    border-color: #28a745;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.16);
+  }
+
+  .delivery-address-radio:focus + .delivery-address-card {
+    outline: 2px solid #80bdff;
+    outline-offset: 2px;
+  }
+
+  .delivery-address-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .delivery-address-check {
+    display: none;
+    flex: 0 0 auto;
+    font-size: 1.15rem;
+  }
+
+  .delivery-address-radio:checked + .delivery-address-card .delivery-address-check {
+    display: inline-block;
+  }
+
+  .delivery-address-line {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
   @media (max-width: 575px) {
+    .table-shopping-cart .itemside .aside {
+      display: block;
+    }
+
     .table-shopping-cart,
     .table-shopping-cart tbody,
     .table-shopping-cart tr,
@@ -461,6 +633,10 @@
       float: none;
       display: grid;
       margin-bottom: 1rem;
+    }
+
+    .delivery-address-heading {
+      align-items: flex-start;
     }
   }
 </style>

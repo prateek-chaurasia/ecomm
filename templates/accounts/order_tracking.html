@@ -9,14 +9,7 @@
         <h1 class="h2 mb-2">Track your delivery</h1>
         <p class="text-muted">Placed on {{ order.order_date|date:"F j, Y" }}</p>
 
-        {% if order.status == 'pending_review' %}
-        <div class="alert alert-warning">
-          We have received your order. Our team is reviewing delivery availability for pincode
-          <strong>{{ order.delivery_pincode|default:"provided" }}</strong> before accepting it.
-          Delivery and return terms may differ for orders outside our regular service area.
-          {% if order.additional_delivery_fee %} An additional delivery fee of <strong>INR {{ order.additional_delivery_fee }}</strong> applies.{% else %} Any additional delivery fee will be decided during review.{% endif %}
-        </div>
-        {% elif order.status == 'cancelled' %}
+        {% if order.status == 'cancelled' %}
         <div class="alert alert-danger">This order has been cancelled.</div>
         {% else %}
         <div class="order-progress my-5">
@@ -34,8 +27,19 @@
 
         <div class="row mt-4">
           <div class="col-md-6"><strong>Delivery address</strong><p class="text-muted">{{ order.shipping_address|default:"Not provided" }}</p></div>
-          <div class="col-md-6"><strong>Order total</strong><p class="text-muted">INR {{ order.grand_total }}{% if order.additional_delivery_fee %} + INR {{ order.additional_delivery_fee }} delivery fee{% endif %}</p></div>
+          <div class="col-md-6">
+            {% if order.outside_service_area %}<strong>Delivery area</strong><p class="text-muted">Outside Standard Service Area (estimated 4–6 days)</p>{% endif %}
+            {% if order.delivery_option %}<strong>Delivery option</strong><p class="text-muted">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}</p>{% endif %}
+            <strong>Delivery charges</strong><p class="text-muted">{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</p>
+            <strong>Order total</strong><p class="text-muted">INR {{ order.grand_total }}</p>
+          </div>
         </div>
+        {% if order.can_be_cancelled %}
+        <form method="post" action="{% url 'cancel_order' order.order_id order.guest_access_token %}" class="mb-3" onsubmit="return confirm('Cancel this order?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger"><i class="fas fa-times mr-1"></i>Cancel Order</button>
+        </form>
+        {% endif %}
         {% if order.user %}<a href="{% url 'order_details' order.order_id %}" class="btn btn-outline-primary">View full order details</a>{% endif %}
       </div>
     </div>

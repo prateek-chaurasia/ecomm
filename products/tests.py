@@ -1,13 +1,15 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.core import mail
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import Cart, CartItem
+from home.models import ReturnRefundPolicy
 from products.admin import ProductAdmin, restock_selected
 from products.models import (
-    Category, Product, AgeGroup, Tag, ReturnDetails, ProductReview,
-    BundleConfiguration, BundleOffer, BundlePackagingOption,
+    Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ReturnDetails, ProductReview,
+    BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
 
 
@@ -33,6 +35,23 @@ class ProductInventoryAdminTests(TestCase):
 
         self.product.refresh_from_db()
         self.assertGreaterEqual(self.product.stock_quantity, self.product.low_stock_threshold)
+
+    def test_admin_restock_action_emails_wishlist_subscriber(self):
+        self.product.stock_quantity = 0
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+        user = User.objects.create_user(
+            username='restock-customer', email='restock@example.com')
+        Wishlist.objects.create(
+            user=user, product=self.product, notify_on_restock=True)
+
+        restock_selected(
+            admin.site._registry[Product],
+            None,
+            Product.objects.filter(pk=self.product.pk),
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['restock@example.com'])
 
 
 class BundleBuilderTests(TestCase):
@@ -75,7 +94,8 @@ class BundleBuilderTests(TestCase):
             reverse('bundle_builder', args=[self.offer.slug]),
             {'products': [str(self.products[0].uid), str(self.products[1].uid)], 'quantity': 2},
         )
-        self.assertRedirects(response, reverse('cart'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('cart'))
         cart = Cart.objects.get(session_key=self.client.session.session_key)
         bundle_item = cart.bundle_items.get()
         self.assertEqual(bundle_item.quantity, 2)
@@ -144,6 +164,10 @@ class CategoryPagesTests(TestCase):
         response = self.client.get(reverse('categories'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Shoes')
+        self.assertContains(
+            response,
+            f'href="{reverse("category_products", args=[self.category.slug])}"',
+        )
 
     def test_category_page_shows_products_for_that_category(self):
         response = self.client.get(reverse('category_products', args=[self.category.slug]))
@@ -268,6 +292,10 @@ class ProductPricingTests(TestCase):
 
 class ProductReturnDetailsTests(TestCase):
     def test_return_details_attach_to_product_and_render(self):
+        generic_policy = ReturnRefundPolicy.get_solo()
+        generic_policy.return_summary = 'Generic return summary.'
+        generic_policy.refund_summary = 'Generic refund summary.'
+        generic_policy.save()
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(
             product_name='Building Blocks',
@@ -279,6 +307,7 @@ class ProductReturnDetailsTests(TestCase):
             product=product,
             return_window_days=14,
             policy='Contact support to start a return.',
+            refund_policy='Refunds for this product are store credit only.',
             conditions='Item must be unused and in original packaging.',
         )
 
@@ -287,7 +316,221 @@ class ProductReturnDetailsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Return Details')
         self.assertContains(response, '14 days')
+        self.assertContains(response, 'Refunds for this product are store credit only.')
+        self.assertNotContains(response, 'Generic return summary.')
+        self.assertNotContains(response, 'Generic refund summary.')
+        self.assertContains(response, '<details class="return-policy-section"', html=False)
         self.assertContains(response, 'Buy Now')
+
+    def test_generic_policy_is_used_when_product_has_no_return_details(self):
+        generic_policy = ReturnRefundPolicy.get_solo()
+        generic_policy.return_summary = 'Generic return summary.'
+        generic_policy.refund_summary = 'Generic refund summary.'
+        generic_policy.save()
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Toy car',
+            category=category,
+            price=500,
+            product_desription='A toy car',
+        )
+
+        response = self.client.get(reverse('get_product', args=[product.slug]))
+
+        self.assertContains(response, 'Generic return summary.')
+        self.assertContains(response, 'Generic refund summary.')
+
+    def test_generic_refund_policy_fills_missing_product_refund_policy(self):
+        generic_policy = ReturnRefundPolicy.get_solo()
+        generic_policy.refund_summary = 'Generic refund summary.'
+        generic_policy.save()
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden train',
+            category=category,
+            price=700,
+            product_desription='A wooden train',
+        )
+        ReturnDetails.objects.create(
+            product=product,
+            policy='Product-specific return terms.',
+        )
+
+        response = self.client.get(reverse('get_product', args=[product.slug]))
+
+        self.assertContains(response, 'Product-specific return terms.')
+        self.assertContains(response, 'Generic refund summary.')
+
+
+class ProductCartStateTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='cart-customer', password='secret123')
+        self.category = Category.objects.create(category_name='Toys')
+        self.product = Product.objects.create(
+            product_name='Toy robot',
+            category=self.category,
+            price=750,
+            product_desription='A toy robot',
+            stock_quantity=8,
+        )
+        self.client.force_login(self.user)
+
+    def test_product_page_shows_existing_cart_quantity_instead_of_add_button(self):
+        cart = Cart.objects.create(user=self.user)
+        cart_item = CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            quantity=3,
+        )
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertEqual(response.context['product_cart_item'], cart_item)
+        self.assertContains(response, '3 items added')
+        self.assertContains(response, 'id="add-to-cart-btn" class="btn btn-primary" hidden')
+        self.assertContains(response, 'id="add-to-cart-form" class="d-inline-block d-none"')
+
+    def test_product_page_shows_add_button_when_not_in_cart(self):
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertIsNone(response.context['product_cart_item'])
+        self.assertContains(response, 'Add to cart')
+        self.assertNotContains(response, 'added to cart')
+
+
+class WishlistBackInStockTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='wishlist-customer',
+            email='wishlist@example.com',
+            password='secret123',
+        )
+        self.category = Category.objects.create(category_name='Gifts')
+        self.product = Product.objects.create(
+            product_name='Out of stock gift',
+            category=self.category,
+            price=1200,
+            product_desription='A popular gift',
+            stock_quantity=0,
+        )
+
+    def test_product_page_hides_add_wishlist_action_when_already_wishlisted(self):
+        Wishlist.objects.create(user=self.user, product=self.product)
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='products/out-of-stock-gift.jpg',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'In wishlist')
+        self.assertContains(response, 'class="stock-status-overlay"')
+        self.assertContains(response, 'role="status">Out of stock</span>')
+        self.assertNotContains(response, 'Add to wishlist')
+
+    def test_registered_user_can_opt_into_restock_email_without_size_variants(self):
+        self.client.force_login(self.user)
+
+        product_url = reverse('get_product', args=[self.product.slug])
+        detail_response = self.client.get(product_url)
+        self.assertContains(
+            detail_response,
+            f'action="{reverse("add_to_wishlist", args=[self.product.uid])}?size="',
+        )
+        self.assertNotContains(detail_response, '?size=None')
+
+        response = self.client.post(
+            reverse('add_to_wishlist', args=[self.product.uid]),
+            {
+                'size': 'None',
+                'manage_restock_notification': '1',
+                'notify_on_restock': 'on',
+                'next': product_url,
+            },
+        )
+
+        self.assertRedirects(response, product_url)
+        wishlist_item = Wishlist.objects.get(user=self.user, product=self.product)
+        self.assertTrue(wishlist_item.notify_on_restock)
+        self.assertContains(self.client.get(reverse('get_product', args=[self.product.slug])), 'Email me when this item is back in stock')
+
+    def test_user_can_opt_out_of_restock_email(self):
+        Wishlist.objects.create(
+            user=self.user,
+            product=self.product,
+            notify_on_restock=True,
+        )
+        self.client.force_login(self.user)
+
+        self.client.post(
+            reverse('add_to_wishlist', args=[self.product.uid]),
+            {'manage_restock_notification': '1'},
+        )
+
+        wishlist_item = Wishlist.objects.get(user=self.user, product=self.product)
+        self.assertFalse(wishlist_item.notify_on_restock)
+
+    def test_restock_preference_only_updates_selected_size(self):
+        small = SizeVariant.objects.create(size_name='Small')
+        large = SizeVariant.objects.create(size_name='Large')
+        self.product.size_variant.add(small, large)
+        Wishlist.objects.create(user=self.user, product=self.product, size_variant=small)
+        Wishlist.objects.create(user=self.user, product=self.product, size_variant=large)
+        self.client.force_login(self.user)
+
+        self.client.post(
+            reverse('add_to_wishlist', args=[self.product.uid]),
+            {'size': 'Large', 'manage_restock_notification': '1', 'notify_on_restock': 'on'},
+        )
+
+        self.assertFalse(Wishlist.objects.get(user=self.user, product=self.product, size_variant=small).notify_on_restock)
+        self.assertTrue(Wishlist.objects.get(user=self.user, product=self.product, size_variant=large).notify_on_restock)
+
+    def test_move_to_cart_uses_wishlisted_size_variant(self):
+        small = SizeVariant.objects.create(size_name='Small')
+        large = SizeVariant.objects.create(size_name='Large')
+        self.product.size_variant.add(small, large)
+        self.product.stock_quantity = 3
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+        Wishlist.objects.create(user=self.user, product=self.product, size_variant=small)
+        Wishlist.objects.create(user=self.user, product=self.product, size_variant=large)
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('move_to_cart', args=[self.product.uid]), {'size': 'Large'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('cart'))
+        self.assertTrue(Wishlist.objects.filter(user=self.user, product=self.product, size_variant=small).exists())
+        self.assertFalse(Wishlist.objects.filter(user=self.user, product=self.product, size_variant=large).exists())
+        self.assertEqual(
+            CartItem.objects.get(cart__user=self.user, product=self.product).size_variant,
+            large,
+        )
+
+    @override_settings(DEFAULT_FROM_EMAIL='noreply@example.com')
+    def test_transition_from_out_of_stock_sends_one_email_to_subscribed_user(self):
+        wishlist_item = Wishlist.objects.create(
+            user=self.user,
+            product=self.product,
+            notify_on_restock=True,
+        )
+
+        self.product.stock_quantity = 4
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['wishlist@example.com'])
+        self.assertIn(self.product.product_name, mail.outbox[0].subject)
+        self.assertIn(self.product.slug, mail.outbox[0].body)
+        wishlist_item.refresh_from_db()
+        self.assertTrue(wishlist_item.restock_notification_sent)
+
+        self.product.stock_quantity = 6
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+        self.assertEqual(len(mail.outbox), 1)
 
 
 class ProductReviewPageTests(TestCase):

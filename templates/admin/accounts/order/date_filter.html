@@ -1,0 +1,22 @@
+{% load i18n %}
+<h3>{{ title }}</h3>
+<ul>
+  {% for choice in choices %}
+  <li{% if choice.selected %} class="selected"{% endif %}>
+    <a href="{{ choice.query_string|iriencode }}">{{ choice.display }}</a>
+  </li>
+  {% endfor %}
+</ul>
+<form method="get" class="order-date-range-filter">
+  {% for key, value in request.GET.items %}
+    {% if key != 'period' and key != 'date_from' and key != 'date_to' %}
+    <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endif %}
+  {% endfor %}
+  <input type="hidden" name="period" value="custom">
+  <label for="order-date-from">From</label>
+  <input id="order-date-from" type="date" name="date_from" value="{{ request.GET.date_from }}">
+  <label for="order-date-to">To</label>
+  <input id="order-date-to" type="date" name="date_to" value="{{ request.GET.date_to }}">
+  <button type="submit" class="button">Apply range</button>
+</form>

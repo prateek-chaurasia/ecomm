@@ -81,6 +81,18 @@
     margin-bottom: 18px;
   }
 
+  .home-banner-image {
+    height: 490px;
+    object-fit: cover;
+  }
+
+  @media (max-width: 767.98px) {
+    .home-banner-image {
+      height: auto;
+      object-fit: contain;
+    }
+  }
+
   .filter-shell {
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid rgba(15, 23, 42, 0.08);
@@ -255,7 +267,7 @@
       {% for banner in banners %}
       <div class="carousel-item {% if forloop.first %}active{% endif %}">
         {% if banner.image %}
-        <img src="{{ banner.image.url }}" class="d-block w-100" alt="{{ banner.title }}" style="height: 360px; object-fit: cover;">
+        <img src="{{ banner.image.url }}" class="d-block w-100 home-banner-image" alt="{{ banner.title }}">
         {% endif %}
         <div class="carousel-caption d-none d-md-block text-left" style="background: rgba(0,0,0,0.35); border-radius: 12px; padding: 20px; max-width: 420px; right: 8%; left: auto; bottom: 40px;">
           <h2>{{ banner.title }}</h2>

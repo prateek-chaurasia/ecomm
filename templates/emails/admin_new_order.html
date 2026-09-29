@@ -7,11 +7,12 @@
     <p><strong>Order ID:</strong> {{ order.order_id }}</p>
     <p><strong>Customer:</strong> {{ customer_name }}</p>
     <p><strong>Delivery pincode:</strong> {{ order.delivery_pincode|default:"Not provided" }}</p>
+    {% if order.outside_service_area %}<p><strong>Delivery area:</strong> Outside Standard Service Area (estimated 4–6 days)</p>{% endif %}
     <p><strong>Initial status:</strong> {{ order.get_status_display }}</p>
-    {% if order.outside_service_area %}<p><strong>Additional delivery fee:</strong> To be decided during review</p>{% endif %}
+    <p><strong>Delivery charges:</strong> {% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</p>
     <p><strong>Items:</strong> {{ item_count }}</p>
-    <p><strong>Total:</strong> INR {{ order.grand_total }}</p>
     <p><strong>Payment:</strong> {{ order.payment_mode }} ({{ order.payment_status }})</p>
+    <p><strong>Total:</strong> INR {{ order.grand_total }}</p>
     <p><a href="{{ admin_order_link }}" style="display: inline-block; padding: 12px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 5px;">Open order in admin</a></p>
   </div>
 </body>

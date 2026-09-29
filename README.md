@@ -70,6 +70,7 @@ To run this project locally, please follow these steps:
 
     - Before running migrations, create a `.env` file in the project root. You can use `.env.example` as a template.
     - For local development, set `DEBUG=True`; local HTTP such as `http://localhost:8080` is allowed. For production, set `DEBUG=False`; production HTTPS hardening is then enabled by default.
+    - Online payments are enabled by default outside production and shown as “Coming Soon” in production. Set `ONLINE_PAYMENT_ENABLED=True` to enable them explicitly, or `ONLINE_PAYMENT_ENABLED=False` to disable them in any environment.
     - Configure `PUBLIC_BASE_URL` with the public website URL used in customer-facing emails and tracking links:
       ```
       PUBLIC_BASE_URL=http://localhost:8080  # For local development
@@ -151,7 +152,7 @@ If you encounter issues during setup, here are some common problems and their so
 
 ## Usage
 
-- **Admin Panel:** Access the admin panel at `http://127.0.0.1:8000/admin/` to manage products, orders, and users.
+- **Admin Panel:** Access the admin panel at `http://127.0.0.1:8000/admin/` to manage products, orders, and users. Update site-wide delivery copy under `Home > Delivery guideline` and return/refund/cancellation copy under `Home > Return and refund policy`. Product-specific return eligibility and conditions remain editable on each product.
 - **Shopping:** Browse products, add items to the cart, proceed to checkout, and make payments using Razorpay.
 - **User Profile:** Users can register, log in, reset their passwords, view their order history, and update their profiles.
 - **Adding Images:** When adding products, categories, or updating your profile, use image URLs from external sources (e.g., image hosting services, CDNs, or direct URLs). The admin interface provides a URL input field for easy image management.

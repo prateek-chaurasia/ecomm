@@ -13,6 +13,10 @@ from ecomm.sitemaps import (
     StaticSitemap,
 )
 
+admin.site.site_header = 'Bundle of Gifts Admin'
+admin.site.site_title = 'Bundle of Gifts Admin'
+admin.site.index_title = 'Bundle of Gifts Admin'
+
 
 sitemaps = {
     'static': StaticSitemap,

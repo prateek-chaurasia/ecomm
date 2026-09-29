@@ -21,6 +21,12 @@
             <a href="{% url 'download_invoice' order.order_id %}" class="btn btn-primary download-invoice-btn">
               <i class="fas fa-download me-2"></i>Download Invoice
             </a>
+            {% if order.can_be_cancelled %}
+            <form class="order-cancel-form" method="post" action="{% url 'cancel_order' order.order_id order.guest_access_token %}" onsubmit="return confirm('Cancel this order?');">
+              {% csrf_token %}
+              <button type="submit" class="btn cancel-order-btn"><i class="fas fa-times mr-1"></i>Cancel Order</button>
+            </form>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -157,14 +163,20 @@
                 <div class="info-label">Payment Mode</div>
                 <div class="info-value">{{ order.payment_mode }}</div>
               </div>
+              {% if order.delivery_option %}
+              <div class="info-item">
+                <div class="info-label">Delivery Option</div>
+                <div class="info-value">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}</div>
+              </div>
+              {% endif %}
               <div class="info-item full-width">
                 <div class="info-label">Shipping Address</div>
                 <div class="info-value">{{ order.shipping_address|default:"Not Provided" }}</div>
               </div>
               {% if order.outside_service_area %}
               <div class="info-item full-width">
-                <div class="info-label">Delivery Fee Review</div>
-                <div class="info-value">{% if order.additional_delivery_fee %}Additional fee: ₹{{ order.additional_delivery_fee }}{% else %}Any additional delivery fee will be decided during review.{% endif %}</div>
+                <div class="info-label">Delivery Area</div>
+                <div class="info-value">Outside Standard Service Area (estimated 4–6 days)</div>
               </div>
               {% endif %}
             </div>
@@ -188,6 +200,10 @@
             <div class="summary-item">
               <span class="summary-label">Coupon Discount</span>
               <span class="summary-value discount-value">-₹{{ order.coupon.discount_amount|default:"0" }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Delivery charges</span>
+              <span class="summary-value">{% if order.additional_delivery_fee %}₹{{ order.additional_delivery_fee }}{% else %}Free{% endif %}</span>
             </div>
             <hr class="summary-divider">
             <div class="summary-item total-item">
@@ -454,6 +470,32 @@
 
   .tracking-link-btn i {
     line-height: 1;
+  }
+
+  .order-cancel-form {
+    display: inline-flex;
+    margin: 0;
+  }
+
+  .cancel-order-btn {
+    align-items: center;
+    background: #b42318;
+    border: 2px solid #fff;
+    border-radius: 8px;
+    color: #fff;
+    display: inline-flex;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 50px;
+    padding: 0.75rem 1.25rem;
+    white-space: nowrap;
+  }
+
+  .cancel-order-btn:hover,
+  .cancel-order-btn:focus-visible {
+    background: #8f1710;
+    border-color: #fff;
+    color: #fff;
   }
 
   .download-invoice-btn {

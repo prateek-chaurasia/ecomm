@@ -1,6 +1,7 @@
 {% extends "base/base.html" %}
 {% block title %}Profile{% endblock title %}
 {% load crispy_forms_tags %} {% load static %} {% block start %}
+<script src="{% static 'js/form-validation.js' %}" defer></script>
 
 <style>
   .img-account-profile {
@@ -80,7 +81,7 @@
         <div class="card mb-4 mb-xl-0">
           <div class="card-header">Profile Picture</div>
           <div class="card-body text-center">
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" data-validate-on-blur>
               {% csrf_token %}
 
               {% if user.profile.profile_image %}

@@ -1,38 +1,43 @@
 {% for product in products %}
-<div class="col-md-3">
-  <figure class="card card-product-grid">
-    <div class="img-wrap" style="position: relative;">
+<div class="col-6 col-md-4 col-lg-3 mb-4">
+  <article class="card card-product-grid product-catalog-card h-100">
+    <a href="{% url 'get_product' product.slug %}" class="product-catalog-media" aria-label="View {{ product.product_name }}">
       {% with image=product.product_images.first %}
       {% if image and image.image_url %}
       <img src="{{ image.image_url.url }}" alt="{{ product.product_name }}" loading="lazy" />
+      {% else %}
+      <span class="product-catalog-placeholder" aria-hidden="true"><i class="fas fa-gift"></i></span>
       {% endif %}
       {% endwith %}
       {% if product.stock_quantity <= 0 %}
-      <span class="badge badge-danger" style="position: absolute; top: 10px; left: 10px; font-size: 12px; padding: 6px 8px; z-index: 1;">Out of stock</span>
+      <span class="badge badge-danger product-stock-badge">Out of stock</span>
       {% endif %}
-    </div>
-    <figcaption class="info-wrap border-top">
-      <a href="{% url 'get_product' product.slug %}" class="title">
-        <b>{{ product.product_name }}</b>
-      </a>
-      <div class="mt-1 text-muted small">
-        <strong>Brand:</strong> {{ product.brand_name }}
-      </div>
+    </a>
+    <div class="card-body product-catalog-body">
+      {% if product.brand_name %}
+      <div class="product-catalog-brand">{{ product.brand_name }}</div>
+      {% endif %}
+      <h2 class="product-catalog-title">
+        <a href="{% url 'get_product' product.slug %}" class="text-dark">{{ product.product_name }}</a>
+      </h2>
       {% if product.age_groups.all %}
-      <div class="mt-1 text-muted small">
-        <strong>Age:</strong> {% for age_group in product.age_groups.all %}{{ age_group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+      <div class="product-catalog-age">
+        For {% for age_group in product.age_groups.all %}{{ age_group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
       </div>
       {% endif %}
-      <div class="price mt-2">
+      <div class="product-catalog-price">
         {% if product.has_discount %}
-        <span class="text-muted" style="text-decoration: line-through; margin-right: 8px;">₹{{ product.marked_price }}.00</span>
-        <span class="font-weight-bold text-danger">{{ product.discount_label }}</span>
-        <div class="mt-1">₹{{ product.price }}.00</div>
+        <div class="product-catalog-price-row">
+          <span class="product-current-price">₹{{ product.price }}.00</span>
+          <span class="product-original-price">₹{{ product.marked_price }}.00</span>
+        </div>
+        <span class="product-discount-label"><i class="fas fa-tag" aria-hidden="true"></i>{{ product.discount_label }}</span>
         {% else %}
-        <div>₹{{ product.price }}.00</div>
+        <span class="product-current-price">₹{{ product.price }}.00</span>
         {% endif %}
       </div>
-    </figcaption>
-  </figure>
+      <a href="{% url 'get_product' product.slug %}" class="product-catalog-cta">View details <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+    </div>
+  </article>
 </div>
 {% endfor %}

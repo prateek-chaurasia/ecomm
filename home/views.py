@@ -4,15 +4,18 @@ from decouple import config
 
 from django.db.models import Q, Avg
 from django.db.models.functions import Coalesce
+from django.core.mail import EmailMessage
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.conf import settings
+from django.contrib import messages
 from products.models import Product, Category, Tag
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from home.models import HomeBanner
+from home.forms import ContactForm
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +139,46 @@ def product_search(request):
 
 
 def contact(request):
-    context = {"form_id": "xgvvlrvn"}
-    return render(request, 'home/contact.html', context)
+    form = ContactForm(request.POST or None)
+    if request.method == 'POST':
+        admin_recipients = [
+            address.strip()
+            for address in settings.ADMIN_EMAIL.split(',')
+            if address.strip()
+        ]
+        if form.is_valid() and not admin_recipients:
+            messages.error(request, 'Contact email is temporarily unavailable. Please try again later.')
+        elif form.is_valid():
+            subject_label = dict(ContactForm.SUBJECT_CHOICES)[
+                form.cleaned_data['subject']
+            ]
+            email_body = '\n'.join([
+                f"Name: {form.cleaned_data['first_name']} {form.cleaned_data['last_name']}",
+                f"Email: {form.cleaned_data['email']}",
+                f"Subject: {subject_label}",
+                f"Newsletter updates requested: {'Yes' if form.cleaned_data['newsletter'] else 'No'}",
+                '',
+                form.cleaned_data['message'],
+            ])
+            try:
+                EmailMessage(
+                    subject=f'Contact form: {subject_label}',
+                    body=email_body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=admin_recipients,
+                    reply_to=[form.cleaned_data['email']],
+                ).send(fail_silently=False)
+            except Exception:
+                logger.exception('Contact form email delivery failed')
+                messages.error(
+                    request,
+                    'We could not send your message right now. Please try again later.',
+                )
+            else:
+                messages.success(request, 'Your message has been sent. We will get back to you soon.')
+                return redirect('contact')
+
+    return render(request, 'home/contact.html', {'form': form})
 
 
 def about(request):

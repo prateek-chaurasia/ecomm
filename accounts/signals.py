@@ -36,6 +36,10 @@ def notify_customer_of_order_status(sender, instance, created, **kwargs):
     if created or not getattr(instance, '_status_changed', False):
         return
 
+    if instance.status == Order.Status.CANCELLED:
+        if getattr(instance, '_cancelled_by_customer', False):
+            return
+
     try:
         send_order_status_update_email(instance)
     except Exception:

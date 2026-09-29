@@ -80,7 +80,7 @@
                   <div>
                     <strong>{{ address.first_name }} {{ address.last_name }}</strong>
                     <div class="text-muted small">
-                      {{ address.street }}, {{ address.street_number }}, {{ address.city }}, {{ address.country }}, {{ address.zip_code }}
+                      {{ address.street }}, {{ address.street_number }}, {{ address.city }}, {{ address.state }}, {{ address.country }}, {{ address.zip_code }}
                     </div>
                     <div class="text-muted small">{{ address.phone }}</div>
                     {% if address.is_default %}
@@ -102,7 +102,7 @@
             </div>
             {% endif %}
 
-            <form method="POST">
+            <form method="POST" data-validate-on-blur>
               {% csrf_token %}
               {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
               {% if selected_address %}<input type="hidden" name="address_id" value="{{ selected_address.uid }}">{% endif %}
@@ -123,7 +123,9 @@
                 <div class="form-group col-md-4">{{ form.zip_code|as_crispy_field }}</div>
               </div>
 
-              {{ form.country|as_crispy_field }} {{ form.phone|as_crispy_field }}
+              {{ form.country|as_crispy_field }}
+              {{ form.state|as_crispy_field }}
+              {{ form.phone|as_crispy_field }}
               <div class="form-group">
                 {{ form.is_default|as_crispy_field }}
               </div>
@@ -165,4 +167,5 @@
   }
 </style>
 
+<script src="{% static 'js/form-validation.js' %}" defer></script>
 {% endblock %}

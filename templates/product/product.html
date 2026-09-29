@@ -8,9 +8,54 @@
     cursor: zoom-in;
   }
 
+  .carousel-item {
+    position: relative;
+  }
+
+  .stock-status-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    width: 100%;
+    padding: 0.4rem 0.7rem;
+    background: #f4c542;
+    color: #3f3100;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
   .zoomed-in {
     transform: scale(2);
     cursor: zoom-out;
+  }
+
+  .product-detail-card {
+    overflow: hidden;
+    border: 1px solid #e4e9e7;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(31, 55, 45, 0.08);
+  }
+
+  .product-discount-badge {
+    border: 1px solid #c9e5d2;
+    border-radius: 5px;
+    padding: 0.45rem 0.75rem;
+    background: #e8f4ec;
+    color: #256b43;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .quantity-error {
+    margin-top: 6px;
+    color: #b02a37;
+    font-size: 0.85rem;
+    line-height: 1.35;
   }
 
   /* Unified Color System */
@@ -118,6 +163,26 @@
     background: #fff;
   }
 
+  .cart-item-quantity-control {
+    min-height: 38px;
+  }
+
+  .added-to-cart-label {
+    min-width: 92px;
+    padding: 0 5px;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .cart-item-quantity-control .quantity-btn {
+    width: 28px;
+    height: 36px;
+    font-size: 12px;
+  }
+
   .quantity-btn {
     width: 42px;
     height: 42px;
@@ -142,6 +207,19 @@
     margin-top: 6px;
   }
 
+  .wishlist-saved-icon {
+    color: #e11d48;
+    font-size: 1.05em;
+  }
+
+  .wishlist-saved-status:disabled {
+    border-color: #fda4af;
+    background: #fff1f2;
+    color: #9f1239;
+    cursor: default;
+    opacity: 1;
+  }
+
   .purchase-actions {
     align-items: flex-end;
   }
@@ -159,6 +237,41 @@
 
   .gift-wrap-option input {
     margin-top: 4px;
+  }
+
+  .return-policy-section {
+    border-bottom: 1px solid #dbe3e8;
+    border-top: 1px solid #dbe3e8;
+    margin: 1.5rem 0;
+  }
+
+  .return-policy-toggle {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    list-style: none;
+  }
+
+  .return-policy-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .return-policy-toggle:focus-visible {
+    outline: 2px solid #1b6a50;
+    outline-offset: 3px;
+  }
+
+  .return-policy-toggle .return-policy-chevron {
+    transition: transform 0.2s ease;
+  }
+
+  .return-policy-section[open] .return-policy-chevron {
+    transform: rotate(180deg);
+  }
+
+  .return-policy-content {
+    padding: 0 0 1rem;
   }
 
   @media (max-width: 575.98px) {
@@ -187,7 +300,7 @@
   <div class="container mt-3">
     {% include 'base/alert.html' %}
     <!-- ============================ COMPONENT Product Details ================================= -->
-    <div class="card">
+    <div class="card product-detail-card">
       <div class="row no-gutters">
         <aside class="col-md-6">
           <!-- Gallery-Wrap -->
@@ -197,6 +310,9 @@
                 {% for image in product.product_images.all %}
                 <div class="carousel-item {% if forloop.first %}active{% endif %}">
                   <img id="mainImage" src="{{ image.image_url.url }}" alt="{{ product.product_name }}" />
+                  {% if not product.in_stock %}
+                  <span class="stock-status-overlay" role="status">Out of stock</span>
+                  {% endif %}
                 </div>
                 {% endfor %}
               </div>
@@ -215,7 +331,7 @@
           <!-- Gallery-Wrap End.// -->
         </aside>
         <main class="col-md-6 border-left">
-          <article class="content-body">
+          <article class="content-body card-body">
             <h2 class="title">{{product.product_name}}</h2>
             <h6 class="text-muted">{{product.category}}</h6>
 
@@ -244,7 +360,7 @@
               {% if product.has_discount %}
               <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
                 <span class="text-muted h5 mb-0" style="text-decoration: line-through; color: #64748b !important;">₹{{ product.marked_price }}.00</span>
-                <span class="badge badge-danger px-3 py-2" style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; background: linear-gradient(135deg, #ef4444, #dc2626); border-radius: 10px; box-shadow: 0 8px 18px rgba(239, 68, 68, 0.25);">{{ product.discount_label }}</span>
+                <span class="badge product-discount-badge">{{ product.discount_label }}</span>
               </div>
               <div class="d-flex align-items-center flex-wrap gap-2">
                 <var class="price h3 text-danger mb-0" style="font-size: 2rem; font-weight: 800;">₹{{ current_price }}.00</var>
@@ -263,21 +379,6 @@
               {{product.product_desription}}
             </p>
 
-            {% if product.return_details %}
-            <section class="return-details-section mt-4 mb-4">
-              <h5 class="mb-2"><i class="fas fa-undo mr-2"></i>Return Details</h5>
-              {% if product.return_details.return_policy == 'returnable' %}
-              <p class="mb-2">Returnable within {{ product.return_details.return_window_days }} days of delivery.</p>
-              {% elif product.return_details.return_policy == 'replaceable' %}
-              <p class="mb-2">Replaceable according to the product policy.</p>
-              {% else %}
-              <p class="mb-2">This product is non-returnable.</p>
-              {% endif %}
-              {% if product.return_details.policy %}<p class="text-muted mb-2">{{ product.return_details.policy }}</p>{% endif %}
-              {% if product.return_details.conditions %}<p class="text-muted mb-0"><strong>Conditions:</strong> {{ product.return_details.conditions }}</p>{% endif %}
-            </section>
-            {% endif %}
-            <br />
             <dl class="row">
               <dt class="col-sm-3">Brand</dt>
               <dd class="col-sm-9">{{ product.brand_name }}</dd>
@@ -297,7 +398,7 @@
               </dd>
 
               <dt class="col-sm-3">Delivery</dt>
-              <dd class="col-sm-9">Only in Dehradun!</dd>
+              <dd class="col-sm-9">{{ delivery_guideline.summary }}</dd>
             </dl>
 
             <hr />
@@ -325,17 +426,18 @@
             <!-- Add to Wishlist Button -->
             <div class="form-group d-flex flex-wrap justify-content-start purchase-actions">
               <div class="quantity-panel mr-3 mb-2">
-                <div class="quantity-label">Quantity</div>
-                <div class="quantity-control" role="group" aria-label="Product quantity">
-                  <button type="button" class="quantity-btn" id="decrease-quantity" aria-label="Decrease quantity" title="Decrease quantity" {% if not product.in_stock %}disabled{% endif %}>
+                <div class="quantity-label" id="quantity-label" {% if product_cart_item %}hidden{% endif %}>Quantity</div>
+                <div class="quantity-control" id="product-quantity-control" role="group" aria-label="Product quantity" {% if product_cart_item %}hidden{% endif %}>
+                  <button type="button" class="quantity-btn" id="decrease-quantity" aria-label="Decrease quantity" title="Decrease quantity" {% if not product.in_stock and not product_cart_item %}disabled{% endif %}>
                     <i class="fas fa-minus" aria-hidden="true"></i>
                   </button>
-                  <input type="number" id="product-quantity" class="product-quantity" value="1" min="1" max="{{ product.stock_quantity }}" inputmode="numeric" aria-label="Quantity" {% if not product.in_stock %}disabled{% endif %}>
+                    <input type="number" id="product-quantity" class="product-quantity" value="{{ product_cart_item.quantity|default:1 }}" min="{% if product_cart_item %}0{% else %}1{% endif %}" max="{{ product.stock_quantity }}" step="1" data-cart-item-id="{% if product_cart_item %}{{ product_cart_item.uid }}{% endif %}" inputmode="numeric" aria-label="Quantity" aria-describedby="quantity-error stock-note" {% if not product.in_stock and not product_cart_item %}disabled{% endif %}>
                   <button type="button" class="quantity-btn" id="increase-quantity" aria-label="Increase quantity" title="Increase quantity" {% if not product.in_stock %}disabled{% endif %}>
                     <i class="fas fa-plus" aria-hidden="true"></i>
                   </button>
                 </div>
-                <div class="stock-note"><i class="fas fa-box-open mr-1" aria-hidden="true"></i>{{ product.stock_quantity }} available</div>
+                <div id="quantity-error" class="quantity-error" role="alert" aria-live="polite" hidden></div>
+                <div class="stock-note" id="stock-note"><i class="fas fa-box-open mr-1" aria-hidden="true"></i>{{ product.stock_quantity }} available</div>
               </div>
               {% if product.gift_wrap_available and product.gift_wrap_price > 0 %}
               <label class="gift-wrap-option w-100 mb-3 ml-3" for="gift-wrap">
@@ -345,30 +447,76 @@
               {% endif %}
               
               <div class="d-sm-flex align-items-end mr-2">
-                <div class="mb-2 mb-sm-0 mr-0 mr-sm-3">
-                  <form method="POST" action="{% url 'add_to_wishlist' product.uid %}?size={{ selected_size }}">
+                <div class="mb-2 mb-sm-0 mr-0 mr-sm-3 wishlist-product-action">
+                  {% if not product.in_stock and request.user.is_authenticated %}
+                  <form method="POST" action="{% url 'add_to_wishlist' product.uid %}?size={{ selected_size|default_if_none:'' }}">
                     {% csrf_token %}
+                    <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input type="hidden" name="manage_restock_notification" value="1">
+                    {% if in_wishlist %}
+                    <button type="button" class="btn btn-outline-secondary wishlist-saved-status mb-2" disabled aria-label="Already in wishlist">
+                      <i class="fas fa-heart mr-1 wishlist-saved-icon" aria-hidden="true"></i>In wishlist
+                    </button>
+                    {% endif %}
+                    <label class="form-check mb-2" for="notify-restock">
+                      <input class="form-check-input" type="checkbox" id="notify-restock" name="notify_on_restock" {% if wishlist_item.notify_on_restock %}checked{% endif %}>
+                      <span class="form-check-label">Email me when this item is back in stock</span>
+                    </label>
                     <button type="submit" class="btn btn-outline-primary">
-                      <i class="fas fa-heart"></i> Add to Wishlist
+                      <i class="fas fa-bell mr-1"></i>
+                      {% if wishlist_item %}Save notification preference{% else %}Add to wishlist{% endif %}
                     </button>
                   </form>
+                  {% elif product.in_stock and request.user.is_authenticated and in_wishlist %}
+                  <button type="button" class="btn btn-outline-secondary wishlist-saved-status" disabled aria-label="Already in wishlist">
+                    <i class="fas fa-heart mr-1 wishlist-saved-icon" aria-hidden="true"></i>In wishlist
+                  </button>
+                  {% elif product.in_stock and request.user.is_authenticated %}
+                  <form method="POST" action="{% url 'add_to_wishlist' product.uid %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-outline-primary">
+                      <i class="fas fa-heart mr-1" aria-hidden="true"></i>Add to wishlist
+                    </button>
+                  </form>
+                  {% elif not product.in_stock %}
+                  <a class="btn btn-outline-primary" href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">
+                    <i class="fas fa-bell mr-1" aria-hidden="true"></i>Sign in for restock alerts
+                  </a>
+                  {% else %}
+                  <a class="btn btn-outline-primary" href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}">
+                    <i class="fas fa-heart mr-1" aria-hidden="true"></i>Add to wishlist
+                  </a>
+                  {% endif %}
                 </div>
-                <form method="post" action="{% url 'add_to_cart' product.uid %}" id="add-to-cart-form" class="d-inline-block">
+                <div class="quantity-control cart-item-quantity-control" id="cart-item-quantity-control" role="group" aria-label="Cart item quantity" {% if not product_cart_item %}hidden{% endif %}>
+                  <button type="button" class="quantity-btn" id="cart-decrease-quantity" aria-label="Decrease quantity" title="Decrease quantity">
+                    <i class="fas fa-minus" aria-hidden="true"></i>
+                  </button>
+                  <span class="added-to-cart-label" id="added-to-cart-label" role="status" aria-live="polite">{% if product_cart_item.quantity == 1 %}1 item added{% elif product_cart_item %}{{ product_cart_item.quantity }} items added{% endif %}</span>
+                  <button type="button" class="quantity-btn" id="cart-increase-quantity" aria-label="Increase quantity" title="Increase quantity">
+                    <i class="fas fa-plus" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <form method="post" action="{% url 'add_to_cart' product.uid %}" id="add-to-cart-form" class="d-inline-block {% if product_cart_item %}d-none{% endif %}">
                   {% csrf_token %}
-                  <input type="hidden" name="size" value="{{ selected_size }}">
+                  <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
                   <input type="hidden" name="quantity" value="1" class="product-quantity-value">
                   <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
-                  <button type="submit" id="add-to-cart-btn" class="btn btn-primary">
+                  <button type="submit" id="add-to-cart-btn" class="btn btn-primary" {% if product_cart_item %}hidden{% endif %}>
                     <i class="fas fa-shopping-bag mr-1"></i>
                     <span>Add to cart</span>
                   </button>
                 </form>
                 <form method="post" action="{% url 'add_to_cart' product.uid %}" id="buy-now-form" class="d-inline-block">
                   {% csrf_token %}
-                  <input type="hidden" name="size" value="{{ selected_size }}">
+                  <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
                   <input type="hidden" name="quantity" value="1" class="product-quantity-value">
                   <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
-                  <button type="submit" id="buy-now-btn" class="btn btn-success ml-2 {% if not product.in_stock %}disabled{% endif %}" {% if not product.in_stock %}disabled aria-disabled="true"{% endif %}>
+                  <button type="submit" id="buy-now-btn" class="btn btn-success ml-2 {% if not product.in_stock %}disabled{% endif %}" data-in-stock="{% if product.in_stock %}true{% else %}false{% endif %}" {% if not product.in_stock %}disabled aria-disabled="true"{% endif %}>
                     <i class="fas fa-bolt mr-1"></i>
                     <span>Buy Now</span>
                   </button>
@@ -379,6 +527,44 @@
         </main>
       </div>
     </div>
+
+    <details class="return-policy-section" aria-label="Return and refund policy">
+      <summary class="title padding-y-sm return-policy-toggle">
+        <span><i class="fas fa-undo mr-2" aria-hidden="true"></i>Return and refund policy</span>
+        <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
+      </summary>
+      <div class="return-policy-content">
+        <section class="return-details-section mb-4">
+          <h5 class="mb-2">
+            <i class="fas fa-undo mr-2"></i>
+            {% if product.return_details %}Return Details{% else %}{{ return_refund_policy.return_title }}{% endif %}
+          </h5>
+          {% if product.return_details %}
+          {% if product.return_details.return_policy == 'returnable' %}
+          <p class="mb-2">Returnable within {{ product.return_details.return_window_days }} days of delivery.</p>
+          {% elif product.return_details.return_policy == 'replaceable' %}
+          <p class="mb-2">Replaceable according to the product policy.</p>
+          {% else %}
+          <p class="mb-2">This product is non-returnable.</p>
+          {% endif %}
+          {% if product.return_details.policy %}<p class="text-muted mb-2">{{ product.return_details.policy|linebreaksbr }}</p>{% endif %}
+          {% if product.return_details.conditions %}<p class="text-muted mb-0"><strong>Conditions:</strong> {{ product.return_details.conditions|linebreaksbr }}</p>{% endif %}
+          {% else %}
+          <p class="mb-2">{{ return_refund_policy.return_summary }}</p>
+          <p class="text-muted mb-0">{{ return_refund_policy.return_details|linebreaksbr }}</p>
+          {% endif %}
+        </section>
+        <section class="refund-details-section">
+          <h5 class="mb-2">{{ return_refund_policy.refund_title }}</h5>
+          {% if product.return_details.refund_policy %}
+          <p class="text-muted mb-0">{{ product.return_details.refund_policy|linebreaksbr }}</p>
+          {% else %}
+          <p class="mb-2">{{ return_refund_policy.refund_summary }}</p>
+          <p class="text-muted mb-0">{{ return_refund_policy.refund_details|linebreaksbr }}</p>
+          {% endif %}
+        </section>
+      </div>
+    </details>
 
     <!-- Related Products Section -->
     <h3 class="title padding-y-sm">Related products</h3>
@@ -960,27 +1146,142 @@
     const quantityInput = document.getElementById("product-quantity");
     const addToCartForm = document.getElementById("add-to-cart-form");
     const buyNowForm = document.getElementById("buy-now-form");
-    const decreaseButton = document.getElementById("decrease-quantity");
-    const increaseButton = document.getElementById("increase-quantity");
+    const quantityLabel = document.getElementById("quantity-label");
+    const quantityControl = document.getElementById("product-quantity-control");
+    const cartItemQuantityControl = document.getElementById("cart-item-quantity-control");
+    const decreaseButtons = [
+      document.getElementById("decrease-quantity"),
+      document.getElementById("cart-decrease-quantity"),
+    ];
+    const increaseButtons = [
+      document.getElementById("increase-quantity"),
+      document.getElementById("cart-increase-quantity"),
+    ];
     const giftWrapInput = document.getElementById("gift-wrap");
+    const addToCartButton = document.getElementById("add-to-cart-btn");
+    const buyNowButton = document.getElementById("buy-now-btn");
+    const addedToCartLabel = document.getElementById("added-to-cart-label");
 
     if (!quantityInput || !addToCartForm || !buyNowForm) return;
 
-    const quantity = Math.max(1, Math.min(Number(quantityInput.value) || 1, Number(quantityInput.max)));
-    quantityInput.value = quantity;
-    if (decreaseButton) decreaseButton.disabled = quantity <= 1 || quantityInput.disabled;
-    if (increaseButton) increaseButton.disabled = quantity >= Number(quantityInput.max) || quantityInput.disabled;
-    [addToCartForm, buyNowForm].forEach((form) => {
-      form.querySelector(".product-quantity-value").value = quantity;
-      form.querySelector(".gift-wrap-value").value = giftWrapInput && giftWrapInput.checked ? "1" : "0";
+    const hasCartItem = Boolean(quantityInput.dataset.cartItemId);
+    const minimum = hasCartItem ? 0 : 1;
+    const quantity = Number(quantityInput.value);
+    const maximum = Number(quantityInput.max);
+    let quantityError = "";
+    if (!Number.isInteger(quantity) || quantity < minimum) {
+      quantityError = `Enter a whole number of at least ${minimum}.`;
+    } else if (quantity > maximum) {
+      quantityError = `Only ${maximum} available. Choose a lower quantity.`;
+    }
+    showQuantityError(quantityError);
+
+    if (quantityLabel) quantityLabel.hidden = hasCartItem;
+    if (quantityControl) quantityControl.hidden = hasCartItem;
+    if (cartItemQuantityControl) cartItemQuantityControl.hidden = !hasCartItem;
+    decreaseButtons.forEach((button) => {
+      if (button) button.disabled = quantity <= minimum || quantityInput.disabled;
     });
+    increaseButtons.forEach((button) => {
+      if (button) button.disabled = quantity >= Number(quantityInput.max) || quantityInput.disabled;
+    });
+    addToCartForm.classList.toggle("d-none", hasCartItem || quantityInput.disabled);
+    if (addToCartButton) addToCartButton.hidden = hasCartItem || quantityInput.disabled;
+    if (addToCartButton) addToCartButton.disabled = Boolean(quantityError) || quantityInput.disabled;
+    if (buyNowButton) {
+      buyNowButton.disabled = Boolean(quantityError) || quantityInput.disabled || buyNowButton.dataset.inStock !== "true";
+      buyNowButton.setAttribute("aria-disabled", String(buyNowButton.disabled));
+    }
+    if (addedToCartLabel) {
+      addedToCartLabel.hidden = !hasCartItem;
+      if (hasCartItem) addedToCartLabel.textContent = `${quantity} ${quantity === 1 ? "item" : "items"} added`;
+    }
+    if (!quantityError) {
+      [addToCartForm, buyNowForm].forEach((form) => {
+        form.querySelector(".product-quantity-value").value = quantity;
+        form.querySelector(".gift-wrap-value").value = giftWrapInput && giftWrapInput.checked ? "1" : "0";
+      });
+    }
+    return !quantityError;
   }
 
-  function changeProductQuantity(amount) {
+  function showQuantityError(message) {
+    const quantityInput = document.getElementById("product-quantity");
+    const errorElement = document.getElementById("quantity-error");
+    if (quantityInput) {
+      quantityInput.setCustomValidity(message);
+      quantityInput.setAttribute("aria-invalid", String(Boolean(message)));
+    }
+    if (errorElement) {
+      errorElement.textContent = message;
+      errorElement.hidden = !message;
+    }
+  }
+
+  async function changeProductQuantity(amount) {
     const quantityInput = document.getElementById("product-quantity");
     if (!quantityInput || quantityInput.disabled) return;
-    quantityInput.value = Number(quantityInput.value || 1) + amount;
+    const targetQuantity = Number(quantityInput.value || 1) + amount;
+    if (quantityInput.dataset.cartItemId) {
+      await saveCartItemQuantity(quantityInput, targetQuantity);
+      return;
+    }
+    quantityInput.value = targetQuantity;
     updateProductActionLinks();
+  }
+
+  async function saveCartItemQuantity(quantityInput, requestedQuantity) {
+    const previousQuantity = Number(quantityInput.value);
+    const quantity = Number(requestedQuantity);
+    const csrfToken = document.querySelector('#add-to-cart-form [name="csrfmiddlewaretoken"]')?.value;
+    const controls = [
+      document.getElementById("decrease-quantity"),
+      document.getElementById("increase-quantity"),
+      document.getElementById("cart-decrease-quantity"),
+      document.getElementById("cart-increase-quantity"),
+      quantityInput,
+    ];
+    controls.forEach((control) => { if (control) control.disabled = true; });
+
+    let updateError = "";
+    try {
+      const response = await fetch("{% url 'update_cart_item' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken,
+        },
+        body: JSON.stringify({
+          cart_item_id: quantityInput.dataset.cartItemId,
+          quantity,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to update your cart.");
+      }
+
+      document.querySelectorAll(".notify").forEach((badge) => {
+        badge.textContent = result.cart_count;
+      });
+
+      if (result.removed) {
+        quantityInput.dataset.cartItemId = "";
+        quantityInput.min = "1";
+        quantityInput.value = "1";
+      } else {
+        quantityInput.value = result.quantity;
+      }
+    } catch (error) {
+      quantityInput.value = previousQuantity;
+      updateError = error.message;
+    } finally {
+      controls.forEach((control) => {
+        if (control) control.disabled = !Number(quantityInput.max);
+      });
+      updateProductActionLinks();
+      if (updateError) showQuantityError(updateError);
+    }
   }
 
   function get_correct_price(selected_size) {
@@ -1002,14 +1303,33 @@
     const quantityInput = document.getElementById("product-quantity");
     if (quantityInput) {
       quantityInput.addEventListener("input", updateProductActionLinks);
-      quantityInput.addEventListener("change", updateProductActionLinks);
+      quantityInput.addEventListener("change", function () {
+        if (quantityInput.dataset.cartItemId) {
+          if (updateProductActionLinks()) saveCartItemQuantity(quantityInput, quantityInput.value);
+        } else {
+          updateProductActionLinks();
+        }
+      });
       const giftWrapInput = document.getElementById("gift-wrap");
       if (giftWrapInput) giftWrapInput.addEventListener("change", updateProductActionLinks);
-      document.getElementById("decrease-quantity").addEventListener("click", function () {
-        changeProductQuantity(-1);
+      ["decrease-quantity", "cart-decrease-quantity"].forEach((id) => {
+        document.getElementById(id).addEventListener("click", function () {
+          changeProductQuantity(-1);
+        });
       });
-      document.getElementById("increase-quantity").addEventListener("click", function () {
-        changeProductQuantity(1);
+      ["increase-quantity", "cart-increase-quantity"].forEach((id) => {
+        document.getElementById(id).addEventListener("click", function () {
+          changeProductQuantity(1);
+        });
+      });
+      [addToCartForm, buyNowForm].forEach((form) => {
+        form.addEventListener("submit", function (event) {
+          if (!updateProductActionLinks()) {
+            event.preventDefault();
+            quantityInput.focus();
+            quantityInput.reportValidity();
+          }
+        });
       });
       updateProductActionLinks();
     }

@@ -28,9 +28,31 @@
   <link rel="stylesheet" href="https://cdn.lineicons.com/3.0/lineicons.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css" />
+
+  <style>
+    .select2-container {
+      width: 100% !important;
+    }
+
+    .select2-container--default .select2-selection--single {
+      height: 38px;
+      border: 1px solid #ced4da;
+      border-radius: 0.25rem;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+      line-height: 36px;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 36px;
+    }
+  </style>
 
   <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js"></script>
 
   <!-- Popper.js -->
   <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.5/dist/umd/popper.min.js"></script>
@@ -44,48 +66,6 @@
 </head>
 
 <style>
-  @property --angle {
-    syntax: "<angle>";
-    initial-value: 0deg;
-    inherits: false;
-  }
-
-  .card-body::after,
-  .card-body::before {
-    content: "";
-    position: absolute;
-    height: 100%;
-    width: 100%;
-    background-image: conic-gradient(from var(--angle),
-        #ff4545,
-        #00ff99,
-        #006aff,
-        #ff0095,
-        #ff4545);
-    top: 50%;
-    left: 50%;
-    translate: -50% -50%;
-    z-index: -1;
-    padding: 3px;
-    border-radius: 10px;
-    animation: 3s spin linear infinite;
-  }
-
-  .card-body::before {
-    filter: blur(1.5rem);
-    opacity: 0.5;
-  }
-
-  @keyframes spin {
-    from {
-      --angle: 0deg;
-    }
-
-    to {
-      --angle: 360deg;
-    }
-  }
-
   a {
     text-decoration: none;
   }
@@ -118,6 +98,15 @@
   {% block footer %}
   {% include 'home/footer.html' %}
   {% endblock %}
+
+  <script>
+    $(function () {
+      $('.select2-state').select2({
+        width: '100%',
+        placeholder: 'Select a state',
+      });
+    });
+  </script>
 </body>
 
 </html>

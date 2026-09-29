@@ -3,6 +3,7 @@ import json
 import uuid
 import hmac
 import logging
+from collections import Counter
 from urllib.parse import urlencode
 import razorpay
 from weasyprint import CSS, HTML
@@ -11,15 +12,23 @@ from django.urls import reverse
 from django.conf import settings
 from django.contrib import messages
 from django.http import JsonResponse
-from home.models import ShippingAddress
+from home.models import DeliveryGuideline, ShippingAddress
+from home.delivery import (
+    get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
+)
 from django.contrib.auth.models import User
 from django.template.loader import get_template
 from accounts.models import (
     Profile, Cart, CartItem, Order, OrderItem, BundleCartItem,
     BundleOrderItem, BundleOrderProduct, ServiceablePincode,
 )
-from base.emails import send_account_activation_email
-from base.emails import send_order_confirmation_email, send_admin_new_order_email
+from base.emails import (
+    send_account_activation_email,
+    send_admin_new_order_email,
+    send_admin_order_cancelled_email,
+    send_order_cancelled_customer_email,
+    send_order_confirmation_email,
+)
 from django.views.decorators.http import require_POST
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -31,11 +40,35 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.shortcuts import redirect, render, get_object_or_404
 from accounts.forms import (
-    UserUpdateForm, UserProfileForm, ShippingAddressForm,
+    UserUpdateForm, UserProfileForm, RegistrationForm, ShippingAddressForm,
     GuestShippingAddressForm, CustomPasswordChangeForm,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _automatic_delivery_selection(
+    city, pincode, latitude, longitude, accuracy_meters, order_total,
+):
+    is_serviceable = ServiceablePincode.objects.filter(
+        pincode=(pincode or '').strip(), is_active=True,
+    ).exists()
+    return get_automatic_delivery_selection(
+        DeliveryGuideline.get_solo(),
+        city,
+        is_serviceable,
+        latitude,
+        longitude,
+        accuracy_meters,
+        order_total,
+    )
+
+
+def _cart_delivery_fee(cart):
+    return get_delivery_fee(
+        DeliveryGuideline.get_solo(),
+        cart.get_cart_total_price_after_coupon(),
+    )
 
 def generate_order_id():
     return f'BOG-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
@@ -73,10 +106,17 @@ def login_page(request):
 def register_page(request):
     if request.method == 'POST':
         username = request.POST.get('username')
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
-        email = request.POST.get('email')
-        password = request.POST.get('password')
+        registration_form = RegistrationForm(request.POST)
+        if not registration_form.is_valid():
+            return render(
+                request,
+                'accounts/register.html',
+                {'registration_form': registration_form},
+            )
+        first_name = registration_form.cleaned_data['first_name']
+        last_name = registration_form.cleaned_data['last_name']
+        email = registration_form.cleaned_data['email']
+        password = registration_form.cleaned_data['password']
 
         user_obj = User.objects.filter(Q(username=username) | Q(email=email))
 
@@ -97,7 +137,11 @@ def register_page(request):
         messages.success(request, "An email has been sent to your mail.")
         return HttpResponseRedirect(request.path_info)
 
-    return render(request, 'accounts/register.html')
+    return render(
+        request,
+        'accounts/register.html',
+        {'registration_form': RegistrationForm()},
+    )
 
 
 @require_POST
@@ -177,27 +221,65 @@ def add_to_cart(request, uid):
             messages.warning(request, 'This product is out of stock.')
             return redirect(reverse('get_product', kwargs={'slug': product.slug}))
 
-        quantity = min(quantity, product.stock_quantity)
         gift_wrap = (request.POST.get('gift_wrap') or request.GET.get('gift_wrap')) == '1' and product.gift_wrap_available
         cart = get_active_cart(request, create=True)
         size_variant = get_object_or_404(
             SizeVariant, size_name=variant) if variant else None
 
-        cart_item, created = CartItem.objects.get_or_create(
-            cart=cart, product=product, size_variant=size_variant, gift_wrap=gift_wrap)
-        if not created:
-            cart_item.quantity = min(cart_item.quantity + quantity, product.stock_quantity)
-            cart_item.save()
+        cart_item = CartItem.objects.filter(
+            cart=cart,
+            product=product,
+            size_variant=size_variant,
+            gift_wrap=gift_wrap,
+        ).first()
+        already_in_cart = cart_item.quantity if cart_item else 0
+        quantity_after_add = already_in_cart + quantity
+        if quantity_after_add > product.stock_quantity:
+            available_to_add = max(product.stock_quantity - already_in_cart, 0)
+            available_label = 'item' if available_to_add == 1 else 'items'
+            messages.error(
+                request,
+                f'Only {available_to_add} more {available_label} can be added. '
+                f'{already_in_cart} already in your cart; {product.stock_quantity} in stock.',
+            )
         else:
-            cart_item.quantity = quantity
-            cart_item.save(update_fields=['quantity'])
-
-        messages.success(request, 'Item added to cart successfully.')
+            cart_item, created = CartItem.objects.get_or_create(
+                cart=cart,
+                product=product,
+                size_variant=size_variant,
+                gift_wrap=gift_wrap,
+                defaults={'quantity': quantity},
+            )
+            if created:
+                messages.success(request, 'Item added to cart successfully.')
+            else:
+                quantity_after_add = cart_item.quantity + quantity
+                if quantity_after_add > product.stock_quantity:
+                    available_to_add = max(
+                        product.stock_quantity - cart_item.quantity, 0)
+                    available_label = 'item' if available_to_add == 1 else 'items'
+                    messages.error(
+                        request,
+                        f'Only {available_to_add} more {available_label} can be added. '
+                        f'{cart_item.quantity} already in your cart; '
+                        f'{product.stock_quantity} in stock.',
+                    )
+                else:
+                    cart_item.quantity = quantity_after_add
+                    cart_item.save()
+                    messages.success(request, 'Item added to cart successfully.')
 
     except Exception as e:
         logger.exception("Add to cart failed for product %s", uid)
         messages.error(request, 'Error adding item to cart.')
 
+    next_url = request.POST.get('next')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
     return redirect(reverse('cart'))
 
 
@@ -247,16 +329,88 @@ def cart(request):
         elif saved_addresses:
             selected_address_id = str(saved_addresses[0].uid)
 
+    delivery_guideline = DeliveryGuideline.get_solo()
+    cart_total_after_coupon = cart_obj.get_cart_total_price_after_coupon()
+    cart_has_items = cart_obj.cart_items.exists() or cart_obj.bundle_items.exists()
+    delivery_fee = (
+        get_delivery_fee(delivery_guideline, cart_total_after_coupon)
+        if cart_has_items else None
+    )
+    if delivery_fee is None:
+        delivery_fee_reason = ''
+    elif delivery_guideline.delivery_charge_threshold is None:
+        delivery_fee_reason = 'No free-delivery threshold is configured.'
+    elif cart_total_after_coupon < delivery_guideline.delivery_charge_threshold:
+        delivery_fee_reason = (
+            f'Applies because the order total is below the '
+            f'₹{delivery_guideline.delivery_charge_threshold} free-delivery threshold.'
+        )
+    else:
+        delivery_fee_reason = (
+            f'Free delivery because the order total meets the '
+            f'₹{delivery_guideline.delivery_charge_threshold} threshold.'
+        )
+    cart_subtotal_with_delivery = cart_obj.get_cart_total() + (delivery_fee or 0)
+
     context = {
         'cart': cart_obj,
         'payment': payment,
         'razorpay_key_id': settings.RAZORPAY_KEY_ID,
+        'online_payment_enabled': settings.ONLINE_PAYMENT_ENABLED,
         'quantity_range': range(1, 6),
         'base_url': settings.BASE_URL,
         'saved_addresses': saved_addresses,
         'selected_address_id': selected_address_id,
+        'delivery_guideline': delivery_guideline,
+        'cart_has_items': cart_has_items,
+        'cart_subtotal': cart_subtotal_with_delivery,
+        'cart_discount': (
+            cart_obj.get_cart_total() - cart_obj.get_cart_total_price_after_coupon()
+        ),
+        'delivery_fee': delivery_fee,
+        'delivery_fee_reason': delivery_fee_reason,
+        'cart_total_after_delivery': (
+            cart_total_after_coupon + delivery_fee
+            if delivery_fee is not None else None
+        ),
     }
     return render(request, 'accounts/cart.html', context)
+
+
+@require_POST
+def delivery_options(request):
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'error': 'Invalid delivery selection request.'}, status=400)
+
+    if request.user.is_authenticated:
+        selected_address = ShippingAddress.objects.filter(
+            user=request.user,
+            uid=payload.get('selected_address_id'),
+        ).first()
+        if not selected_address:
+            return JsonResponse({'error': 'Choose a saved delivery address first.'}, status=400)
+        city = selected_address.city
+    else:
+        city = (payload.get('city') or '').strip()
+
+    cart_obj = get_active_cart(request)
+    if not cart_obj:
+        return JsonResponse({'error': 'Your cart is empty.'}, status=400)
+
+    try:
+        options = get_delivery_options(
+            DeliveryGuideline.get_solo(),
+            city,
+            payload.get('latitude'),
+            payload.get('longitude'),
+            payload.get('accuracy_meters'),
+            cart_obj.get_cart_total_price_after_coupon(),
+        )
+    except ValueError as error:
+        return JsonResponse({'error': str(error)}, status=400)
+    return JsonResponse(options)
 
 
 @require_POST
@@ -277,10 +431,13 @@ def create_payment_order(request):
             profile.shipping_address = selected_address
             profile.save(update_fields=['shipping_address', 'updated_at'])
 
+    if not settings.ONLINE_PAYMENT_ENABLED:
+        return JsonResponse({'error': 'Online payments are coming soon.'}, status=503)
+
     cart_obj = get_object_or_404(Cart, user=request.user, is_paid=False)
     if not _cart_has_available_stock(cart_obj):
         return JsonResponse({'error': 'One or more products are no longer available in the requested quantity.'}, status=409)
-    amount = int(cart_obj.get_cart_total_price_after_coupon() * 100)
+    amount = int((cart_obj.get_cart_total_price_after_coupon() + _cart_delivery_fee(cart_obj)) * 100)
 
     if amount < 100:
         return JsonResponse(
@@ -325,6 +482,9 @@ def create_payment_order(request):
 @require_POST
 @login_required
 def verify_payment(request):
+    if not settings.ONLINE_PAYMENT_ENABLED:
+        return JsonResponse({'error': 'Online payments are coming soon.'}, status=503)
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -334,6 +494,9 @@ def verify_payment(request):
     payment_id = data.get('razorpay_payment_id')
     signature = data.get('razorpay_signature')
     selected_address_id = data.get('selected_address_id')
+    delivery_latitude = data.get('delivery_latitude')
+    delivery_longitude = data.get('delivery_longitude')
+    delivery_accuracy = data.get('delivery_accuracy_meters')
     if not all((order_id, payment_id, signature)):
         return JsonResponse(
             {'error': 'Missing payment verification fields.'}, status=400)
@@ -356,7 +519,7 @@ def verify_payment(request):
         logger.exception("Unable to fetch Razorpay payment %s", payment_id)
         return JsonResponse({'error': 'Unable to validate the payment.'}, status=502)
 
-    expected_amount = int(cart_obj.get_cart_total_price_after_coupon() * 100)
+    expected_amount = int((cart_obj.get_cart_total_price_after_coupon() + _cart_delivery_fee(cart_obj)) * 100)
     if (
         payment.get('order_id') != order_id or
         payment.get('amount') != expected_amount or
@@ -365,18 +528,34 @@ def verify_payment(request):
     ):
         return JsonResponse({'error': 'Payment validation failed.'}, status=400)
 
-    if selected_address_id:
-        selected_address = ShippingAddress.objects.filter(user=request.user, uid=selected_address_id).first()
-        if selected_address:
-            profile, _ = Profile.objects.get_or_create(user=request.user)
-            profile.shipping_address = selected_address
-            profile.save(update_fields=['shipping_address', 'updated_at'])
+    selected_address = ShippingAddress.objects.filter(
+        user=request.user,
+        uid=selected_address_id,
+    ).first() if selected_address_id else None
+    if not selected_address:
+        try:
+            client.payment.refund(payment_id, {})
+        except Exception:
+            logger.exception('Unable to refund payment %s without a shipping address', payment_id)
+        return JsonResponse({'error': 'Please choose a valid delivery address.'}, status=409)
+
+    delivery_option, delivery_distance = _automatic_delivery_selection(
+        selected_address.city,
+        selected_address.zip_code,
+        delivery_latitude,
+        delivery_longitude,
+        delivery_accuracy,
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
+
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    profile.shipping_address = selected_address
+    profile.save(update_fields=['shipping_address', 'updated_at'])
 
     try:
         order = create_order(cart_obj, shipping_address=(
-            ShippingAddress.objects.filter(user=request.user, uid=selected_address_id).first()
-            if selected_address_id else None
-        ))
+            selected_address
+        ), delivery_option=delivery_option, delivery_distance_km=delivery_distance)
     except ValueError as error:
         logger.warning("Payment %s could not reserve inventory: %s", payment_id, error)
         try:
@@ -420,25 +599,29 @@ def place_cod_order(request):
             ),
         }, status=400)
 
-    selected_address_id = None
+    payload = {}
     if request.content_type == 'application/json':
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
             payload = {}
-        selected_address_id = payload.get('selected_address_id')
     else:
-        selected_address_id = request.POST.get('selected_address_id')
+        payload = request.POST
+    selected_address_id = payload.get('selected_address_id')
+    delivery_latitude = payload.get('delivery_latitude')
+    delivery_longitude = payload.get('delivery_longitude')
+    delivery_accuracy = payload.get('delivery_accuracy_meters')
 
     profile = Profile.objects.filter(user=request.user).first()
     shipping_address = profile.shipping_address if profile else None
     if selected_address_id:
         selected_address = ShippingAddress.objects.filter(user=request.user, uid=selected_address_id).first()
-        if selected_address:
-            shipping_address = selected_address
-            if profile:
-                profile.shipping_address = selected_address
-                profile.save(update_fields=['shipping_address', 'updated_at'])
+        if not selected_address:
+            return JsonResponse({'error': 'Please choose a valid delivery address.'}, status=400)
+        shipping_address = selected_address
+        if profile:
+            profile.shipping_address = selected_address
+            profile.save(update_fields=['shipping_address', 'updated_at'])
 
     addresses = ShippingAddress.objects.filter(user=request.user).order_by('-is_default', '-created_at')
     if addresses.count() > 1 and not selected_address_id:
@@ -456,6 +639,15 @@ def place_cod_order(request):
             status=400,
         )
 
+    delivery_option, delivery_distance = _automatic_delivery_selection(
+        shipping_address.city,
+        shipping_address.zip_code,
+        delivery_latitude,
+        delivery_longitude,
+        delivery_accuracy,
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
+
     try:
         order = create_order(
             cart_obj,
@@ -463,6 +655,8 @@ def place_cod_order(request):
             payment_status='Pending',
             payment_mode='Cash on Delivery',
             shipping_address=shipping_address,
+            delivery_option=delivery_option,
+            delivery_distance_km=delivery_distance,
         )
     except ValueError as error:
         return JsonResponse({'error': str(error)}, status=409)
@@ -497,66 +691,198 @@ def guest_checkout(request):
     ):
         next_url = reverse('cart')
 
-    if request.method == 'POST':
+    quote_key = 'guest_checkout_quote'
+    quote_ready = False
+    editing_address = request.GET.get('edit') == '1'
+    quote_message = ''
+    delivery_fee = None
+    cart_total_after_delivery = None
+    shipping_address_summary = ''
+
+    if request.method == 'POST' and request.POST.get('confirm_order') == '1':
+        quote = request.session.get(quote_key)
+        if not quote or quote.get('cart_uid') != str(cart_obj.uid):
+            request.session.pop(quote_key, None)
+            form = GuestShippingAddressForm()
+            form.add_error(
+                None,
+                'Please enter your shipping address to view the delivery charges first.',
+            )
+        else:
+            form = GuestShippingAddressForm(quote['address'])
+            if form.is_valid():
+                current_cart_total = cart_obj.get_cart_total_price_after_coupon()
+                delivery_fee = _cart_delivery_fee(cart_obj)
+                cart_total_after_delivery = current_cart_total + delivery_fee
+                if (
+                    str(current_cart_total) != quote['cart_total'] or
+                    str(delivery_fee) != quote['delivery_fee']
+                ):
+                    quote['cart_total'] = str(current_cart_total)
+                    quote['delivery_fee'] = str(delivery_fee)
+                    quote_ready = True
+                    quote_message = 'Your cart or delivery charge changed. Review the updated total before placing your order.'
+                else:
+                    delivery_option, delivery_distance = _automatic_delivery_selection(
+                        form.cleaned_data['city'],
+                        form.cleaned_data['zip_code'],
+                        quote.get('delivery_latitude'),
+                        quote.get('delivery_longitude'),
+                        quote.get('delivery_accuracy_meters'),
+                        current_cart_total,
+                    )
+                    try:
+                        guest_address = form.save(commit=False)
+                        order = create_order(
+                            cart_obj,
+                            order_id=generate_order_id(),
+                            payment_status='Pending',
+                            payment_mode='Cash on Delivery',
+                            shipping_address=guest_address,
+                            delivery_pincode=guest_address.zip_code,
+                            guest_access_token=uuid.uuid4().hex,
+                            guest_name=(
+                                f'{form.cleaned_data["first_name"]} '
+                                f'{form.cleaned_data["last_name"]}'
+                            ).strip(),
+                            guest_email=form.cleaned_data['email'],
+                            delivery_option=delivery_option,
+                            delivery_distance_km=delivery_distance,
+                        )
+                    except ValueError as error:
+                        form.add_error(None, str(error))
+                        quote_ready = True
+                    else:
+                        cart_obj.is_paid = True
+                        cart_obj.session_key = None
+                        cart_obj.save(update_fields=['is_paid', 'session_key', 'updated_at'])
+                        try:
+                            send_order_confirmation_email(order)
+                        except Exception:
+                            logger.exception("Guest order email failed for order %s", order.order_id)
+                        try:
+                            send_admin_new_order_email(order)
+                        except Exception:
+                            logger.exception("Admin order notification failed for order %s", order.order_id)
+                        request.session.flush()
+                        return redirect(
+                            f'{reverse("success")}?order_id={order.order_id}'
+                            f'&guest_token={order.guest_access_token}'
+                        )
+                if quote_ready:
+                    request.session[quote_key] = quote
+            else:
+                request.session.pop(quote_key, None)
+    elif request.method == 'POST':
         form = GuestShippingAddressForm(request.POST)
         if form.is_valid():
-            try:
-                guest_address = form.save(commit=False)
-                order = create_order(
-                    cart_obj,
-                    order_id=generate_order_id(),
-                    payment_status='Pending',
-                    payment_mode='Cash on Delivery',
-                    shipping_address=guest_address,
-                    delivery_pincode=guest_address.zip_code,
-                    guest_access_token=uuid.uuid4().hex,
-                    guest_name=f'{form.cleaned_data["first_name"]} {form.cleaned_data["last_name"]}'.strip(),
-                    guest_email=form.cleaned_data['email'],
+            address = {
+                field: form.cleaned_data[field]
+                for field in (
+                    'first_name', 'last_name', 'street', 'street_number',
+                    'zip_code', 'city', 'phone', 'email',
                 )
-            except ValueError as error:
-                form.add_error(None, str(error))
-                return render(request, 'accounts/guest_checkout.html', {'form': form, 'next_url': next_url})
-            cart_obj.is_paid = True
-            cart_obj.session_key = None
-            cart_obj.save(update_fields=['is_paid', 'session_key', 'updated_at'])
-            try:
-                send_order_confirmation_email(order)
-            except Exception as error:
-                logger.exception("Guest order email failed for order %s", order.order_id)
-            try:
-                send_admin_new_order_email(order)
-            except Exception:
-                logger.exception("Admin order notification failed for order %s", order.order_id)
-            request.session.flush()
-            return redirect(
-                f'{reverse("success")}?order_id={order.order_id}'
-                f'&guest_token={order.guest_access_token}'
-            )
+            }
+            address['country'] = form.cleaned_data['country']
+            address['state'] = str(form.cleaned_data['state'].pk)
+            current_cart_total = cart_obj.get_cart_total_price_after_coupon()
+            delivery_fee = _cart_delivery_fee(cart_obj)
+            cart_total_after_delivery = current_cart_total + delivery_fee
+            quote = {
+                'cart_uid': str(cart_obj.uid),
+                'address': address,
+                'cart_total': str(current_cart_total),
+                'delivery_fee': str(delivery_fee),
+                'delivery_latitude': request.POST.get('delivery_latitude'),
+                'delivery_longitude': request.POST.get('delivery_longitude'),
+                'delivery_accuracy_meters': request.POST.get('delivery_accuracy_meters'),
+            }
+            request.session[quote_key] = quote
+            quote_ready = True
     else:
-        form = GuestShippingAddressForm()
+        quote = request.session.get(quote_key)
+        if quote and quote.get('cart_uid') == str(cart_obj.uid):
+            form = GuestShippingAddressForm(quote['address'])
+            if form.is_valid() and not editing_address:
+                delivery_fee = _cart_delivery_fee(cart_obj)
+                cart_total_after_delivery = (
+                    cart_obj.get_cart_total_price_after_coupon() + delivery_fee
+                )
+                quote_ready = True
+        else:
+            request.session.pop(quote_key, None)
+            form = GuestShippingAddressForm()
+
+    if quote_ready:
+        address = form.cleaned_data
+        country_name = dict(form.fields['country'].choices).get(
+            address['country'], address['country'],
+        )
+        shipping_address_summary = {
+            'name': f"{address['first_name']} {address['last_name']}",
+            'street': f"{address['street']}, {address['street_number']}",
+            'locality': (
+                f"{address['city']}, {address['state'].name} {address['zip_code']}"
+            ),
+            'country': country_name,
+            'phone': address['phone'],
+            'email': address['email'],
+        }
 
     return render(request, 'accounts/guest_checkout.html', {
         'form': form,
         'next_url': next_url,
+        'quote_ready': quote_ready,
+        'editing_address': editing_address,
+        'quote_message': quote_message,
+        'delivery_fee': delivery_fee,
+        'cart_total_after_delivery': cart_total_after_delivery,
+        'shipping_address_summary': shipping_address_summary,
     })
 
 
 @require_POST
 def update_cart_item(request):
+    cart_item_id = None
     try:
         data = json.loads(request.body)
         cart_item_id = data.get("cart_item_id")
         quantity = int(data.get("quantity"))
+        if quantity < 0:
+            return JsonResponse({"success": False, "error": "Quantity cannot be negative."}, status=400)
 
         cart = get_active_cart(request)
         cart_item = CartItem.objects.get(
             uid=cart_item_id, cart=cart, cart__is_paid=False)
+        if quantity == 0:
+            cart_item.delete()
+            return JsonResponse({
+                "success": True,
+                "removed": True,
+                "quantity": 0,
+                "cart_count": CartItem.objects.filter(cart=cart, cart__is_paid=False).count(),
+            })
         if not cart_item.product or cart_item.product.stock_quantity < 1:
             return JsonResponse({"success": False, "error": "This product is out of stock."}, status=400)
-        cart_item.quantity = max(1, min(quantity, cart_item.product.stock_quantity))
+        if (
+            quantity > cart_item.product.stock_quantity
+            and quantity >= cart_item.quantity
+        ):
+            available = cart_item.product.stock_quantity
+            return JsonResponse({
+                "success": False,
+                "error": f"Only {available} available. Choose a lower quantity.",
+                "available_quantity": available,
+            }, status=409)
+        cart_item.quantity = quantity
         cart_item.save()
 
-        return JsonResponse({"success": True})
+        return JsonResponse({
+            "success": True,
+            "removed": False,
+            "quantity": cart_item.quantity,
+            "cart_count": CartItem.objects.filter(cart=cart, cart__is_paid=False).count(),
+        })
     except Exception as e:
         logger.exception("Cart item update failed for item %s", cart_item_id)
         return JsonResponse({"success": False, "error": "Unable to update cart item."})
@@ -783,7 +1109,7 @@ def track_order(request, order_id, access_token):
 def create_order(
     cart, order_id=None, payment_status='Paid', payment_mode='Razorpay',
     shipping_address=None, delivery_pincode='', guest_access_token=None,
-    guest_name='', guest_email='',
+    guest_name='', guest_email='', delivery_option='', delivery_distance_km=None,
 ):
     with transaction.atomic():
         cart_items = list(CartItem.objects.select_related(
@@ -816,24 +1142,25 @@ def create_order(
         ).strip()
         is_serviceable = ServiceablePincode.objects.filter(
             pincode=delivery_pincode, is_active=True).exists()
+        delivery_fee = _cart_delivery_fee(cart)
         order, created = Order.objects.get_or_create(
             user=cart.user,
             order_id=order_id or generate_order_id(),
             guest_access_token=guest_access_token or uuid.uuid4().hex,
             guest_name=guest_name,
             guest_email=guest_email,
-            status=(
-                Order.Status.ACCEPTED
-                if is_serviceable else Order.Status.PENDING_REVIEW
-            ),
+            status=Order.Status.ACCEPTED,
             delivery_pincode=delivery_pincode,
             outside_service_area=not is_serviceable,
+            delivery_option=delivery_option,
+            delivery_distance_km=delivery_distance_km,
+            additional_delivery_fee=delivery_fee or None,
             payment_status=payment_status,
             shipping_address=str(selected_address) if selected_address else '',
             payment_mode=payment_mode,
             order_total_price=cart.get_cart_total(),
             coupon=cart.coupon,
-            grand_total=cart.get_cart_total_price_after_coupon(),
+            grand_total=cart.get_cart_total_price_after_coupon() + delivery_fee,
         )
 
         if created:
@@ -892,6 +1219,84 @@ def order_details(request, order_id):
         'grand_total': order.get_order_total_price()
     }
     return render(request, 'accounts/order_details.html', context)
+
+
+@require_POST
+def cancel_order(request, order_id, access_token):
+    if request.user.is_authenticated:
+        order_filter = {'user': request.user}
+    else:
+        order_filter = {
+            'user__isnull': True,
+            'guest_access_token': access_token,
+        }
+
+    was_cancelled = False
+    with transaction.atomic():
+        order = get_object_or_404(
+            Order.objects.select_for_update(),
+            order_id=order_id,
+            **order_filter,
+        )
+        if not order.can_be_cancelled:
+            messages.error(
+                request,
+                f'Orders can only be cancelled within {order.cancellation_window_hours} hours of placement and before dispatch.',
+            )
+        else:
+            quantities = Counter()
+            for product_id, quantity in order.order_items.values_list(
+                'product_id', 'quantity'
+            ):
+                if product_id:
+                    quantities[product_id] += quantity
+            for product_id, quantity in order.bundle_items.values_list(
+                'selected_products__product_id', 'quantity'
+            ):
+                if product_id:
+                    quantities[product_id] += quantity
+
+            products = Product.objects.select_for_update().filter(
+                uid__in=quantities.keys())
+            for product in products:
+                product.stock_quantity += quantities[product.uid]
+                product.save(update_fields=['stock_quantity', 'updated_at'])
+
+            if (
+                order.payment_mode != 'Cash on Delivery' and
+                order.payment_status.strip().lower() == 'paid'
+            ):
+                order.payment_status = 'Refund pending'
+            order.status = Order.Status.CANCELLED
+            order._cancelled_by_customer = True
+            order.save(update_fields=[
+                'status', 'payment_status', 'updated_at',
+            ])
+            was_cancelled = True
+            messages.success(
+                request,
+                'Your order has been cancelled. Any applicable refund will be reviewed by our team.',
+            )
+
+    if was_cancelled:
+        try:
+            send_order_cancelled_customer_email(order)
+        except Exception:
+            logger.exception(
+                'Customer cancellation email failed for order %s', order.order_id)
+        try:
+            send_admin_order_cancelled_email(order)
+        except Exception:
+            logger.exception(
+                'Admin cancellation email failed for order %s', order.order_id)
+
+    if request.user.is_authenticated:
+        return redirect('order_details', order_id=order.order_id)
+    return redirect(
+        'track_order',
+        order_id=order.order_id,
+        access_token=order.guest_access_token,
+    )
 
 
 # Delete user account feature

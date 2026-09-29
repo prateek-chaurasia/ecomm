@@ -178,9 +178,8 @@
           <div class="feature-icon-wrapper">
             <i class="fas fa-shipping-fast"></i>
           </div>
-          <h5>Lightning Fast Delivery</h5>
-          <p>Same-day and next-day delivery options with real-time tracking for your peace of mind.</p>
-          <div class="feature-highlight">Free shipping on orders over &#8377; 1000</div>
+          <h5>{{ delivery_guideline.title }}</h5>
+          <p>{{ delivery_guideline.summary }}</p>
         </div>
       </div>
       <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="200">
@@ -208,9 +207,9 @@
           <div class="feature-icon-wrapper">
             <i class="fas fa-undo"></i>
           </div>
-          <h5>Hassle-Free Returns</h5>
-          <p>Inspect and approve your items at the doorstep upon delivery—if you don't love it, hand it right back with zero return hassle.</p>
-          <div class="feature-highlight">No questions asked policy</div>
+          <h5>{{ return_refund_policy.return_title }}</h5>
+          <p>{{ return_refund_policy.return_summary }}</p>
+          <div class="feature-highlight">{{ return_refund_policy.refund_title }}: {{ return_refund_policy.refund_summary }}</div>
         </div>
       </div>
     </div>

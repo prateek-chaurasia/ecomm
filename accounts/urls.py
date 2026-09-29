@@ -33,6 +33,7 @@ urlpatterns = [
 
     # Cart functionality with add-to-cart, update-cart, remove-cart, and remove-coupon urls.
     path('cart/', cart, name="cart"),
+    path('api/delivery-options/', delivery_options, name='delivery-options'),
     path('api/create-order/', create_payment_order, name='create_payment_order'),
     path('api/verify-payment/', verify_payment, name='verify_payment'),
     path('api/place-cod-order/', place_cod_order, name='place_cod_order'),
@@ -48,6 +49,7 @@ urlpatterns = [
     # Order history and details urls
     path('order-history/', order_history, name='order_history'),
     path('order-details/<str:order_id>/', order_details, name='order_details'),
+    path('order-cancel/<str:order_id>/<str:access_token>/', cancel_order, name='cancel_order'),
     path('track-order/<str:order_id>/<str:access_token>/', track_order, name='track_order'),
     path('order-details/<str:order_id>/download/', download_invoice, name='download_invoice'),
 

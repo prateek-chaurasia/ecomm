@@ -7,6 +7,7 @@ from django.contrib import messages
 from accounts.models import Cart, CartItem, BundleCartItem, BundleCartProduct
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from products.models import (
@@ -268,6 +269,11 @@ def category_products(request, slug):
 def get_product(request, slug):
     product = get_object_or_404(Product, slug=slug)
     sorted_size_variants = product.size_variant.all().order_by('size_name')
+    selected_size = request.GET.get('size') or None
+    selected_size_variant = (
+        product.size_variant.filter(size_name=selected_size).first()
+        if selected_size else None
+    )
     related_products = list(product.category.products.filter(parent=None).exclude(uid=product.uid))
 
     # Review product view
@@ -306,8 +312,30 @@ def get_product(request, slug):
         related_products = random.sample(related_products, 4)
 
     in_wishlist = False
+    wishlist_item = None
     if request.user.is_authenticated:
-        in_wishlist = Wishlist.objects.filter(user=request.user, product=product).exists()
+        wishlist_item = Wishlist.objects.filter(
+            user=request.user,
+            product=product,
+            size_variant=selected_size_variant,
+        ).first()
+        in_wishlist = wishlist_item is not None
+
+    cart_items = CartItem.objects.filter(
+        product=product,
+        size_variant=selected_size_variant,
+        color_variant__isnull=True,
+        gift_wrap=False,
+        cart__is_paid=False,
+    )
+    if request.user.is_authenticated:
+        cart_items = cart_items.filter(cart__user=request.user)
+    elif request.session.session_key:
+        cart_items = cart_items.filter(
+            cart__session_key=request.session.session_key)
+    else:
+        cart_items = cart_items.none()
+    product_cart_item = cart_items.first()
 
     context = {
         'product': product,
@@ -316,12 +344,13 @@ def get_product(request, slug):
         'review_form': review_form,
         'rating_percentage': rating_percentage,
         'in_wishlist': in_wishlist,
+        'wishlist_item': wishlist_item,
+        'selected_size': selected_size,
+        'product_cart_item': product_cart_item,
     }
 
-    if request.GET.get('size'):
-        size = request.GET.get('size')
-        price = product.get_product_price_by_size(size)
-        context['selected_size'] = size
+    if selected_size:
+        price = product.get_product_price_by_size(selected_size)
         context['updated_price'] = price
 
     return render(request, 'product/product.html', context=context)
@@ -424,19 +453,53 @@ def delete_review(request, slug, review_uid):
 # Add a product to Wishlist
 @login_required
 def add_to_wishlist(request, uid):
-    variant = request.GET.get('size')
-    if not variant:
-        messages.warning(request, 'Please select a size variant before adding to the wishlist!')
-        return redirect(request.META.get('HTTP_REFERER'))
-
+    variant = request.POST.get('size') or request.GET.get('size')
+    if variant and variant.strip().lower() in {'none', 'null', 'undefined'}:
+        variant = None
     product = get_object_or_404(Product, uid=uid)
-    size_variant = get_object_or_404(SizeVariant, size_name=variant)
-    wishlist, created = Wishlist.objects.get_or_create(
-        user=request.user, product=product, size_variant=size_variant)
+    if product.size_variant.exists() and not variant:
+        messages.warning(request, 'Please select a size before adding this product to your wishlist.')
+        return redirect('get_product', slug=product.slug)
+    size_variant = None
+    if variant:
+        size_variant = get_object_or_404(
+            product.size_variant, size_name=variant)
 
-    if created:
+    manage_notification = request.POST.get('manage_restock_notification') == '1'
+    notify_on_restock = (
+        request.POST.get('notify_on_restock') == 'on'
+        if manage_notification else False
+    )
+    wishlist, created = Wishlist.objects.get_or_create(
+        user=request.user,
+        product=product,
+        size_variant=size_variant,
+        defaults={'notify_on_restock': notify_on_restock},
+    )
+
+    if manage_notification:
+        updates = {'notify_on_restock': notify_on_restock}
+        if notify_on_restock:
+            updates['restock_notification_sent'] = False
+        Wishlist.objects.filter(
+            user=request.user,
+            product=product,
+            size_variant=size_variant,
+        ).update(**updates)
+        if notify_on_restock:
+            messages.success(request, 'We will email you when this product is back in stock.')
+        else:
+            messages.success(request, 'Your back-in-stock notification preference was updated.')
+    elif created:
         messages.success(request, "Product added to Wishlist!")
 
+    next_url = request.POST.get('next')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
     return redirect(reverse('wishlist'))
 
 
@@ -447,11 +510,13 @@ def remove_from_wishlist(request, uid):
     size_variant_name = request.GET.get('size')
 
     if size_variant_name:
-        size_variant = get_object_or_404(SizeVariant, size_name=size_variant_name)
-        Wishlist.objects.filter(
-            user=request.user, product=product, size_variant=size_variant).delete()
+        size_variant = get_object_or_404(
+            product.size_variant, size_name=size_variant_name)
     else:
-        Wishlist.objects.filter(user=request.user, product=product).delete()
+        size_variant = None
+
+    Wishlist.objects.filter(
+        user=request.user, product=product, size_variant=size_variant).delete()
 
     messages.success(request, "Product removed from wishlist!")
     return redirect(reverse('wishlist'))
@@ -469,7 +534,18 @@ def wishlist_view(request):
 @login_required
 def move_to_cart(request, uid):
     product = get_object_or_404(Product, uid=uid)
-    wishlist = Wishlist.objects.filter(user=request.user, product=product).first()
+    if not product.in_stock:
+        messages.warning(request, 'This product is out of stock and remains in your wishlist.')
+        return redirect('wishlist')
+
+    size_variant_name = request.POST.get('size')
+    wishlist_items = Wishlist.objects.filter(user=request.user, product=product)
+    if size_variant_name:
+        wishlist_items = wishlist_items.filter(
+            size_variant__size_name=size_variant_name)
+    else:
+        wishlist_items = wishlist_items.filter(size_variant__isnull=True)
+    wishlist = wishlist_items.select_related('size_variant').first()
 
     if not wishlist:
         messages.error(request, "Item not found in wishlist.")

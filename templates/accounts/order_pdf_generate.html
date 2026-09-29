@@ -448,6 +448,10 @@
               <span class="info-label">Coupon Discount</span>
               <span class="info-value discount-value">-₹{{ order.coupon.discount_amount|default:"0" }}</span>
             </div>
+            <div class="summary-item">
+              <span class="info-label">Delivery charges</span>
+              <span class="info-value">{% if order.additional_delivery_fee %}₹{{ order.additional_delivery_fee }}{% else %}Free{% endif %}</span>
+            </div>
             <hr class="summary-divider">
             <div class="total-item">
               <div class="summary-item">

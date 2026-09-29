@@ -1,12 +1,15 @@
 
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from base.models import BaseModel
 from products.models import (
     Product, ColorVariant, SizeVariant, Coupon, BundleOffer,
     BundlePackagingOption,
 )
-from home.models import ShippingAddress
+from home.models import ReturnRefundPolicy, ShippingAddress
 from django.conf import settings
 import os
 # Create your models here.
@@ -131,6 +134,11 @@ class ServiceablePincode(BaseModel):
 
 
 class Order(BaseModel):
+    class DeliveryOption(models.TextChoices):
+        LOCAL_FREE = 'local_free', 'Free local delivery'
+        EXPRESS = 'express', 'Express delivery'
+        NEXT_DAY = 'next_day', 'Next day delivery'
+
     class Status(models.TextChoices):
         PENDING_REVIEW = 'pending_review', 'Pending review'
         ACCEPTED = 'accepted', 'Order accepted'
@@ -148,9 +156,21 @@ class Order(BaseModel):
         max_length=30, choices=Status.choices, default=Status.ACCEPTED)
     delivery_pincode = models.CharField(max_length=10, blank=True)
     outside_service_area = models.BooleanField(default=False)
+    delivery_option = models.CharField(
+        max_length=20,
+        choices=DeliveryOption.choices,
+        blank=True,
+        default='',
+    )
+    delivery_distance_km = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     additional_delivery_fee = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True,
-        help_text='Set this during review for non-serviceable pincodes.',
+        help_text='Delivery charge applied when the order is below the free-delivery threshold.',
     )
     guest_name = models.CharField(max_length=200, blank=True)
     guest_email = models.EmailField(blank=True)
@@ -163,12 +183,36 @@ class Order(BaseModel):
         Coupon, on_delete=models.SET_NULL, null=True, blank=True)
     grand_total = models.DecimalField(max_digits=10, decimal_places=2)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['order_date'], name='order_date_idx'),
+            models.Index(fields=['status', 'order_date'], name='order_status_date_idx'),
+            models.Index(fields=['payment_status'], name='order_payment_status_idx'),
+            models.Index(fields=['payment_mode'], name='order_payment_mode_idx'),
+        ]
+
     def __str__(self):
         owner = self.user.username if self.user else 'Guest'
         return f"Order {self.order_id} by {owner}"
 
     def get_order_total_price(self):
         return self.order_total_price
+
+    @property
+    def cancellation_window_hours(self):
+        return ReturnRefundPolicy.get_solo().cancellation_window_hours
+
+    @property
+    def can_be_cancelled(self):
+        cancellable_statuses = {
+            self.Status.PENDING_REVIEW,
+            self.Status.ACCEPTED,
+            self.Status.PACKING,
+        }
+        return (
+            self.status in cancellable_statuses and
+            timezone.now() <= self.order_date + timedelta(hours=self.cancellation_window_hours)
+        )
 
     @property
     def status_index(self):

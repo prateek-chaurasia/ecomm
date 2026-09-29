@@ -168,6 +168,7 @@ class ReturnDetails(BaseModel):
         max_length=20, choices=RETURN_POLICY_CHOICES, default='returnable')
     return_window_days = models.PositiveIntegerField(default=7)
     policy = models.TextField(blank=True)
+    refund_policy = models.TextField(blank=True)
     conditions = models.TextField(blank=True)
 
     def __str__(self):
@@ -291,6 +292,8 @@ class Wishlist(BaseModel):
         Product, on_delete=models.CASCADE, related_name="wishlisted_by")
     size_variant = models.ForeignKey(SizeVariant, on_delete=models.SET_NULL, null=True,
                                      blank=True, related_name="wishlist_items")
+    notify_on_restock = models.BooleanField(default=False)
+    restock_notification_sent = models.BooleanField(default=False)
 
     added_on = models.DateTimeField(auto_now_add=True)
 
