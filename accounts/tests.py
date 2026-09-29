@@ -363,6 +363,18 @@ class CartItemQuantityUpdateTests(TestCase):
             cart=cart, product=self.product, quantity=2)
         self.client.force_login(self.user)
 
+    def test_empty_cart_hides_cart_count_badge(self):
+        self.cart_item.delete()
+
+        response = self.client.get(reverse('cart'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'class="badge badge-pill badge-danger notify" hidden',
+            html=False,
+        )
+
     def test_reaching_delivery_threshold_removes_fee_and_updates_subtotal(self):
         guideline = DeliveryGuideline.get_solo()
         guideline.delivery_charge_threshold = 500

@@ -1262,7 +1262,9 @@
       }
 
       document.querySelectorAll(".notify").forEach((badge) => {
-        badge.textContent = result.cart_count;
+        const cartCount = Number(result.cart_count);
+        badge.textContent = cartCount > 0 ? cartCount : "";
+        badge.hidden = cartCount <= 0;
       });
 
       if (result.removed) {

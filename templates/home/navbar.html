@@ -94,11 +94,11 @@
                 <i class="fa fa-shopping-cart"></i>
               </a>
               {% if user.is_authenticated %}
-              <span class="badge badge-pill badge-danger notify">
-                {{request.user.profile.get_cart_count}}
-              </span>
+              {% with cart_count=request.user.profile.get_cart_count %}
+              <span class="badge badge-pill badge-danger notify" {% if not cart_count %}hidden{% endif %}>{% if cart_count %}{{ cart_count }}{% endif %}</span>
+              {% endwith %}
               {% else %}
-              <span class="badge badge-pill badge-danger notify"></span>
+              <span class="badge badge-pill badge-danger notify" hidden></span>
               {% endif %}
             </div>
 

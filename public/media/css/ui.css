@@ -1248,6 +1248,9 @@ a[class*="card"]:hover .title {
   color: #fff;
   background-color: #fa3434;
 }
+.notify[hidden] {
+  display: none !important;
+}
 
 .price {
   font-weight: 600;
