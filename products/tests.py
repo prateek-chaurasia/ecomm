@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from accounts.models import Cart, CartItem
 from home.models import ReturnRefundPolicy
-from products.admin import ProductAdmin, restock_selected
+from products.admin import ProductAdmin, ReturnDetailsInlineForm, restock_selected
 from products.models import (
     Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
@@ -291,6 +291,22 @@ class ProductPricingTests(TestCase):
 
 
 class ProductReturnDetailsTests(TestCase):
+    def test_product_admin_shows_return_policy_choices_during_product_entry(self):
+        admin_user = User.objects.create_superuser(
+            username='product-admin',
+            email='admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('admin:products_product_add'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Return policy')
+        self.assertContains(response, 'value="returnable">Returnable')
+        self.assertContains(response, 'value="replaceable">Replaceable')
+        self.assertContains(response, 'value="non_returnable">Non-Returnable')
+
     def test_return_details_attach_to_product_and_render(self):
         generic_policy = ReturnRefundPolicy.get_solo()
         generic_policy.return_summary = 'Generic return summary.'
@@ -361,6 +377,30 @@ class ProductReturnDetailsTests(TestCase):
         self.assertContains(response, 'Product-specific return terms.')
         self.assertContains(response, 'Generic refund summary.')
 
+    def test_admin_return_policy_form_syncs_legacy_returnable_flag(self):
+        category = Category.objects.create(category_name='Gifts')
+        product = Product.objects.create(
+            product_name='Personalized gift',
+            category=category,
+            price=700,
+            product_desription='A personalized gift',
+        )
+
+        for policy, is_returnable in (
+            ('returnable', True),
+            ('replaceable', True),
+            ('non_returnable', False),
+        ):
+            form = ReturnDetailsInlineForm(
+                data={'return_policy': policy},
+                instance=ReturnDetails(product=product),
+            )
+            self.assertTrue(form.is_valid(), form.errors)
+            return_details = form.save()
+            self.assertEqual(return_details.return_policy, policy)
+            self.assertEqual(return_details.is_returnable, is_returnable)
+            return_details.delete()
+
 
 class ProductCartStateTests(TestCase):
     def setUp(self):
@@ -397,6 +437,32 @@ class ProductCartStateTests(TestCase):
         self.assertIsNone(response.context['product_cart_item'])
         self.assertContains(response, 'Add to cart')
         self.assertNotContains(response, 'added to cart')
+
+    def test_product_description_renders_allowed_html_and_newlines(self):
+        self.product.product_desription = (
+            'Gift highlights:\n'
+            '<ul><li><strong>Handmade</strong></li><li>Ready to gift</li></ul>'
+        )
+        self.product.save(update_fields=['product_desription'])
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'Gift highlights:<br>')
+        self.assertContains(response, '<ul><li><strong>Handmade</strong></li>')
+        self.assertContains(response, '<li>Ready to gift</li></ul>')
+
+    def test_product_description_strips_unsafe_html_and_attributes(self):
+        self.product.product_desription = (
+            '<p onclick="alert(1)">Safe text</p>'
+            '<script>alert(2)</script>'
+        )
+        self.product.save(update_fields=['product_desription'])
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, '<p>Safe text</p>alert(2)')
+        self.assertNotContains(response, 'onclick')
+        self.assertNotContains(response, '<script>')
 
 
 class WishlistBackInStockTests(TestCase):

@@ -60,9 +60,39 @@ class ProductImageAdmin(admin.StackedInline):
     image_preview.short_description = 'Preview'
 
 
+class ProductAdminForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = '__all__'
+        help_texts = {
+            'product_desription': (
+                'Supports basic HTML formatting (paragraphs, bold/italic text, '
+                'and ordered or unordered lists). Plain-text newlines are also rendered.'
+            ),
+        }
+
+
+class ReturnDetailsInlineForm(forms.ModelForm):
+    class Meta:
+        model = ReturnDetails
+        fields = ['return_policy', 'return_window_days', 'policy', 'refund_policy', 'conditions']
+        help_texts = {
+            'return_policy': 'Choose whether this product is returnable, replaceable, or non-returnable.',
+        }
+
+    def save(self, commit=True):
+        return_details = super().save(commit=False)
+        return_details.is_returnable = return_details.return_policy != 'non_returnable'
+        if commit:
+            return_details.save()
+            self.save_m2m()
+        return return_details
+
+
 class ReturnDetailsInline(admin.StackedInline):
     model = ReturnDetails
-    extra = 0
+    form = ReturnDetailsInlineForm
+    extra = 1
     max_num = 1
 
 
@@ -83,6 +113,7 @@ restock_selected.short_description = 'Restock selected products'
 
 
 class ProductAdmin(admin.ModelAdmin):
+    form = ProductAdminForm
     list_display = ['product_name', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
     list_filter = ['category', 'brand_name', 'newest_product', 'tags', 'bundle_eligible', 'show_in_catalog']
     search_fields = ['product_name', 'brand_name', 'tags__name']

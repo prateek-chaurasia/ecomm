@@ -1,6 +1,6 @@
 {% extends "base/base.html"%}
 {% block title %}{{product.product_name}} {% endblock %}
-{% block start %} {% load crispy_forms_tags %}
+{% block start %} {% load crispy_forms_tags product_description %}
 
 <style>
   #mainImage {
@@ -375,9 +375,9 @@
             </div>
             <!-- price-detail-wrap .// -->
 
-            <p style="line-height: 2rem; margin-top: revert; text-align: justify">
-              {{product.product_desription}}
-            </p>
+            <div class="product-description" style="line-height: 2rem; margin-top: revert; text-align: justify">
+              {{ product.product_desription|render_product_description }}
+            </div>
 
             <dl class="row">
               <dt class="col-sm-3">Brand</dt>
