@@ -21,8 +21,17 @@ from accounts.forms import (
 )
 from accounts.views import create_order
 from base.emails import send_admin_new_order_email
-from home.models import DeliveryGuideline, ReturnRefundPolicy, ShippingAddress, State
+from home.models import City, DeliveryGuideline, ReturnRefundPolicy, ShippingAddress, State
 from products.models import Category, Product
+
+
+def city_for_state(state, name):
+    city, _ = City.objects.get_or_create(
+        state=state,
+        normalized_name=City.normalize_name(name),
+        defaults={'name': name},
+    )
+    return city
 
 
 class ShippingAddressFormTests(TestCase):
@@ -43,6 +52,7 @@ class ShippingAddressFormTests(TestCase):
                 country__code='IN').exists())
         self.assertContains(response, 'name="state"')
         self.assertContains(response, 'select2-state')
+        self.assertContains(response, 'select2-city')
         self.assertContains(response, 'Andhra Pradesh')
 
     def test_bound_form_filters_state_queryset_to_selected_country(self):
@@ -53,6 +63,36 @@ class ShippingAddressFormTests(TestCase):
             set(form.fields['state'].queryset.values_list('country__code', flat=True)),
             {'IN'},
         )
+
+    def test_city_queryset_is_limited_to_selected_state(self):
+        uttarakhand = State.objects.get(country__code='IN', name='Uttarakhand')
+        delhi = State.objects.get(country__code='IN', name='Delhi')
+        delhi_city = city_for_state(delhi, 'New Delhi')
+        form = ShippingAddressForm(data={
+            'country': 'IN',
+            'state': uttarakhand.pk,
+            'city': delhi_city.pk,
+        })
+
+        self.assertIn('city', form.errors)
+
+    def test_city_endpoint_returns_only_cities_for_selected_state(self):
+        uttarakhand = State.objects.get(country__code='IN', name='Uttarakhand')
+        delhi = State.objects.get(country__code='IN', name='Delhi')
+        city_for_state(uttarakhand, 'Dehradun')
+        city_for_state(delhi, 'New Delhi')
+
+        response = self.client.get(reverse('cities_for_state'), {'state': uttarakhand.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['cities'], [
+            {'id': City.objects.get(state=uttarakhand).pk, 'name': 'Dehradun'},
+        ])
+
+    def test_city_endpoint_rejects_invalid_state_ids(self):
+        response = self.client.get(reverse('cities_for_state'), {'state': 'invalid'})
+
+        self.assertEqual(response.status_code, 400)
 
     def test_shipping_address_names_reject_digits(self):
         for field_name in ('first_name', 'last_name'):
@@ -69,7 +109,8 @@ class ShippingAddressFormTests(TestCase):
             )
 
     def test_shipping_address_page_displays_name_validation_error(self):
-        state = State.objects.filter(country__code='IN').first()
+        state = State.objects.get(country__code='IN', name='Delhi')
+        city = city_for_state(state, 'New Delhi')
         for field_name in ('first_name', 'last_name'):
             response = self.client.post(reverse('shipping-address'), {
                 'first_name': 'Ash1a' if field_name == 'first_name' else 'Asha',
@@ -77,7 +118,7 @@ class ShippingAddressFormTests(TestCase):
                 'street': 'Main Road',
                 'street_number': '10',
                 'zip_code': '110001',
-                'city': 'New Delhi',
+                'city': city.pk,
                 'country': 'IN',
                 'state': state.pk,
                 'phone': '9876543210',
@@ -477,6 +518,7 @@ class CartItemQuantityUpdateTests(TestCase):
         self.assertEqual(self.cart_item.quantity, 2)
 
 
+@override_settings(SERVICE_CITY='India')
 class GuestCheckoutDeliveryTests(TestCase):
     def setUp(self):
         self.category = Category.objects.create(category_name='Guest gifts')
@@ -493,6 +535,7 @@ class GuestCheckoutDeliveryTests(TestCase):
         )
         self.cart = Cart.objects.get(session_key=self.client.session.session_key)
         self.state = State.objects.get(country_id='IN', name='Delhi')
+        self.city = city_for_state(self.state, 'New Delhi')
         ServiceablePincode.objects.create(pincode='110001')
         DeliveryGuideline.get_solo()
 
@@ -503,7 +546,7 @@ class GuestCheckoutDeliveryTests(TestCase):
             'street': 'Main Road',
             'street_number': '12',
             'zip_code': '110001',
-            'city': 'New Delhi',
+            'city': self.city.pk,
             'country': 'IN',
             'state': self.state.pk,
             'phone': '9999999999',
@@ -526,11 +569,25 @@ class GuestCheckoutDeliveryTests(TestCase):
             ['next_day'],
         )
 
+    @override_settings(SERVICE_CITY='Dehradun')
+    def test_guest_checkout_rejects_addresses_outside_service_city(self):
+        response = self.client.post(
+            reverse('guest-checkout'), self.checkout_data(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'We are currently operational in Dehradun city only.')
+        self.assertContains(response, 'Please choose a delivery address in Dehradun.')
+        self.assertNotContains(response, 'Total to pay')
+        self.assertFalse(Order.objects.filter(guest_email='guest@example.com').exists())
+
     def test_guest_checkout_shows_total_before_confirming_order(self):
         initial_response = self.client.get(reverse('guest-checkout'))
         self.assertEqual(initial_response.status_code, 200)
+        self.assertContains(initial_response, 'We are currently operational across India.')
         self.assertNotContains(initial_response, 'Delivery charges')
         self.assertContains(initial_response, 'data-validate-on-blur')
+        self.assertContains(initial_response, 'select2-city')
         self.assertContains(initial_response, 'select2-state')
 
         with patch('accounts.views.send_order_confirmation_email'), patch(
@@ -868,6 +925,7 @@ class UserShippingAddressTests(TestCase):
         self.cart = Cart.objects.create(user=self.user)
         CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
         self.state = State.objects.get(country_id='IN', name='Uttarakhand')
+        self.city = city_for_state(self.state, 'Dehradun')
 
     def test_cart_shows_delivery_fee_below_products_not_in_sidebar(self):
         guideline = DeliveryGuideline.get_solo()
@@ -881,7 +939,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='248001',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=self.state,
             phone='9999999999',
@@ -892,6 +950,7 @@ class UserShippingAddressTests(TestCase):
         response = self.client.get(reverse('cart'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'We are currently operational in Dehradun city only.')
         response_html = response.content.decode()
         self.assertContains(response, 'Processing order...')
         self.assertContains(response, 'class="cod-button-spinner"')
@@ -944,7 +1003,7 @@ class UserShippingAddressTests(TestCase):
             'street': 'Main Street',
             'street_number': '12',
             'zip_code': '110001',
-            'city': 'Dehradun',
+            'city': self.city.pk,
             'country': 'IN',
             'state': self.state.pk,
             'phone': '9999999999',
@@ -964,7 +1023,7 @@ class UserShippingAddressTests(TestCase):
             'street': 'Market Road',
             'street_number': '43',
             'zip_code': '110002',
-            'city': 'Dehradun',
+            'city': self.city.pk,
             'country': 'IN',
             'state': self.state.pk,
             'phone': '8888888888',
@@ -991,7 +1050,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=state,
             phone='9999999999',
@@ -1005,7 +1064,7 @@ class UserShippingAddressTests(TestCase):
             street='Park Lane',
             street_number='7',
             zip_code='110002',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=state,
             phone='8888888888',
@@ -1044,7 +1103,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=self.state,
             phone='9999999999',
@@ -1058,7 +1117,7 @@ class UserShippingAddressTests(TestCase):
             street='Park Lane',
             street_number='7',
             zip_code='110002',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=self.state,
             phone='8888888888',
@@ -1150,6 +1209,38 @@ class UserShippingAddressTests(TestCase):
         amount = razorpay_client.return_value.order.create.call_args.args[0]['amount']
         self.assertEqual(amount, 88000)
 
+    @override_settings(
+        ONLINE_PAYMENT_ENABLED=True,
+        RAZORPAY_KEY_ID='test-key',
+        RAZORPAY_KEY_SECRET='test-secret',
+    )
+    def test_online_payment_rejects_address_outside_service_city(self):
+        state = State.objects.get(country_id='IN', name='Delhi')
+        address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Alice',
+            last_name='Smith',
+            street='Main Street',
+            street_number='12',
+            zip_code='110001',
+            city=city_for_state(state, 'New Delhi'),
+            country='IN',
+            state=state,
+            phone='9999999999',
+        )
+        self.client.force_login(self.user)
+
+        with patch('accounts.views.razorpay.Client') as razorpay_client:
+            response = self.client.post(
+                reverse('create_payment_order'),
+                data=json.dumps({'selected_address_id': str(address.uid)}),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('Dehradun city only', response.json()['error'])
+        razorpay_client.assert_not_called()
+
     def test_order_creation_consumes_stock_atomically(self):
         self.product.stock_quantity = 2
         self.product.save(update_fields=['stock_quantity'])
@@ -1177,23 +1268,7 @@ class UserShippingAddressTests(TestCase):
             )
         self.assertFalse(Order.objects.filter(order_id='ORDER-STOCK-2').exists())
 
-    def test_guest_address_outside_service_city_can_enter_review(self):
-        form = GuestShippingAddressForm(data={
-            'first_name': 'Alice',
-            'last_name': 'Smith',
-            'street': 'Main Street',
-            'street_number': '12',
-            'zip_code': '110001',
-            'city': 'New Delhi',
-            'country': 'IN',
-            'state': State.objects.get(country_id='IN', name='Delhi').pk,
-            'phone': '9999999999',
-            'email': 'alice@example.com',
-        })
-
-        self.assertTrue(form.is_valid())
-
-    def test_unlisted_pincode_order_is_accepted_immediately(self):
+    def test_order_creation_rejects_address_outside_service_city(self):
         outside_address = ShippingAddress.objects.create(
             user=self.user,
             first_name='Alice',
@@ -1201,23 +1276,52 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='New Delhi',
+            city=city_for_state(
+                State.objects.get(country_id='IN', name='Delhi'), 'New Delhi'
+            ),
             country='IN',
             state=State.objects.get(country_id='IN', name='Delhi'),
             phone='9999999999',
         )
 
+        with self.assertRaisesMessage(
+            ValueError, 'We are currently operational in Dehradun city only.',
+        ):
+            create_order(
+                self.cart,
+                order_id='ORDER-OUTSIDE-CITY',
+                payment_status='Pending',
+                payment_mode='Cash on Delivery',
+                shipping_address=outside_address,
+            )
+
+        self.assertFalse(Order.objects.filter(order_id='ORDER-OUTSIDE-CITY').exists())
+
+    def test_unlisted_pincode_in_service_city_is_accepted(self):
+        address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Alice',
+            last_name='Smith',
+            street='Main Street',
+            street_number='12',
+            zip_code='248099',
+            city=self.city,
+            country='IN',
+            state=self.state,
+            phone='9999999999',
+        )
+
         order = create_order(
             self.cart,
-            order_id='ORDER-OUTSIDE-CITY',
+            order_id='ORDER-UNLISTED-PINCODE',
             payment_status='Pending',
             payment_mode='Cash on Delivery',
-            shipping_address=outside_address,
+            shipping_address=address,
         )
 
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertTrue(order.outside_service_area)
-        self.assertEqual(order.delivery_pincode, '110001')
+        self.assertEqual(order.delivery_pincode, '248099')
 
     def test_listed_pincode_starts_order_as_accepted(self):
         ServiceablePincode.objects.create(pincode='248001')
@@ -1232,7 +1336,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='248001',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=self.state,
             phone='9999999999',
@@ -1265,7 +1369,7 @@ class UserShippingAddressTests(TestCase):
             street='Main Street',
             street_number='12',
             zip_code='110001',
-            city='Dehradun',
+            city=self.city,
             country='IN',
             state=self.state,
             phone='9999999999',

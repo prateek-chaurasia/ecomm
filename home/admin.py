@@ -1,11 +1,19 @@
 from django.contrib import admin
 from .models import (
-    ShippingAddress, HomeBanner, DeliveryGuideline, ReturnRefundPolicy,
+    City, ShippingAddress, HomeBanner, MarqueeAnnouncement,
+    DeliveryGuideline, ReturnRefundPolicy,
 )
 
 # Register your models here.
 
 admin.site.register(ShippingAddress)
+
+
+@admin.register(City)
+class CityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'state', 'normalized_name')
+    list_filter = ('state__country', 'state')
+    search_fields = ('name', 'state__name')
 
 
 @admin.register(DeliveryGuideline)
@@ -50,3 +58,12 @@ class HomeBannerAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('title', 'subtitle')
     ordering = ('-starts_at',)
+
+
+@admin.register(MarqueeAnnouncement)
+class MarqueeAnnouncementAdmin(admin.ModelAdmin):
+    list_display = ('text', 'is_active', 'display_order', 'updated_at')
+    list_editable = ('is_active', 'display_order')
+    list_filter = ('is_active',)
+    search_fields = ('text',)
+    ordering = ('display_order', 'created_at')

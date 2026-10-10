@@ -15,6 +15,7 @@ urlpatterns = [
     path('shipping-address/', update_shipping_address, name='shipping-address'),
     path('shipping-address/delete/<uuid:address_uid>/', delete_shipping_address, name='delete_shipping_address'),
     path('guest-checkout/', guest_checkout, name='guest-checkout'),
+    path('api/cities/', cities_for_state, name='cities_for_state'),
 
     # Passoword reset urls with django default view.
     path('password_reset/', auth_views.PasswordResetView.as_view(

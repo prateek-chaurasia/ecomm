@@ -3,7 +3,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from accounts.models import Profile
-from home.models import CountryModel, ShippingAddress, State
+from home.models import City, CountryModel, ShippingAddress, State
 from home.validators import validate_person_name
 
 import re
@@ -104,6 +104,19 @@ class ShippingAddressForm(forms.ModelForm):
         else:
             self.fields['state'].queryset = State.objects.none()
         self.fields['state'].widget.attrs['class'] = 'form-control select2-state'
+        state_value = self.data.get(self.add_prefix('state')) if self.is_bound else None
+        state_value = state_value or self.initial.get('state') or self.instance.state_id
+        state_id = getattr(state_value, 'pk', state_value)
+        self.fields['city'].queryset = City.objects.filter(
+            state_id=state_id,
+            state__country__code='IN',
+        ).order_by('name') if state_id else City.objects.none()
+        self.fields['city'].widget.attrs.update({
+            'class': 'form-control select2-city',
+            'data-placeholder': 'Select a city',
+        })
+        if not state_id:
+            self.fields['city'].widget.attrs['disabled'] = True
 
         self.fields['zip_code'].widget.attrs.update({
             'pattern': r'[1-9][0-9]{5}',

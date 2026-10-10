@@ -10,6 +10,7 @@ from django_countries.fields import CountryField
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.utils import timezone
 import re
+import unicodedata
 
 # Create your models here.
 
@@ -38,6 +39,18 @@ class HomeBanner(BaseModel):
         if self.ends_at is not None:
             return self.starts_at <= now <= self.ends_at
         return self.starts_at <= now
+
+
+class MarqueeAnnouncement(BaseModel):
+    text = models.CharField(max_length=500)
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order', 'created_at']
+
+    def __str__(self):
+        return self.text[:80]
 
 
 class DeliveryGuideline(models.Model):
@@ -204,6 +217,38 @@ class State(models.Model):
         return f'{self.name}'
 
 
+class City(models.Model):
+    name = models.CharField(max_length=100)
+    normalized_name = models.CharField(max_length=100, editable=False)
+    state = models.ForeignKey(State, on_delete=models.CASCADE, related_name='cities')
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['state', 'normalized_name'],
+                name='unique_city_name_per_state',
+            ),
+        ]
+
+    @staticmethod
+    def normalize_name(name):
+        normalized = unicodedata.normalize('NFKD', name)
+        normalized = ''.join(
+            character for character in normalized
+            if not unicodedata.combining(character)
+        ).casefold()
+        return ''.join(character for character in normalized if character.isalnum())
+
+    def save(self, *args, **kwargs):
+        self.name = ' '.join(self.name.split())
+        self.normalized_name = self.normalize_name(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
 class ShippingAddress(BaseModel):
     # 1. Define the validator
     alphanumeric_username = RegexValidator(
@@ -225,7 +270,7 @@ class ShippingAddress(BaseModel):
                     )
                 ]
             )
-    city = models.CharField(max_length=50)
+    city = models.ForeignKey(City, on_delete=models.PROTECT, related_name='shipping_addresses')
     country = CountryField()
     state = models.ForeignKey(State, on_delete=models.PROTECT)
     phone = models.CharField(max_length=30)
@@ -251,6 +296,20 @@ class ShippingAddress(BaseModel):
 class ShippingAddressForm(forms.ModelForm):
     save_address = forms.BooleanField(required=False, label='Save the billing addres')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['state'].queryset = State.objects.filter(
+            country__code='IN').order_by('name')
+        state_value = self.data.get('state') if self.is_bound else None
+        state_value = state_value or self.initial.get('state') or self.instance.state_id
+        state_id = getattr(state_value, 'pk', state_value)
+        self.fields['city'].queryset = City.objects.filter(
+            state_id=state_id,
+            state__country__code='IN',
+        ).order_by('name') if state_id else City.objects.none()
+        self.fields['state'].widget.attrs['class'] = 'form-control select2-state'
+        self.fields['city'].widget.attrs['class'] = 'form-control select2-city'
+
     class Meta:
         model = ShippingAddress
         fields = [
@@ -259,6 +318,7 @@ class ShippingAddressForm(forms.ModelForm):
             'street',
             'street_number',
             'zip_code',
+            'state',
             'city',
             'country',
             'phone'

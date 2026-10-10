@@ -73,6 +73,7 @@
 
 <body>
   <!-- Slider Header Banner -->
+  {% if marquee_announcements %}
   <div class="header-banner slide-up" aria-hidden="false">
     <div class="container">
       <div class="d-flex justify-content-center">
@@ -81,17 +82,24 @@
           <div class="content">
             <marquee direction="left" width="100%" scrollamount="10" onmouseover="this.stop();"
               onmouseout="this.start();">
+              {% for announcement in marquee_announcements %}
               <span class="header-promotion marquee-span">
-                Use Code NEW10 and get 10% OFF* on all items over
-                Rs. 4499. Maximum Discount: Rs. 500. T&amp;C Apply.
+                {{ announcement.text }}
               </span>
+              {% endfor %}
             </marquee>
           </div>
         </div>
       </div>
     </div>
   </div>
+  {% endif %}
   {% include 'home/navbar.html' %}
+  <div class="container mt-2">
+    <div class="alert alert-info mb-0 text-center" role="status">
+      {{ service_area_message }}
+    </div>
+  </div>
   {% block start %} {% endblock %}
 
   <!-- Conditional Footer Display -->
@@ -101,10 +109,71 @@
 
   <script>
     $(function () {
-      $('.select2-state').select2({
+      const stateSelect = $('.select2-state');
+      const citySelect = $('.select2-city');
+      const cityCache = new Map();
+      let cityRequestId = 0;
+
+      stateSelect.select2({ width: '100%', placeholder: 'Select a state' });
+      citySelect.select2({
         width: '100%',
-        placeholder: 'Select a state',
+        placeholder: 'Select a city',
       });
+
+      async function loadCities(stateId, selectedCityId, selectedCityName) {
+        const requestId = ++cityRequestId;
+        citySelect.empty().append(new Option('', '', false, false));
+        if (!stateId) {
+          citySelect.prop('disabled', true).trigger('change.select2');
+          return;
+        }
+
+        citySelect.prop('disabled', true);
+        try {
+          let cities = cityCache.get(stateId);
+          if (!cities) {
+            const response = await fetch(
+              "{% url 'cities_for_state' %}?state=" + encodeURIComponent(stateId));
+            const result = await response.json();
+            if (!response.ok || !Array.isArray(result.cities)) {
+              throw new Error('City list is unavailable.');
+            }
+            cities = result.cities;
+            cityCache.set(stateId, cities);
+          }
+
+          if (requestId !== cityRequestId) return;
+          cities.forEach((city) => {
+            citySelect.append(new Option(
+              city.name,
+              city.id,
+              false,
+              String(city.id) === String(selectedCityId),
+            ));
+          });
+        } catch (error) {
+          if (requestId !== cityRequestId) return;
+          if (selectedCityId && selectedCityName) {
+            citySelect.append(new Option(selectedCityName, selectedCityId, false, true));
+          }
+        } finally {
+          if (requestId === cityRequestId) {
+            citySelect.prop('disabled', false).trigger('change.select2');
+          }
+        }
+      }
+
+      stateSelect.on('change', function () {
+        loadCities($(this).val(), '', '');
+      });
+
+      if (stateSelect.val()) {
+        const currentCityId = citySelect.val();
+        const currentCityName = citySelect.find('option:selected').text();
+        loadCities(stateSelect.val(), currentCityId, currentCityName);
+      } else {
+        citySelect.prop('disabled', true);
+      }
     });
   </script>
 </body>

@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.conf import settings
 from django.contrib import messages
 from django.http import JsonResponse
-from home.models import DeliveryGuideline, ShippingAddress
+from home.models import City, DeliveryGuideline, ShippingAddress, State
 from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
 )
@@ -29,7 +29,7 @@ from base.emails import (
     send_order_cancelled_customer_email,
     send_order_confirmation_email,
 )
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -45,6 +45,24 @@ from accounts.forms import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _service_area_error(city, country='IN'):
+    country_code = getattr(country, 'code', country)
+    if str(country_code or '').upper() != 'IN':
+        return 'We currently deliver within India only.'
+
+    service_city = str(settings.SERVICE_CITY).strip()
+    if service_city.casefold() == 'india':
+        return None
+
+    city_name = getattr(city, 'name', city)
+    if str(city_name or '').strip().casefold() != service_city.casefold():
+        return (
+            f'We are currently operational in {service_city} city only. '
+            f'Please choose a delivery address in {service_city}.'
+        )
+    return None
 
 
 def _automatic_delivery_selection(
@@ -391,9 +409,13 @@ def delivery_options(request):
         ).first()
         if not selected_address:
             return JsonResponse({'error': 'Choose a saved delivery address first.'}, status=400)
-        city = selected_address.city
+        city = selected_address.city.name
     else:
         city = (payload.get('city') or '').strip()
+
+    service_area_error = _service_area_error(city)
+    if service_area_error:
+        return JsonResponse({'error': service_area_error}, status=409)
 
     cart_obj = get_active_cart(request)
     if not cart_obj:
@@ -413,6 +435,19 @@ def delivery_options(request):
     return JsonResponse(options)
 
 
+@require_GET
+def cities_for_state(request):
+    try:
+        state_id = int(request.GET.get('state'))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Choose a valid state.'}, status=400)
+    state = State.objects.filter(pk=state_id, country__code='IN').first()
+    if not state:
+        return JsonResponse({'error': 'Choose a valid state.'}, status=400)
+    cities = City.objects.filter(state=state).order_by('name').values('id', 'name')
+    return JsonResponse({'cities': list(cities)})
+
+
 @require_POST
 @login_required
 def create_payment_order(request):
@@ -426,10 +461,16 @@ def create_payment_order(request):
 
     if selected_address_id:
         selected_address = ShippingAddress.objects.filter(user=request.user, uid=selected_address_id).first()
-        if selected_address:
-            profile, _ = Profile.objects.get_or_create(user=request.user)
-            profile.shipping_address = selected_address
-            profile.save(update_fields=['shipping_address', 'updated_at'])
+        if not selected_address:
+            return JsonResponse({'error': 'Please choose a valid delivery address.'}, status=400)
+        service_area_error = _service_area_error(
+            selected_address.city, selected_address.country,
+        )
+        if service_area_error:
+            return JsonResponse({'error': service_area_error}, status=409)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.shipping_address = selected_address
+        profile.save(update_fields=['shipping_address', 'updated_at'])
 
     if not settings.ONLINE_PAYMENT_ENABLED:
         return JsonResponse({'error': 'Online payments are coming soon.'}, status=503)
@@ -540,7 +581,7 @@ def verify_payment(request):
         return JsonResponse({'error': 'Please choose a valid delivery address.'}, status=409)
 
     delivery_option, delivery_distance = _automatic_delivery_selection(
-        selected_address.city,
+        selected_address.city.name,
         selected_address.zip_code,
         delivery_latitude,
         delivery_longitude,
@@ -639,8 +680,14 @@ def place_cod_order(request):
             status=400,
         )
 
+    service_area_error = _service_area_error(
+        shipping_address.city, shipping_address.country,
+    )
+    if service_area_error:
+        return JsonResponse({'error': service_area_error}, status=409)
+
     delivery_option, delivery_distance = _automatic_delivery_selection(
-        shipping_address.city,
+        shipping_address.city.name,
         shipping_address.zip_code,
         delivery_latitude,
         delivery_longitude,
@@ -724,7 +771,7 @@ def guest_checkout(request):
                     quote_message = 'Your cart or delivery charge changed. Review the updated total before placing your order.'
                 else:
                     delivery_option, delivery_distance = _automatic_delivery_selection(
-                        form.cleaned_data['city'],
+                        form.cleaned_data['city'].name,
                         form.cleaned_data['zip_code'],
                         quote.get('delivery_latitude'),
                         quote.get('delivery_longitude'),
@@ -775,14 +822,17 @@ def guest_checkout(request):
                 request.session.pop(quote_key, None)
     elif request.method == 'POST':
         form = GuestShippingAddressForm(request.POST)
-        if form.is_valid():
+        if form.is_valid() and not _service_area_error(
+            form.cleaned_data['city'], form.cleaned_data['country'],
+        ):
             address = {
                 field: form.cleaned_data[field]
                 for field in (
                     'first_name', 'last_name', 'street', 'street_number',
-                    'zip_code', 'city', 'phone', 'email',
+                    'zip_code', 'phone', 'email',
                 )
             }
+            address['city'] = str(form.cleaned_data['city'].pk)
             address['country'] = form.cleaned_data['country']
             address['state'] = str(form.cleaned_data['state'].pk)
             current_cart_total = cart_obj.get_cart_total_price_after_coupon()
@@ -799,6 +849,10 @@ def guest_checkout(request):
             }
             request.session[quote_key] = quote
             quote_ready = True
+        elif form.is_valid():
+            form.add_error(None, _service_area_error(
+                form.cleaned_data['city'], form.cleaned_data['country'],
+            ))
     else:
         quote = request.session.get(quote_key)
         if quote and quote.get('cart_uid') == str(cart_obj.uid):
@@ -822,7 +876,7 @@ def guest_checkout(request):
             'name': f"{address['first_name']} {address['last_name']}",
             'street': f"{address['street']}, {address['street_number']}",
             'locality': (
-                f"{address['city']}, {address['state'].name} {address['zip_code']}"
+                f"{address['city'].name}, {address['state'].name} {address['zip_code']}"
             ),
             'country': country_name,
             'phone': address['phone'],
@@ -1137,6 +1191,12 @@ def create_order(
         selected_address = shipping_address or (
             getattr(cart.user.profile, 'shipping_address', None) if cart.user else None
         )
+        if selected_address:
+            service_area_error = _service_area_error(
+                selected_address.city, selected_address.country,
+            )
+            if service_area_error:
+                raise ValueError(service_area_error)
         delivery_pincode = (
             delivery_pincode or getattr(selected_address, 'zip_code', '')
         ).strip()

@@ -77,12 +77,18 @@ To run this project locally, please follow these steps:
       PUBLIC_BASE_URL=https://bundleofgifts.com  # For production
       ```
       `BASE_URL` remains supported as a fallback for existing deployments.
-    - Configure the primary delivery city label. It defaults to Dehradun:
+    - Configure the order delivery area. It defaults to Dehradun; set it to `India` when ready to accept orders from anywhere in India:
       ```
       SERVICE_CITY=Dehradun
+      # Later, change to:
+      SERVICE_CITY=India
       ```
-      Add active serviceable pincodes in the Django admin under `Accounts > Serviceable pincodes`.
-      Orders with listed pincodes start as accepted; other pincodes start as `Pending review` so the team can review the delivery and return-policy SOP before accepting them.
+      While set to a city, orders to other cities are rejected during checkout. Serviceable pincodes remain available in the Django admin under `Accounts > Serviceable pincodes` for delivery-area tracking.
+    - Shipping cities are stored locally and linked to their State. Existing address cities are migrated automatically. To import or extend the city catalog, prepare a UTF-8 CSV with `state,city` headers and run:
+      ```bash
+      python manage.py import_cities --file data/india_cities.csv
+      ```
+      State names must match the India states in the database. City duplicates that differ only by case, accents, spaces, or punctuation are merged per State.
     - Configure `ALLOWED_HOSTS` with your domain names (comma-separated, no spaces):
       ```
       ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com

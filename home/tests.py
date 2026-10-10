@@ -1,7 +1,11 @@
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.core import mail
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -11,7 +15,10 @@ from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
     validate_delivery_selection,
 )
-from home.models import DeliveryGuideline, HomeBanner, ReturnRefundPolicy
+from home.models import (
+    City, DeliveryGuideline, HomeBanner, MarqueeAnnouncement,
+    ReturnRefundPolicy, State,
+)
 from products.models import Category, Product
 
 
@@ -202,6 +209,31 @@ class DeliveryGuidelineTests(TestCase):
         self.assertEqual(DeliveryGuideline.objects.get(pk=1).title, 'Updated version')
 
 
+class CityDirectoryTests(TestCase):
+    def test_city_normalization_collapses_case_spacing_and_diacritics(self):
+        self.assertEqual(City.normalize_name('Dehra dūn'), 'dehradun')
+        self.assertEqual(City.normalize_name('DEHRA-DUN'), 'dehradun')
+
+    def test_import_cities_skips_normalized_duplicates(self):
+        state = State.objects.get(country_id='IN', name='Uttarakhand')
+        with TemporaryDirectory() as temp_directory:
+            csv_path = Path(temp_directory) / 'cities.csv'
+            csv_path.write_text(
+                'state,city\nUttarakhand,Dehradun\nUttarakhand,Dehra dun\n',
+                encoding='utf-8',
+            )
+            output = StringIO()
+            repeated_output = StringIO()
+
+            call_command('import_cities', file=csv_path, stdout=output)
+            call_command('import_cities', file=csv_path, stdout=repeated_output)
+
+        self.assertEqual(City.objects.filter(state=state).count(), 1)
+        self.assertEqual(City.objects.get(state=state).name, 'Dehradun')
+        self.assertIn('Imported 1 cities; skipped 1 normalized duplicates.', output.getvalue())
+        self.assertIn('Imported 0 cities; skipped 2 normalized duplicates.', repeated_output.getvalue())
+
+
 class ReturnRefundPolicyTests(TestCase):
     def test_policy_is_available_on_site_pages(self):
         policy = ReturnRefundPolicy.get_solo()
@@ -256,6 +288,27 @@ class HomeBannerTests(TestCase):
 
         self.assertEqual(list(response.context['banners']), [banner])
         self.assertContains(response, 'Diwali Sale')
+
+    def test_active_marquee_announcements_render_in_order(self):
+        MarqueeAnnouncement.objects.all().update(is_active=False)
+        second = MarqueeAnnouncement.objects.create(
+            text='Second announcement', display_order=2,
+        )
+        first = MarqueeAnnouncement.objects.create(
+            text='First announcement', display_order=1,
+        )
+        MarqueeAnnouncement.objects.create(
+            text='Inactive announcement', display_order=0, is_active=False,
+        )
+
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(
+            list(response.context['marquee_announcements']), [first, second],
+        )
+        self.assertContains(response, 'First announcement')
+        self.assertContains(response, 'Second announcement')
+        self.assertNotContains(response, 'Inactive announcement')
 
 
 class InfiniteProductLoadingTests(TestCase):

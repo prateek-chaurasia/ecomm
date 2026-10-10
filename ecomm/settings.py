@@ -40,7 +40,7 @@ if IS_PRODUCTION:
     ALLOWED_HOSTS = config(
         "ALLOWED_HOSTS", default="bundleofgifts.com,www.bundleofgifts.com,187.127.180.137").split(",")
 
-# Orders are currently delivered only within this city.
+# Set SERVICE_CITY=India to accept delivery addresses across India.
 SERVICE_CITY = config("SERVICE_CITY", default="Dehradun")
 
 # Public URL used in customer-facing links. Set this per environment, for example:
