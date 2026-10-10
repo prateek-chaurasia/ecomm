@@ -274,6 +274,18 @@ class CampaignTagTests(TestCase):
 
 
 class ProductPricingTests(TestCase):
+    def test_product_slug_supports_full_product_name_length(self):
+        category = Category.objects.create(category_name='Learning')
+        product_name = 'A detailed description of this exceptionally long product name'
+        product = Product.objects.create(
+            product_name=product_name,
+            category=category,
+            price=1200,
+            product_desription='Product description',
+        )
+
+        self.assertEqual(product.slug, 'a-detailed-description-of-this-exceptionally-long-product-name')
+
     def test_marked_price_calculates_discount_percentage(self):
         category = Category.objects.create(category_name='Learning', category_image='categories/learning.jpg')
         product = Product.objects.create(
