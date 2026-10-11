@@ -117,11 +117,24 @@ restock_selected.short_description = 'Restock selected products'
 
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
-    list_display = ['product_name', 'sku', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
+    list_display = ['product_name', 'image_thumbnail', 'sku', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
     list_filter = ['category', 'brand_name', 'newest_product', 'tags', 'bundle_eligible', 'show_in_catalog']
     search_fields = ['product_name', 'sku', 'brand_name', 'tags__name']
     inlines = [ProductImageAdmin, ReturnDetailsInline]
     actions = [restock_selected]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('product_images')
+
+    @admin.display(description='Image')
+    def image_thumbnail(self, obj):
+        image = next(iter(obj.product_images.all()), None)
+        if image and image.image_url:
+            return format_html(
+                '<img src="{}" width="60" height="60" style="object-fit: contain;" />',
+                image.image_url.url,
+            )
+        return 'No image'
 
     def display_age_groups(self, obj):
         return ', '.join(age.name for age in obj.age_groups.all()) or 'All ages'
