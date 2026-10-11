@@ -1,12 +1,19 @@
 from django.contrib import admin
 from .models import (
-    City, ShippingAddress, HomeBanner, MarqueeAnnouncement,
+    City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
     DeliveryGuideline, ReturnRefundPolicy,
 )
 
 # Register your models here.
 
 admin.site.register(ShippingAddress)
+
+
+@admin.register(State)
+class StateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'country')
+    list_filter = ('country',)
+    search_fields = ('name', 'country__name', 'country__code')
 
 
 @admin.register(City)
