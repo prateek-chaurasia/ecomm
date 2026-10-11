@@ -1,16 +1,70 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core import mail
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import Cart, CartItem
 from home.models import ReturnRefundPolicy
-from products.admin import ProductAdmin, ReturnDetailsInlineForm, restock_selected
+from products.admin import ProductAdmin, ProductAdminForm, ReturnDetailsInlineForm, restock_selected
 from products.models import (
     Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
+
+
+class ProductSKUTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(category_name='Decorative Items')
+
+    def create_product(self, **overrides):
+        values = {
+            'product_name': 'Buddha Statue',
+            'category': self.category,
+            'price': 500,
+            'product_desription': 'Decorative statue',
+        }
+        values.update(overrides)
+        return Product.objects.create(**values)
+
+    def test_product_generates_readable_sku(self):
+        product = self.create_product()
+
+        self.assertEqual(product.sku, 'DEC-BUD-0001')
+        self.assertEqual(len(product.sku), 12)
+
+    def test_generated_skus_are_unique_for_matching_product_names(self):
+        first = self.create_product()
+        second = self.create_product(product_name='Buddha Lamp')
+
+        self.assertEqual(first.sku, 'DEC-BUD-0001')
+        self.assertEqual(second.sku, 'DEC-BUD-0002')
+
+    def test_custom_sku_is_preserved_and_normalized(self):
+        product = self.create_product(sku='custom-123')
+
+        self.assertEqual(product.sku, 'CUSTOM-123')
+
+    def test_product_admin_rejects_duplicate_sku_case_insensitively(self):
+        existing = self.create_product(sku='CUSTOM-123')
+        form = ProductAdminForm(data={
+            'product_name': 'Another Statue',
+            'category': self.category.pk,
+            'price': 600,
+            'product_desription': 'Another decorative statue',
+            'sku': 'custom-123',
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('sku', form.errors)
+
+    def test_database_rejects_duplicate_sku(self):
+        existing = self.create_product(sku='CUSTOM-123')
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_product(product_name='Different Statue', sku=existing.sku)
 
 
 class ProductInventoryAdminTests(TestCase):

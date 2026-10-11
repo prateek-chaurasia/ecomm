@@ -71,6 +71,9 @@ class ProductAdminForm(forms.ModelForm):
             ),
         }
 
+    def clean_sku(self):
+        return self.cleaned_data['sku'].strip().upper()
+
 
 class ReturnDetailsInlineForm(forms.ModelForm):
     class Meta:
@@ -114,9 +117,9 @@ restock_selected.short_description = 'Restock selected products'
 
 class ProductAdmin(admin.ModelAdmin):
     form = ProductAdminForm
-    list_display = ['product_name', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
+    list_display = ['product_name', 'sku', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
     list_filter = ['category', 'brand_name', 'newest_product', 'tags', 'bundle_eligible', 'show_in_catalog']
-    search_fields = ['product_name', 'brand_name', 'tags__name']
+    search_fields = ['product_name', 'sku', 'brand_name', 'tags__name']
     inlines = [ProductImageAdmin, ReturnDetailsInline]
     actions = [restock_selected]
 

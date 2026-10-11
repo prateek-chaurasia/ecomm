@@ -4,7 +4,12 @@ from django.utils.text import slugify
 from django.utils.html import format_html
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.validators import (
+    MinLengthValidator,
+    MinValueValidator,
+    MaxValueValidator,
+    RegexValidator,
+)
 
 # Create your models here.
 
@@ -61,6 +66,14 @@ class SizeVariant(BaseModel):
 
 
 class Product(BaseModel):
+    SKU_VALIDATORS = [
+        MinLengthValidator(8),
+        RegexValidator(
+            regex=r'^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$',
+            message='Enter an SKU containing only letters, numbers, and single hyphens.',
+        ),
+    ]
+
     AGE_GROUP_CHOICES = [
         ('0-2 years', '0-2 years'),
         ('3-5 years', '3-5 years'),
@@ -74,6 +87,13 @@ class Product(BaseModel):
     parent = models.ForeignKey(
         'self', related_name='variants', on_delete=models.CASCADE, blank=True, null=True)
     product_name = models.CharField(max_length=100)
+    sku = models.CharField(
+        max_length=12,
+        unique=True,
+        blank=True,
+        validators=SKU_VALIDATORS,
+        help_text='Unique internal code. Leave blank to generate one from the category and product name.',
+    )
     slug = models.SlugField(max_length=100, unique=True, null=True, blank=True)
     category = models.ForeignKey(
         Category, on_delete=models.CASCADE, related_name="products")
@@ -135,8 +155,40 @@ class Product(BaseModel):
             return 'Low stock'
         return 'In stock'
 
+    @staticmethod
+    def _sku_component(value, fallback):
+        component = ''.join(character for character in slugify(value).upper() if character.isalnum())
+        return (component[:3] or fallback)
+
+    @staticmethod
+    def _sku_sequence(number):
+        characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        result = ''
+        while number:
+            number, remainder = divmod(number, len(characters))
+            result = characters[remainder] + result
+        return result.rjust(4, '0')
+
+    def _generate_sku(self):
+        category_name = self.category.category_name if self.category_id else ''
+        category_code = self._sku_component(category_name, 'GEN')
+        product_code = self._sku_component(self.product_name, 'PRD')
+        for sequence in range(1, 36 ** 4):
+            candidate = f'{category_code}-{product_code}-{self._sku_sequence(sequence)}'
+            if not type(self).objects.filter(sku=candidate).exclude(pk=self.pk).exists():
+                return candidate
+        raise ValidationError('Could not generate a unique SKU for this product.')
+
     def save(self, *args, **kwargs):
+        generated_sku = not self.sku
+        if generated_sku:
+            self.sku = self._generate_sku()
+        else:
+            self.sku = self.sku.strip().upper()
+
         self.slug = slugify(self.product_name)
+        if generated_sku and kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'sku'}
         super(Product, self).save(*args, **kwargs)
 
     def __str__(self) -> str:
