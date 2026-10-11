@@ -400,14 +400,12 @@
               <dt class="col-sm-3">Brand</dt>
               <dd class="col-sm-9">{{ product.brand_name }}</dd>
 
+              {% if product.age_groups.all %}
               <dt class="col-sm-3">Suitable for</dt>
               <dd class="col-sm-9">
-                {% if product.age_groups.all %}
                   {% for age_group in product.age_groups.all %}{{ age_group.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                {% else %}
-                  All ages
-                {% endif %}
               </dd>
+              {% endif %}
 
               <dt class="col-sm-3">Color</dt>
               <dd class="col-sm-9">

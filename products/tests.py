@@ -504,6 +504,21 @@ class ProductCartStateTests(TestCase):
         self.assertContains(response, 'Add to cart')
         self.assertNotContains(response, 'added to cart')
 
+    def test_product_page_hides_suitable_for_when_no_age_group_is_selected(self):
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertNotContains(response, 'Suitable for')
+        self.assertNotContains(response, 'All ages')
+
+    def test_product_page_shows_selected_age_groups_as_suitable_for(self):
+        age_group = AgeGroup.objects.create(name='6-8 years')
+        self.product.age_groups.add(age_group)
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'Suitable for')
+        self.assertContains(response, '6-8 years')
+
     def test_product_description_renders_allowed_html_and_newlines(self):
         self.product.product_desription = (
             'Gift highlights:\n'
