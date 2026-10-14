@@ -771,6 +771,47 @@ class OrderAdminFilterTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return set(response.context['cl'].queryset.values_list('order_id', flat=True))
 
+    def test_order_changelist_supports_page_sizes_and_preserves_filters(self):
+        for index in range(26):
+            self._create_order(
+                f'PAGE-SIZE-{index}',
+                Order.Status.ACCEPTED,
+                'Paid',
+                'Razorpay',
+            )
+
+        url = reverse('admin:accounts_order_changelist')
+        response = self.client.get(url, {
+            'per_page': '25',
+            'period': 'this_month',
+            'order_status': Order.Status.ACCEPTED,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['cl'].list_per_page, 25)
+        self.assertEqual(len(response.context['cl'].result_list), 25)
+        self.assertContains(response, 'Records per page:')
+        self.assertContains(response, 'name="period" value="this_month"')
+        self.assertContains(
+            response,
+            f'name="order_status" value="{Order.Status.ACCEPTED}"',
+        )
+
+        response = self.client.get(url, {'per_page': '50'})
+        self.assertEqual(response.context['cl'].list_per_page, 50)
+        self.assertEqual(len(response.context['cl'].result_list), 31)
+
+        response = self.client.get(url, {'per_page': '100'})
+        self.assertEqual(response.context['cl'].list_per_page, 100)
+
+    def test_invalid_order_page_size_uses_default(self):
+        response = self.client.get(
+            reverse('admin:accounts_order_changelist'),
+            {'per_page': '500'},
+        )
+
+        self.assertEqual(response.context['cl'].list_per_page, 25)
+
     def test_custom_date_range_is_inclusive_and_shows_range_widget(self):
         response = self.client.get(
             reverse('admin:accounts_order_changelist'),

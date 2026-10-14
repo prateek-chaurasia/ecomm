@@ -108,6 +108,55 @@ class ProductInventoryAdminTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ['restock@example.com'])
 
 
+class ProductAdminPaginationTests(TestCase):
+    def setUp(self):
+        admin_user = User.objects.create_superuser(
+            username='product-pagination-admin',
+            email='product-pagination-admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+        category = Category.objects.create(category_name='Pagination Products')
+        for index in range(26):
+            Product.objects.create(
+                product_name=f'Page size product {index}',
+                category=category,
+                price=100,
+                product_desription='Pagination test product',
+            )
+
+    def test_product_changelist_supports_allowed_page_sizes_and_keeps_filters(self):
+        url = reverse('admin:products_product_changelist')
+        response = self.client.get(url, {
+            'per_page': '25',
+            'q': 'Page size product',
+            'category__id__exact': Category.objects.get(
+                category_name='Pagination Products').pk,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['cl'].list_per_page, 25)
+        self.assertEqual(len(response.context['cl'].result_list), 25)
+        self.assertContains(response, 'Records per page:')
+        self.assertContains(response, 'name="q" value="Page size product"')
+        self.assertContains(response, 'name="category__id__exact"')
+
+        response = self.client.get(url, {'per_page': '50'})
+        self.assertEqual(response.context['cl'].list_per_page, 50)
+        self.assertEqual(len(response.context['cl'].result_list), 26)
+
+        response = self.client.get(url, {'per_page': '100'})
+        self.assertEqual(response.context['cl'].list_per_page, 100)
+
+    def test_invalid_product_page_size_uses_default(self):
+        response = self.client.get(
+            reverse('admin:products_product_changelist'),
+            {'per_page': '500'},
+        )
+
+        self.assertEqual(response.context['cl'].list_per_page, 25)
+
+
 class BundleBuilderTests(TestCase):
     def setUp(self):
         self.category = Category.objects.create(category_name='Gifts')

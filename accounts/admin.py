@@ -4,6 +4,7 @@ from django.contrib import admin
 from django import forms
 from django.utils import timezone
 from django.utils.html import format_html
+from base.admin import PaginatedModelAdmin
 from .models import Profile, Cart, CartItem, Order, OrderItem, ServiceablePincode
 
 # Register your models here.
@@ -196,7 +197,7 @@ class ServiceablePincodeAdmin(admin.ModelAdmin):
     list_editable = ('is_active',)
     search_fields = ('pincode', 'notes')
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
+class OrderAdmin(PaginatedModelAdmin):
     list_display = (
         'order_id', 'customer_name', 'delivery_pincode', 'delivery_option',
         'status', 'additional_delivery_fee', 'payment_status',

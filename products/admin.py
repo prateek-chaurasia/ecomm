@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django import forms
 from django.utils.html import format_html
+from base.admin import PaginatedModelAdmin
 from .models import *
 
 # Register your models here.
@@ -115,7 +116,7 @@ def restock_selected(modeladmin, request, queryset):
 restock_selected.short_description = 'Restock selected products'
 
 
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(PaginatedModelAdmin):
     form = ProductAdminForm
     list_display = ['product_name', 'image_thumbnail', 'sku', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
     list_filter = ['category', 'brand_name', 'newest_product', 'tags', 'bundle_eligible', 'show_in_catalog']
