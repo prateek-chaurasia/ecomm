@@ -40,6 +40,10 @@ class ContactFormTests(TestCase):
         )
         self.assertContains(
             response,
+            'rel="icon" type="image/png" href="/static/images/bundleofgifts-icon.png"',
+        )
+        self.assertContains(
+            response,
             'class="brand-icon"',
         )
 
