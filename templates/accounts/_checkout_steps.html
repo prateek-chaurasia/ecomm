@@ -1,0 +1,96 @@
+<nav class="checkout-progress mb-4" aria-label="Checkout progress">
+  <ol class="checkout-progress-steps">
+    <li class="{% if current_step == 'cart' %}is-current{% elif current_step == 'checkout' or current_step == 'payment' %}is-complete{% endif %} {% if current_step == 'checkout' or current_step == 'payment' %}connector-complete{% endif %}" {% if current_step == 'cart' %}aria-current="step"{% endif %}>
+      <span class="checkout-step-number">1</span><span class="checkout-step-label">Cart</span>
+    </li>
+    <li class="{% if current_step == 'checkout' %}is-current{% elif current_step == 'payment' %}is-complete{% endif %} {% if current_step == 'payment' %}connector-complete{% endif %}" {% if current_step == 'checkout' %}aria-current="step"{% endif %}>
+      <span class="checkout-step-number">2</span><span class="checkout-step-label">Checkout</span>
+    </li>
+    <li class="{% if current_step == 'payment' %}is-current{% endif %}" {% if current_step == 'payment' %}aria-current="step"{% endif %}>
+      <span class="checkout-step-number">3</span><span class="checkout-step-label">Payment</span>
+    </li>
+  </ol>
+</nav>
+<style>
+  .checkout-progress-steps {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .checkout-progress-steps li {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  .checkout-progress-steps li:not(:last-child)::after {
+    position: absolute;
+    top: 0.875rem;
+    left: calc(50% + 1rem);
+    z-index: 0;
+    width: calc(100% - 2rem);
+    height: 2px;
+    background: #d1d5db;
+    content: "";
+  }
+
+  .checkout-progress-steps li.connector-complete::after {
+    background: #16a34a;
+  }
+
+  .checkout-step-number {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    background: #fff;
+    font-weight: 700;
+  }
+
+  .checkout-step-label {
+    margin-top: 0.4rem;
+    text-align: center;
+  }
+
+  .checkout-progress-steps .is-complete {
+    color: #166534;
+    font-weight: 700;
+  }
+
+  .checkout-progress-steps .is-complete .checkout-step-number {
+    border-color: #16a34a;
+    background: #16a34a;
+    color: #fff;
+  }
+
+  .checkout-progress-steps .is-current {
+    color: #92400e;
+    font-weight: 700;
+  }
+
+  .checkout-progress-steps .is-current .checkout-step-number {
+    border-color: #f59e0b;
+    background: #facc15;
+    color: #713f12;
+    box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.2);
+  }
+
+  @media (max-width: 400px) {
+    .checkout-progress-steps li {
+      font-size: 0.78rem;
+    }
+  }
+</style>

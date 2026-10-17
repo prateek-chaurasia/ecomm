@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @media only screen and (max-width: 620px) {
+      .seller-email-shell { width:100% !important; }
+      .seller-email-gutter { padding-left:16px !important; padding-right:16px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f5f9; color:#243047; font-family:Arial,Helvetica,sans-serif; line-height:1.5;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f3f5f9;">
+    <tr><td align="center" style="padding:20px 12px;">
+      <table class="seller-email-shell" role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%; max-width:600px; background-color:#ffffff; border:1px solid #e2e8f0;">
+        <tr><td class="seller-email-gutter" style="padding:22px 28px; border-bottom:1px solid #e2e8f0; color:#29376b; font-size:18px; font-weight:700;">BundleofGifts.com · Seller notification</td></tr>
+        <tr><td class="seller-email-gutter" style="padding:24px 28px;">
+          <h1 style="margin:0 0 16px; color:#243047; font-size:22px;">New order received</h1>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="9" border="0" style="border-collapse:collapse; font-size:14px;">
+            <tr><td width="42%" style="border-bottom:1px solid #e2e8f0; color:#667085;">Order ID</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.order_id }}</td></tr>
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Customer</td><td style="border-bottom:1px solid #e2e8f0;">{{ customer_name }}</td></tr>
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery pincode</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.delivery_pincode|default:"Not provided" }}</td></tr>
+            {% if order.outside_service_area %}<tr><td colspan="2" style="border-bottom:1px solid #e2e8f0;">Delivery area: Outside Standard Service Area (estimated 4–6 days)</td></tr>{% endif %}
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Initial status</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.get_status_display }}</td></tr>
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery charges</td><td style="border-bottom:1px solid #e2e8f0;">{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</td></tr>
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Items</td><td style="border-bottom:1px solid #e2e8f0;">{{ item_count }}</td></tr>
+            <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Payment</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.payment_mode }} ({{ order.payment_status }})</td></tr>
+            <tr><td style="font-weight:700;">Total</td><td style="font-weight:700;">INR {{ order.grand_total }}</td></tr>
+          </table>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:20px 0 0;">
+            <tr><td align="center" style="border-radius:6px; background-color:#4f46e5;"><a href="{{ seller_order_link }}" style="display:inline-block; padding:12px 20px; color:#ffffff; font-weight:700; text-decoration:none;">Open order details</a></td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

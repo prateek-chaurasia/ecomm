@@ -1,0 +1,34 @@
+{% extends "emails/base_email.html" %}
+
+{% block email_title %}{{ request_label|title }} update {{ order.order_id }}{% endblock %}
+{% block email_preheader %}There’s an update on your {{ request_label }} request for order {{ order.order_id }}.{% endblock %}
+{% block email_content %}
+<h1 style="margin:0 0 18px; color:#243047; font-size:24px; line-height:1.3;">Your {{ request_label }} request has been updated</h1>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="9" border="0" style="margin:0 0 18px; border-collapse:collapse; font-size:14px;">
+  <tr><td colspan="2">Hello {{ customer_name }},</td></tr>
+  <tr><td style="border-top:1px solid #e2e8f0;">{{ request_label|title }} request · Order {{ order.order_id }}</td><td align="right" style="border-top:1px solid #e2e8f0; color:#3730a3; font-weight:700;">{{ status_label }}</td></tr>
+  <tr><td colspan="2" style="border-top:1px solid #e2e8f0;">{{ status_message }}</td></tr>
+</table>
+{% include "emails/order_items_summary.html" %}
+{% if return_address %}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="10" border="0" style="margin:0 0 16px; border:1px solid #e2e8f0; border-collapse:collapse; background-color:#f8fafc;">
+  <tr><td><strong>Return shipping address</strong><br>{{ return_address|linebreaksbr }}</td></tr>
+  <tr><td style="border-top:1px solid #e2e8f0;">Return shipping costs are the customer’s responsibility.</td></tr>
+</table>
+{% endif %}
+{% if has_refund_amount or refund_reference or has_deduction_amount or admin_note %}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="9" border="0" style="margin:0 0 18px; border-collapse:collapse; font-size:14px;">
+  {% if has_refund_amount %}<tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Refund amount</td><td align="right" style="border-bottom:1px solid #e2e8f0;">INR {{ refund_amount }}</td></tr>{% endif %}
+  {% if refund_reference %}<tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Refund reference</td><td align="right" style="border-bottom:1px solid #e2e8f0; overflow-wrap:anywhere;">{{ refund_reference }}</td></tr>{% endif %}
+  {% if has_deduction_amount %}<tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Condition deduction</td><td align="right" style="border-bottom:1px solid #e2e8f0;">INR {{ deduction_amount }}{% if deduction_reason %}<br>{{ deduction_reason }}{% endif %}</td></tr>{% endif %}
+  {% if admin_note %}<tr><td style="color:#667085;">Reason</td><td align="right">{{ admin_note }}</td></tr>{% endif %}
+</table>
+{% endif %}
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
+  <tr>
+    <td align="center" style="border-radius:7px; background-color:#4f46e5;">
+      <a href="{{ status_link }}" style="display:inline-block; padding:13px 22px; color:#ffffff; font-weight:700; text-decoration:none;">View request status</a>
+    </td>
+  </tr>
+</table>
+{% endblock %}

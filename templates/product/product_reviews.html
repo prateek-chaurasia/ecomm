@@ -37,6 +37,16 @@
           <small class="text-muted">{{ review.date_added|date:"M d, Y" }}</small>
         </div>
         {% if review.content %}<p class="mt-3 mb-0">{{ review.content }}</p>{% endif %}
+        {% if review.photos.exists %}
+        <div class="d-flex flex-wrap gap-2 mt-3" aria-label="Review photos">
+          {% for photo in review.photos.all %}
+          <a href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer">
+            <img src="{{ photo.image.url }}" alt="Photo shared in review"
+              style="width: 112px; height: 112px; object-fit: cover; border-radius: 8px;">
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
         <small class="text-muted d-block mt-3"><i class="fas fa-thumbs-up mr-1"></i>{{ review.helpful_count }} found this helpful</small>
       </div>
     </article>

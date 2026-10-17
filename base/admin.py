@@ -5,6 +5,10 @@ from django.contrib.admin.views.main import ChangeList
 PAGE_SIZE_CHOICES = (25, 50, 100)
 
 
+class FilterCollapsibleModelAdmin(admin.ModelAdmin):
+    change_list_template = 'admin/change_list_collapsible.html'
+
+
 class PageSizeChangeList(ChangeList):
     def get_filters_params(self, params=None):
         filter_params = super().get_filters_params(params)
@@ -18,7 +22,7 @@ class PageSizeChangeList(ChangeList):
         super().get_results(request)
 
 
-class PaginatedModelAdmin(admin.ModelAdmin):
+class PaginatedModelAdmin(FilterCollapsibleModelAdmin):
     list_per_page = PAGE_SIZE_CHOICES[0]
     change_list_template = 'admin/change_list_page_size.html'
 

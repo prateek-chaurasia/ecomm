@@ -108,6 +108,100 @@
     background: rgba(99, 102, 241, 0.1);
   }
 
+  .product-review-list {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .product-review-item {
+    padding: 0.9rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .product-review-header,
+  .product-review-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .product-review-author {
+    min-width: 0;
+    color: #1e293b;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .product-review-date {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 0.8rem;
+  }
+
+  .product-review-rating {
+    margin-top: 0.2rem;
+    color: #d99a00;
+    white-space: nowrap;
+  }
+
+  .product-review-rating-value {
+    margin-left: 0.25rem;
+    color: #475569;
+    font-size: 0.8rem;
+  }
+
+  .product-review-content {
+    margin: 0.45rem 0 0;
+    color: #475569;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+  }
+
+  .product-review-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-top: 0.65rem;
+  }
+
+  .product-review-actions .btn {
+    padding: 0.3rem 0.6rem;
+  }
+
+  .product-review-photos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+  }
+
+  .product-review-photos img {
+    width: 56px;
+    height: 56px;
+    padding: 2px;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    background: #fff;
+    object-fit: contain;
+  }
+
+  @media (max-width: 575.98px) {
+    .product-review-item {
+      padding: 0.75rem;
+    }
+
+    .product-review-header {
+      align-items: flex-start;
+    }
+
+    .product-review-date {
+      max-width: 40%;
+      text-align: right;
+    }
+  }
+
   /* Delete Review Button */
   .delete-review-btn {
     border-color: var(--primary-color);
@@ -228,6 +322,22 @@
     align-items: flex-end;
   }
 
+  .purchase-cart-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .purchase-cart-actions form {
+    display: inline-flex;
+    margin: 0;
+  }
+
+  .purchase-cart-actions .btn {
+    margin: 0 !important;
+  }
+
   .gift-wrap-option {
     display: flex;
     align-items: flex-start;
@@ -244,9 +354,18 @@
   }
 
   .return-policy-section {
-    border-bottom: 1px solid #dbe3e8;
-    border-top: 1px solid #dbe3e8;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .return-policy-heading {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     margin: 1.5rem 0;
+    padding: 0.25rem 0;
+    border-top: 1px solid #dbe3e8;
+    border-bottom: 1px solid #dbe3e8;
   }
 
   .return-policy-toggle {
@@ -255,6 +374,7 @@
     display: flex;
     justify-content: space-between;
     list-style: none;
+    gap: 0.75rem;
   }
 
   .return-policy-toggle::-webkit-details-marker {
@@ -278,6 +398,58 @@
     padding: 0 0 1rem;
   }
 
+  .return-policy-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 1rem;
+  }
+
+  .return-policy-card {
+    padding: 1.25rem;
+    border: 1px solid #dbe3e8;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(31, 55, 45, 0.05);
+  }
+
+  .return-policy-card h5 {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+    color: #1e293b;
+  }
+
+  .product-return-badge {
+    display: inline-block;
+    flex: 0 0 auto;
+    margin-right: 1rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: #e8f4ec;
+    color: #256b43;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .product-return-badge.replaceable {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .product-return-badge.non-returnable {
+    background: #fff1f2;
+    color: #9f1239;
+  }
+
+  .return-policy-guidelines {
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid #e2e8f0;
+  }
+
   @media (max-width: 575.98px) {
     .purchase-actions {
       align-items: stretch;
@@ -287,6 +459,24 @@
     .purchase-actions .btn {
       margin: 8px 0 0 !important;
       width: 100%;
+    }
+
+    .purchase-cart-actions {
+      align-items: stretch;
+      width: 100%;
+    }
+
+    .purchase-cart-actions form {
+      width: 100%;
+    }
+
+    .purchase-cart-actions #go-to-cart-link {
+      width: 100%;
+    }
+
+    .purchase-cart-actions .cart-item-quantity-control {
+      align-self: flex-start;
+      width: auto;
     }
   }
 
@@ -452,7 +642,10 @@
                   </button>
                 </div>
                 <div id="quantity-error" class="quantity-error" role="alert" aria-live="polite" hidden></div>
-                <div class="stock-note" id="stock-note"><i class="fas fa-box-open mr-1" aria-hidden="true"></i>{{ product.stock_quantity }} available</div>
+                <div class="stock-note" id="stock-note">
+                  <i class="fas fa-box-open mr-1" aria-hidden="true"></i>
+                  {% if product.in_stock %}In stock{% else %}Out of stock{% endif %}
+                </div>
               </div>
               {% if product.gift_wrap_available and product.gift_wrap_price > 0 %}
               <label class="gift-wrap-option w-100 mb-3 ml-3" for="gift-wrap">
@@ -506,36 +699,40 @@
                   </a>
                   {% endif %}
                 </div>
-                <div class="quantity-control cart-item-quantity-control" id="cart-item-quantity-control" role="group" aria-label="Cart item quantity" {% if not product_cart_item %}hidden{% endif %}>
-                  <button type="button" class="quantity-btn" id="cart-decrease-quantity" aria-label="Decrease quantity" title="Decrease quantity">
-                    <i class="fas fa-minus" aria-hidden="true"></i>
-                  </button>
-                  <span class="added-to-cart-label" id="added-to-cart-label" role="status" aria-live="polite">{% if product_cart_item.quantity == 1 %}1 item added{% elif product_cart_item %}{{ product_cart_item.quantity }} items added{% endif %}</span>
-                  <button type="button" class="quantity-btn" id="cart-increase-quantity" aria-label="Increase quantity" title="Increase quantity">
-                    <i class="fas fa-plus" aria-hidden="true"></i>
-                  </button>
+                <div class="purchase-cart-actions">
+                  <div class="quantity-control cart-item-quantity-control" id="cart-item-quantity-control" role="group" aria-label="Cart item quantity" {% if not product_cart_item %}hidden{% endif %}>
+                    <button type="button" class="quantity-btn" id="cart-decrease-quantity" aria-label="Decrease quantity" title="Decrease quantity">
+                      <i class="fas fa-minus" aria-hidden="true"></i>
+                    </button>
+                    <span class="added-to-cart-label" id="added-to-cart-label" role="status" aria-live="polite">{% if product_cart_item.quantity == 1 %}1 item added{% elif product_cart_item %}{{ product_cart_item.quantity }} items added{% endif %}</span>
+                    <button type="button" class="quantity-btn" id="cart-increase-quantity" aria-label="Increase quantity" title="Increase quantity">
+                      <i class="fas fa-plus" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <form method="post" action="{% url 'add_to_cart' product.uid %}" id="add-to-cart-form" class="d-inline-block {% if product_cart_item %}d-none{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input type="hidden" name="quantity" value="1" class="product-quantity-value">
+                    <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
+                    <button type="submit" id="add-to-cart-btn" class="btn btn-primary" {% if product_cart_item %}hidden{% endif %}>
+                      <i class="fas fa-shopping-bag mr-1"></i>
+                      <span>Add to cart</span>
+                    </button>
+                  </form>
+                  <a href="{% url 'cart' %}" id="go-to-cart-link" class="btn btn-outline-primary" {% if not product_cart_item %}hidden{% endif %}>Go to Cart</a>
+                  <form method="post" action="{% url 'add_to_cart' product.uid %}" id="buy-now-form" class="d-inline-block">
+                    {% csrf_token %}
+                    <input type="hidden" name="buy_now" value="1">
+                    <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
+                    <input type="hidden" name="quantity" value="1" class="product-quantity-value">
+                    <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
+                    <button type="submit" id="buy-now-btn" class="btn btn-success {% if not product.in_stock %}disabled{% endif %}" data-in-stock="{% if product.in_stock %}true{% else %}false{% endif %}" {% if not product.in_stock %}disabled aria-disabled="true"{% endif %}>
+                      <i class="fas fa-bolt mr-1"></i>
+                      <span>Buy Now</span>
+                    </button>
+                  </form>
                 </div>
-                <form method="post" action="{% url 'add_to_cart' product.uid %}" id="add-to-cart-form" class="d-inline-block {% if product_cart_item %}d-none{% endif %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
-                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                  <input type="hidden" name="quantity" value="1" class="product-quantity-value">
-                  <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
-                  <button type="submit" id="add-to-cart-btn" class="btn btn-primary" {% if product_cart_item %}hidden{% endif %}>
-                    <i class="fas fa-shopping-bag mr-1"></i>
-                    <span>Add to cart</span>
-                  </button>
-                </form>
-                <form method="post" action="{% url 'add_to_cart' product.uid %}" id="buy-now-form" class="d-inline-block">
-                  {% csrf_token %}
-                  <input type="hidden" name="size" value="{{ selected_size|default_if_none:'' }}">
-                  <input type="hidden" name="quantity" value="1" class="product-quantity-value">
-                  <input type="hidden" name="gift_wrap" value="0" class="gift-wrap-value">
-                  <button type="submit" id="buy-now-btn" class="btn btn-success ml-2 {% if not product.in_stock %}disabled{% endif %}" data-in-stock="{% if product.in_stock %}true{% else %}false{% endif %}" {% if not product.in_stock %}disabled aria-disabled="true"{% endif %}>
-                    <i class="fas fa-bolt mr-1"></i>
-                    <span>Buy Now</span>
-                  </button>
-                </form>
               </div>
             </div>
           </article>
@@ -543,43 +740,63 @@
       </div>
     </div>
 
-    <details class="return-policy-section" aria-label="Return and refund policy">
-      <summary class="title padding-y-sm return-policy-toggle">
-        <span><i class="fas fa-undo mr-2" aria-hidden="true"></i>Return and refund policy</span>
-        <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
-      </summary>
-      <div class="return-policy-content">
-        <section class="return-details-section mb-4">
-          <h5 class="mb-2">
-            <i class="fas fa-undo mr-2"></i>
-            {% if product.return_details %}Return Details{% else %}{{ return_refund_policy.return_title }}{% endif %}
-          </h5>
-          {% if product.return_details %}
-          {% if product.return_details.return_policy == 'returnable' %}
-          <p class="mb-2">Returnable within {{ product.return_details.return_window_days }} days of delivery.</p>
-          {% elif product.return_details.return_policy == 'replaceable' %}
-          <p class="mb-2">Replaceable according to the product policy.</p>
-          {% else %}
-          <p class="mb-2">This product is non-returnable.</p>
-          {% endif %}
-          {% if product.return_details.policy %}<p class="text-muted mb-2">{{ product.return_details.policy|linebreaksbr }}</p>{% endif %}
-          {% if product.return_details.conditions %}<p class="text-muted mb-0"><strong>Conditions:</strong> {{ product.return_details.conditions|linebreaksbr }}</p>{% endif %}
-          {% else %}
-          <p class="mb-2">{{ return_refund_policy.return_summary }}</p>
-          <p class="text-muted mb-0">{{ return_refund_policy.return_details|linebreaksbr }}</p>
-          {% endif %}
-        </section>
-        <section class="refund-details-section">
-          <h5 class="mb-2">{{ return_refund_policy.refund_title }}</h5>
-          {% if product.return_details.refund_policy %}
-          <p class="text-muted mb-0">{{ product.return_details.refund_policy|linebreaksbr }}</p>
-          {% else %}
-          <p class="mb-2">{{ return_refund_policy.refund_summary }}</p>
-          <p class="text-muted mb-0">{{ return_refund_policy.refund_details|linebreaksbr }}</p>
-          {% endif %}
-        </section>
-      </div>
-    </details>
+    <div class="return-policy-heading">
+      <details class="return-policy-section" aria-label="Return and refund policy">
+        <summary class="title padding-y-sm return-policy-toggle">
+          <span><i class="fas fa-undo mr-2" aria-hidden="true"></i>Return and Refund Policy</span>
+          <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
+        </summary>
+        <div class="return-policy-content">
+          <div class="return-policy-cards">
+            <section class="return-policy-card return-details-section">
+              <h5>
+                <i class="fas fa-undo" aria-hidden="true"></i>
+                {% if product.return_details %}Return Details{% else %}{{ return_refund_policy.return_title }}{% endif %}
+              </h5>
+              {% if product.return_details %}
+              {% if product.return_details.return_policy == 'returnable' %}
+              <p class="mb-0">Return requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
+              {% elif product.return_details.return_policy == 'replaceable' %}
+              <p class="mb-0">Replacement requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
+              {% endif %}
+              {% if product.return_details.policy or product.return_details.conditions %}
+              <div class="return-policy-guidelines">
+                {% if product.return_details.policy %}
+                <p class="text-muted mb-2">{{ product.return_details.policy|linebreaksbr }}</p>
+                {% endif %}
+                {% if product.return_details.conditions %}
+                <p class="text-muted mb-0"><strong>Guidelines:</strong> {{ product.return_details.conditions|linebreaksbr }}</p>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% else %}
+              <p class="mb-2">{{ return_refund_policy.return_summary }}</p>
+              <p class="text-muted mb-0">{{ return_refund_policy.return_details|linebreaksbr }}</p>
+              {% endif %}
+            </section>
+            <section class="return-policy-card refund-details-section">
+              <h5>
+                <i class="fas fa-wallet" aria-hidden="true"></i>
+                {{ return_refund_policy.refund_title }}
+              </h5>
+              {% if product.return_details.refund_policy %}
+              <p class="text-muted mb-0">{{ product.return_details.refund_policy|linebreaksbr }}</p>
+              {% else %}
+              <p class="mb-2">{{ return_refund_policy.refund_summary }}</p>
+              <p class="text-muted mb-0">{{ return_refund_policy.refund_details|linebreaksbr }}</p>
+              {% endif %}
+            </section>
+          </div>
+        </div>
+      </details>
+      {% if product.return_details.return_policy == 'returnable' %}
+      <span class="product-return-badge">Returnable</span>
+      {% elif product.return_details.return_policy == 'replaceable' %}
+      <span class="product-return-badge replaceable">Replaceable</span>
+      {% elif product.return_details.return_policy == 'non_returnable' %}
+      <span class="product-return-badge non-returnable">Non-returnable</span>
+      {% endif %}
+    </div>
 
     <!-- Related Products Section -->
     <h3 class="title padding-y-sm">Related products</h3>
@@ -597,150 +814,130 @@
     <!-- Product Review Section -->
     <h3 class="title padding-bottom-sm"><a href="{% url 'product_reviews_for_product' product.slug %}" class="text-dark">Reviews</a></h3>
 
+    <div class="product-review-list">
     {% for review in product.reviews.all %}
-    <div class="card mb-3">
-      <div class="card-body review-card-body">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <p>
-              <strong>Posted on: </strong>{{ review.date_added|date:"Y-m-d" }} by
-              <strong>{{ review.user.get_full_name|default:review.user.username }}</strong><br />
-              <strong>Rating: </strong>{{ review.stars }}/5<br />
-              <strong>Comment: </strong>{{ review.content }}
-            </p>
-          </div>
-          <div class="d-flex flex-wrap align-items-center gap-2">
-            {% if request.user.is_authenticated %}
-            <!-- Like Button -->
-            <button class="btn like-btn d-flex align-items-center" onclick="toggleLike('{{ review.uid }}')">
-              <i class="fas fa-thumbs-up me-2"></i>
-              <span id="like-count-{{ review.uid }}">{{ review.like_count }}</span>
-            </button>
-
-            <!-- Dislike Button -->
-            <button class="btn dislike-btn d-flex align-items-center" onclick="toggleDislike('{{ review.uid }}')">
-              <i class="fas fa-thumbs-down me-2"></i>
-              <span id="dislike-count-{{ review.uid }}">{{ review.dislike_count }}</span>
-            </button>
-
-            {% else %}
-            <button class="btn like-btn d-flex align-items-center">
-              <i class="fas fa-thumbs-up me-2"></i>
-              <span id="like-count-{{ review.uid }}">{{ review.like_count }}</span>
-            </button>
-
-            <button class="btn dislike-btn d-flex align-items-center">
-              <i class="fas fa-thumbs-down me-2"></i>
-              <span id="dislike-count-{{ review.uid }}">{{ review.dislike_count }}</span>
-            </button>
-            {% endif %}
-
-            <!-- Delete Button -->
-            {% if review.user == request.user %}
-            <button class="btn btn-link p-0 delete-review-link ms-auto" title="Delete Review" data-bs-toggle="modal"
-              data-bs-target="#deleteReviewModal"
-              onclick="setDeleteAction('{% url 'delete_review' product.slug review.uid %}')" type="button">
-              <i class="fas fa-trash-alt"></i>
-            </button>
-            {% endif %}
-          </div>
-        </div>
+    <article class="product-review-item">
+      <div class="product-review-header">
+        <div class="product-review-author">{{ review.user.get_full_name|default:review.user.username }}</div>
+        <time class="product-review-date" datetime="{{ review.date_added|date:'c' }}">{{ review.date_added|date:"M j, Y" }}</time>
       </div>
-    </div>
+      <div class="product-review-rating" aria-label="{{ review.stars }} out of 5 stars">
+        {% for star in "12345" %}
+        <i class="{% if forloop.counter <= review.stars %}fas{% else %}far{% endif %} fa-star" aria-hidden="true"></i>
+        {% endfor %}
+        <span class="product-review-rating-value">{{ review.stars }}/5</span>
+      </div>
+      {% if review.content %}
+      <p class="product-review-content">{{ review.content }}</p>
+      {% endif %}
+      {% if review.photos.exists %}
+      <div class="product-review-photos" aria-label="Review photos">
+        {% for photo in review.photos.all %}
+        <a href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer">
+          <img src="{{ photo.image.url }}" alt="Photo shared in review">
+        </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="product-review-actions">
+        {% if request.user.is_authenticated %}
+        <button class="btn like-btn d-flex align-items-center" onclick="toggleLike('{{ review.uid }}')">
+          <i class="fas fa-thumbs-up me-2" aria-hidden="true"></i>
+          <span id="like-count-{{ review.uid }}">{{ review.like_count }}</span>
+        </button>
+        <button class="btn dislike-btn d-flex align-items-center" onclick="toggleDislike('{{ review.uid }}')">
+          <i class="fas fa-thumbs-down me-2" aria-hidden="true"></i>
+          <span id="dislike-count-{{ review.uid }}">{{ review.dislike_count }}</span>
+        </button>
+        {% else %}
+        <button class="btn like-btn d-flex align-items-center" type="button" aria-label="Likes">
+          <i class="fas fa-thumbs-up me-2" aria-hidden="true"></i>
+          <span id="like-count-{{ review.uid }}">{{ review.like_count }}</span>
+        </button>
+        <button class="btn dislike-btn d-flex align-items-center" type="button" aria-label="Dislikes">
+          <i class="fas fa-thumbs-down me-2" aria-hidden="true"></i>
+          <span id="dislike-count-{{ review.uid }}">{{ review.dislike_count }}</span>
+        </button>
+        {% endif %}
+        {% if review.user == request.user %}
+        <button class="btn btn-link p-0 delete-review-link" title="Delete Review" data-bs-toggle="modal"
+          data-bs-target="#deleteReviewModal"
+          onclick="setDeleteAction('{% url 'delete_review' product.slug review.uid %}')" type="button">
+          <i class="fas fa-trash-alt" aria-hidden="true"></i>
+        </button>
+        {% endif %}
+      </div>
+    </article>
     {% empty %}
     <p class="padding-bottom-sm">No reviews yet...</p>
     {% endfor %}
+    </div>
 
     <!-- Modern Review Form -->
-    <div class="review-form-section mt-5">
-      <div class="section-header text-center mb-4">
-        <h3 class="section-title">Share Your Experience</h3>
-        <p class="section-subtitle text-muted">Help other customers by writing a review</p>
-      </div>
+    {% if not request.user.is_authenticated or not user_review %}
+    <section class="review-form-section mt-4" aria-labelledby="share-review-title">
+      <details class="review-form-disclosure"{% if review_form.is_bound %} open{% endif %}>
+        <summary class="review-form-heading">
+          <span>
+            <h3 class="review-form-title mb-0" id="share-review-title">Share Your Experience</h3>
+            <span class="review-form-subtitle">Your feedback helps other shoppers.</span>
+          </span>
+          <i class="fas fa-chevron-down review-form-chevron" aria-hidden="true"></i>
+        </summary>
 
-      {% if request.user.is_authenticated %}
-      <div class="modern-review-form-container">
+        {% if request.user.is_authenticated %}
         <div class="review-form-card">
-          <form method="POST" action="" class="modern-review-form" id="reviewForm">
+          <form method="POST" action="" class="modern-review-form" id="reviewForm" enctype="multipart/form-data">
             {% csrf_token %}
-
-            <!-- User Info Section -->
-            <div class="reviewer-info mb-4">
-              <div class="d-flex align-items-center">
-                <div class="reviewer-avatar">
-                  {% if request.user.profile.profile_image %}
-                  <img src="{{ request.user.profile.profile_image.url }}" alt="Your Avatar" class="avatar-img">
-                  {% else %}
-                  <div class="avatar-placeholder">
-                    <i class="fas fa-user"></i>
-                  </div>
-                  {% endif %}
-                </div>
-                <div class="reviewer-details ms-3">
-                  <h5 class="reviewer-name mb-1">{{ request.user.get_full_name|default:request.user.username }}</h5>
-                  <p class="reviewer-label text-muted mb-0">Verified Customer</p>
-                </div>
+            {% if review_form.errors %}
+            <div class="alert alert-danger mb-3" role="alert">{{ review_form.errors }}</div>
+            {% endif %}
+            <div class="rating-section">
+              <label class="review-rating-label" id="reviewRatingLabel">Choose a rating</label>
+              <input type="hidden" name="stars" id="ratingValue"
+                value="{% if review_form.is_bound %}{{ review_form.stars.value|default:'0' }}{% else %}0{% endif %}">
+              <div class="stars" id="starRating" role="group" aria-labelledby="reviewRatingLabel">
+                {% for star in "12345" %}
+                <button class="star{% if review_form.is_bound and review_form.stars.value >= forloop.counter %} active{% endif %}"
+                  type="button" data-rating="{{ forloop.counter }}"
+                  aria-label="{{ forloop.counter }} star{{ forloop.counter|pluralize }}"
+                  aria-pressed="{% if review_form.is_bound and review_form.stars.value >= forloop.counter %}true{% else %}false{% endif %}">
+                  <i class="fas fa-star" aria-hidden="true"></i>
+                </button>
+                {% endfor %}
+                <span class="rating-text" id="ratingText">Tap a star to begin</span>
               </div>
             </div>
-
-            <!-- Rating Section -->
-            <div class="rating-section mb-4">
-              <label class="form-label fw-semibold mb-3">How would you rate this product?</label>
-              <div class="star-rating-container">
-                <div class="star-rating" id="starRating">
-                  <input type="hidden" name="stars" id="ratingValue" value="0">
-                  <div class="stars">
-                    <i class="fas fa-star star" data-rating="1"></i>
-                    <i class="fas fa-star star" data-rating="2"></i>
-                    <i class="fas fa-star star" data-rating="3"></i>
-                    <i class="fas fa-star star" data-rating="4"></i>
-                    <i class="fas fa-star star" data-rating="5"></i>
-                  </div>
-                  <div class="rating-text">
-                    <span id="ratingText">Click to rate</span>
-                  </div>
-                </div>
+            <div class="review-form-fields"
+              {% if not review_form.is_bound %}hidden{% endif %}>
+              <div class="form-group mb-2">
+                <label class="sr-only" for="reviewContent">Your review</label>
+                <textarea name="content" id="reviewContent" class="form-control review-textarea" rows="3"
+                  placeholder="Add a comment about your experience (at least 10 characters)"
+                  maxlength="500" required>{{ review_form.content.value|default:'' }}</textarea>
               </div>
-            </div>
-
-            <!-- Review Content Section -->
-            <div class="review-content-section mb-4">
-              <label for="reviewContent" class="form-label fw-semibold">Write your review</label>
-              <textarea name="content" id="reviewContent" class="form-control review-textarea" rows="4"
-                placeholder="Share your thoughts about this product. What did you like or dislike? How was the quality, fit, and overall experience?"
-                maxlength="500" required></textarea>
-            </div>
-
-            <!-- Submit Section -->
-            <div class="submit-section">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="recommendProduct">
-                  <label class="form-check-label text-muted" for="recommendProduct">
-                    I would recommend this product to others
-                  </label>
-                </div>
-                <div class="submit-buttons">
-                  <button type="button" class="btn btn-outline-secondary me-2" onclick="resetForm()">
-                    <i class="fas fa-undo me-1"></i>Reset
-                  </button>
-                  <button type="submit" class="btn btn-primary btn-submit" disabled>
-                    <i class="fas fa-paper-plane me-1"></i>Submit Review
-                  </button>
-                </div>
+              <div class="review-form-actions">
+                <label class="btn btn-sm btn-outline-secondary mb-0" for="reviewPhotos">
+                  <i class="fas fa-camera mr-1" aria-hidden="true"></i>Add photos
+                  <span class="small">(optional)</span>
+                </label>
+                <input type="file" name="photos" id="reviewPhotos" class="review-photo-input"
+                  accept="image/*" multiple>
+                <span class="review-photo-name text-muted small" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-submit" disabled>
+                  <i class="fas fa-paper-plane mr-1" aria-hidden="true"></i>Post review
+                </button>
               </div>
+              <small class="form-text text-muted">You can add up to five photos.</small>
             </div>
           </form>
         </div>
-      </div>
-      {% else %}
-      <div class="login-prompt-card">
-        <div class="text-center py-5">
-          <div class="login-icon mb-3">
-            <i class="fas fa-user-circle"></i>
+        {% else %}
+        <div class="login-prompt-card review-login-prompt">
+          <div>
+            <h4 class="mb-1">Sign in to write a review</h4>
+            <p class="text-muted mb-0">Share your experience and help other shoppers.</p>
           </div>
-          <h4 class="mb-3">Sign in to Write a Review</h4>
-          <p class="text-muted mb-4">Share your experience and help other customers make informed decisions</p>
           <div class="login-buttons">
             <a href="{% url 'login' %}" class="btn btn-primary me-2">
               <i class="fas fa-sign-in-alt me-1"></i>Sign In
@@ -750,9 +947,10 @@
             </a>
           </div>
         </div>
-      </div>
-      {% endif %}
-    </div>
+        {% endif %}
+      </details>
+    </section>
+    {% endif %}
     <!-- Product Review Section End-->
     <!-- ============================ COMPONENT Product Details End ================================= -->
   </div>
@@ -1154,6 +1352,222 @@
   .form-submitted {
     animation: submitSuccess 0.3s ease;
   }
+
+  .review-form-section {
+    margin: 1.5rem 0;
+  }
+
+  .review-form-heading {
+    margin-bottom: 0.75rem;
+  }
+
+  .review-form-disclosure > .review-form-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-white);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .review-form-disclosure > .review-form-heading::-webkit-details-marker {
+    display: none;
+  }
+
+  .review-form-disclosure > .review-form-heading::marker {
+    content: "";
+  }
+
+  .review-form-disclosure > .review-form-heading:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  .review-form-disclosure[open] > .review-form-heading {
+    margin-bottom: 0.75rem;
+    border-color: var(--primary-color);
+  }
+
+  .review-form-chevron {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+
+  .review-form-disclosure[open] .review-form-chevron {
+    transform: rotate(180deg);
+  }
+
+  .review-form-title {
+    color: var(--text-dark);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .review-form-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .review-form-card {
+    max-width: 760px;
+    padding: 1rem;
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .review-form-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: none;
+  }
+
+  .rating-section {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+  }
+
+  .rating-section:hover {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .review-rating-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--text-dark);
+    font-weight: 600;
+  }
+
+  .stars {
+    align-items: center;
+    gap: 0.15rem;
+    font-size: 1.5rem;
+  }
+
+  .star {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.15rem;
+    border: 0;
+    background: transparent;
+    color: #d1d5db;
+    font-size: inherit;
+    line-height: 1;
+  }
+
+  .star:hover,
+  .star:focus-visible {
+    color: var(--accent-color);
+    transform: scale(1.1);
+  }
+
+  .star.active,
+  .star.hover {
+    color: var(--accent-color);
+    text-shadow: none;
+  }
+
+  .rating-text {
+    margin-left: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .review-form-fields {
+    margin-top: 0.75rem;
+  }
+
+  .review-form-fields[hidden] {
+    display: none;
+  }
+
+  .review-textarea {
+    min-height: 78px;
+    padding: 0.65rem 0.75rem;
+    border-width: 1px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  .review-form-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .review-photo-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .review-photo-input:focus-visible + .review-photo-name {
+    outline: 2px solid var(--primary-color);
+  }
+
+  .review-photo-name {
+    flex: 1 1 120px;
+  }
+
+  .review-form-actions .btn-submit {
+    margin-left: auto;
+    padding: 0.45rem 0.85rem;
+  }
+
+  .review-login-prompt {
+    max-width: 760px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .review-login-prompt h4 {
+    font-size: 1rem;
+  }
+
+  .review-login-prompt .login-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .review-login-prompt .login-buttons .btn {
+    padding: 0.45rem 0.75rem;
+  }
+
+  @media (max-width: 575.98px) {
+    .review-form-card {
+      padding: 0.85rem;
+    }
+
+    .review-form-actions {
+      align-items: stretch;
+    }
+
+    .review-form-actions .btn-submit {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .review-login-prompt {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
 </style>
 
 <script>
@@ -1176,6 +1590,7 @@
     const addToCartButton = document.getElementById("add-to-cart-btn");
     const buyNowButton = document.getElementById("buy-now-btn");
     const addedToCartLabel = document.getElementById("added-to-cart-label");
+    const goToCartLink = document.getElementById("go-to-cart-link");
 
     if (!quantityInput || !addToCartForm || !buyNowForm) return;
 
@@ -1187,7 +1602,7 @@
     if (!Number.isInteger(quantity) || quantity < minimum) {
       quantityError = `Enter a whole number of at least ${minimum}.`;
     } else if (quantity > maximum) {
-      quantityError = `Only ${maximum} available. Choose a lower quantity.`;
+      quantityError = "Requested quantity exceeds available stock. Choose a lower quantity.";
     }
     showQuantityError(quantityError);
 
@@ -1211,6 +1626,7 @@
       addedToCartLabel.hidden = !hasCartItem;
       if (hasCartItem) addedToCartLabel.textContent = `${quantity} ${quantity === 1 ? "item" : "items"} added`;
     }
+    if (goToCartLink) goToCartLink.hidden = !hasCartItem;
     if (!quantityError) {
       [addToCartForm, buyNowForm].forEach((form) => {
         form.querySelector(".product-quantity-value").value = quantity;
@@ -1233,10 +1649,29 @@
     }
   }
 
+  function handleProductQuantityInput(quantityInput) {
+    const maximum = Number(quantityInput.max);
+    const requestedQuantity = Number(quantityInput.value);
+    const exceedsStock = quantityInput.value !== "" &&
+      Number.isFinite(requestedQuantity) &&
+      requestedQuantity > maximum;
+    if (exceedsStock) quantityInput.value = String(maximum);
+
+    updateProductActionLinks();
+    if (exceedsStock) {
+      showQuantityError("Requested quantity exceeds available stock. Choose a lower quantity.");
+    }
+  }
+
   async function changeProductQuantity(amount) {
     const quantityInput = document.getElementById("product-quantity");
     if (!quantityInput || quantityInput.disabled) return;
     const targetQuantity = Number(quantityInput.value || 1) + amount;
+    const maximum = Number(quantityInput.max);
+    if (targetQuantity > maximum) {
+      showQuantityError("Requested quantity exceeds available stock. Choose a lower quantity.");
+      return;
+    }
     if (quantityInput.dataset.cartItemId) {
       await saveCartItemQuantity(quantityInput, targetQuantity);
       return;
@@ -1318,8 +1753,12 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     const quantityInput = document.getElementById("product-quantity");
+    const addToCartForm = document.getElementById("add-to-cart-form");
+    const buyNowForm = document.getElementById("buy-now-form");
     if (quantityInput) {
-      quantityInput.addEventListener("input", updateProductActionLinks);
+      quantityInput.addEventListener("input", function () {
+        handleProductQuantityInput(quantityInput);
+      });
       quantityInput.addEventListener("change", function () {
         if (quantityInput.dataset.cartItemId) {
           if (updateProductActionLinks()) saveCartItemQuantity(quantityInput, quantityInput.value);
@@ -1404,12 +1843,15 @@
 
   // Modern Review Form JavaScript
   document.addEventListener('DOMContentLoaded', function () {
-    const stars = document.querySelectorAll('.star');
+    const stars = document.querySelectorAll('#starRating .star');
     const ratingValue = document.getElementById('ratingValue');
     const ratingText = document.getElementById('ratingText');
     const reviewContent = document.getElementById('reviewContent');
     const submitBtn = document.querySelector('.btn-submit');
     const reviewForm = document.getElementById('reviewForm');
+    const reviewFields = document.querySelector('.review-form-fields');
+    const reviewPhotos = document.getElementById('reviewPhotos');
+    const reviewPhotoName = document.querySelector('.review-photo-name');
 
     // Rating texts for different star values
     const ratingTexts = {
@@ -1442,7 +1884,13 @@
           const rating = index + 1;
           ratingValue.value = rating;
           highlightStars(rating, 'active');
+          stars.forEach((ratingStar, starIndex) => {
+            ratingStar.setAttribute('aria-pressed', String(starIndex < rating));
+          });
           updateRatingText(rating);
+          if (reviewFields) {
+            reviewFields.hidden = false;
+          }
           validateForm();
 
           // Add a little animation
@@ -1459,9 +1907,18 @@
       reviewContent.addEventListener('input', validateForm);
     }
 
+    if (reviewPhotos && reviewPhotoName) {
+      reviewPhotos.addEventListener('change', function () {
+        const count = reviewPhotos.files.length;
+        reviewPhotoName.textContent = count
+          ? `${count} photo${count === 1 ? '' : 's'} selected`
+          : '';
+      });
+    }
+
     // Form validation
     function validateForm() {
-      const rating = parseInt(ratingValue.value) || 0;
+      const rating = parseInt(ratingValue ? ratingValue.value : '0') || 0;
       const content = reviewContent ? reviewContent.value.trim() : '';
 
       const isValid = rating > 0 && content.length >= 10;
@@ -1527,7 +1984,12 @@
       });
     }
 
-    // Initial validation
+    const initialRating = parseInt(ratingValue ? ratingValue.value : '0') || 0;
+    if (initialRating > 0) {
+      highlightStars(initialRating, 'active');
+      updateRatingText(initialRating);
+    }
+
     validateForm();
   });
 

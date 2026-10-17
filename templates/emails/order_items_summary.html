@@ -1,0 +1,20 @@
+{% if order_items %}
+<h2 style="margin:0 0 12px; color:#243047; font-size:18px;">Items in this order</h2>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="8" border="0" style="margin:0 0 22px; border-collapse:collapse; font-size:14px;">
+  <tbody>
+    {% for item in order_items %}
+    <tr>
+      <td width="72" style="border-bottom:1px solid #e2e8f0;">
+        {% if item.email_thumbnail_cid %}
+        <img src="cid:{{ item.email_thumbnail_cid }}" width="56" height="56" alt="{{ item.product.product_name|default:'Product' }}" style="display:block; width:56px; height:56px; object-fit:contain; border:1px solid #e2e8f0; border-radius:6px;">
+        {% else %}
+        <span style="display:block; width:54px; height:54px; border:1px solid #e2e8f0; border-radius:6px; background-color:#f8fafc;"></span>
+        {% endif %}
+      </td>
+      <td style="border-bottom:1px solid #e2e8f0;">{{ item.product.product_name|default:"Product" }}</td>
+      <td align="right" style="border-bottom:1px solid #e2e8f0;">Qty {{ item.quantity }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

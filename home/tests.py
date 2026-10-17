@@ -29,6 +29,19 @@ class ContactFormTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-validate-on-blur')
         self.assertContains(response, '/static/js/form-validation.js')
+        self.assertContains(response, 'Just Started')
+        self.assertContains(response, 'Growing with You')
+        self.assertNotContains(response, '50K+')
+        self.assertNotContains(response, 'Happy Customers')
+        self.assertNotContains(response, 'Live Chat')
+        self.assertContains(
+            response,
+            'rel="icon" type="image/svg+xml" href="/static/images/bundleofgifts-icon.svg"',
+        )
+        self.assertContains(
+            response,
+            'class="brand-icon"',
+        )
 
     @override_settings(
         ADMIN_EMAIL='support@example.com,orders@example.com',
@@ -247,14 +260,10 @@ class ReturnRefundPolicyTests(TestCase):
         self.assertContains(response, policy.return_summary)
         self.assertContains(response, policy.refund_summary)
 
-    def test_terms_display_configured_cancellation_window(self):
-        policy = ReturnRefundPolicy.get_solo()
-        policy.cancellation_window_hours = 36
-        policy.save()
-
+    def test_terms_display_cancellation_until_dispatch(self):
         response = self.client.get(reverse('terms-and-conditions'))
 
-        self.assertContains(response, 'within 36 hours of placement')
+        self.assertContains(response, 'at any time before they are dispatched')
 
     def test_only_one_policy_can_be_saved(self):
         ReturnRefundPolicy.objects.create(return_title='First policy')

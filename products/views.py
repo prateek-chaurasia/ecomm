@@ -11,7 +11,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from products.models import (
-    Product, SizeVariant, ProductReview, Wishlist, Category, Tag,
+    Product, SizeVariant, ProductReview, ReviewPhoto, Wishlist, Category, Tag,
     BundleOffer, BundleConfiguration, BundlePackagingOption,
 )
 
@@ -267,7 +267,8 @@ def category_products(request, slug):
 
 
 def get_product(request, slug):
-    product = get_object_or_404(Product, slug=slug)
+    product = get_object_or_404(
+        Product.objects.prefetch_related('reviews__photos'), slug=slug)
     sorted_size_variants = product.size_variant.all().order_by('size_name')
     selected_size = request.GET.get('size') or None
     selected_size_variant = (
@@ -292,16 +293,18 @@ def get_product(request, slug):
     if request.method == 'POST' and request.user.is_authenticated:
         if review:
             # If review exists, update it
-            review_form = ReviewForm(request.POST, instance=review)
+            review_form = ReviewForm(request.POST, request.FILES, instance=review)
         else:
             # Otherwise, create a new review
-            review_form = ReviewForm(request.POST)
+            review_form = ReviewForm(request.POST, request.FILES)
 
         if review_form.is_valid():
             review = review_form.save(commit=False)
             review.product = product
             review.user = request.user
             review.save()
+            for photo in review_form.cleaned_data['photos']:
+                ReviewPhoto.objects.create(review=review, image=photo)
             messages.success(request, "Review added successfully!")
             return redirect('get_product', slug=slug)
     else:
@@ -325,7 +328,6 @@ def get_product(request, slug):
         product=product,
         size_variant=selected_size_variant,
         color_variant__isnull=True,
-        gift_wrap=False,
         cart__is_paid=False,
     )
     if request.user.is_authenticated:
@@ -342,6 +344,7 @@ def get_product(request, slug):
         'sorted_size_variants': sorted_size_variants,
         'related_products': related_products,
         'review_form': review_form,
+        'user_review': review,
         'rating_percentage': rating_percentage,
         'in_wishlist': in_wishlist,
         'wishlist_item': wishlist_item,
@@ -367,7 +370,7 @@ def product_reviews(request):
 def product_reviews_for_product(request, slug):
     product = get_object_or_404(Product, slug=slug)
     sort = request.GET.get('sort', 'latest')
-    reviews = product.reviews.select_related('user').annotate(
+    reviews = product.reviews.select_related('user').prefetch_related('photos').annotate(
         helpful_count=Count('likes', distinct=True),
         unhelpful_count=Count('dislikes', distinct=True),
     )
@@ -556,10 +559,16 @@ def move_to_cart(request, uid):
 
     cart, created = Cart.objects.get_or_create(user=request.user, is_paid=False)
     cart_item, created = CartItem.objects.get_or_create(
-        cart=cart, product=product, size_variant=size_variant)
+        cart=cart,
+        product=product,
+        size_variant=size_variant,
+        color_variant=None,
+        defaults={'quantity': 1, 'gift_wrap': False},
+    )
 
     if not created:
         cart_item.quantity += 1
+        cart_item.gift_wrap = False
         cart_item.save()
 
     messages.success(request, "Product moved to cart successfully!")

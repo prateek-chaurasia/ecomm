@@ -1,6 +1,7 @@
 from django.urls import path
 from accounts.views import *
 from django.contrib.auth import views as auth_views
+from accounts.forms import BrandedPasswordResetForm
 
 urlpatterns = [
     # User view urls with login, register, logout, and email activation.
@@ -19,8 +20,9 @@ urlpatterns = [
 
     # Passoword reset urls with django default view.
     path('password_reset/', auth_views.PasswordResetView.as_view(
+        form_class=BrandedPasswordResetForm,
         template_name='registration/password_reset_form.html',
-        email_template_name='registration/password_reset_email.html',
+        email_template_name='registration/password_reset_email.txt',
         html_email_template_name='registration/password_reset_email.html'), name='password_reset'),
 
     path('password_reset/done/', auth_views.PasswordResetDoneView.as_view(
@@ -34,6 +36,8 @@ urlpatterns = [
 
     # Cart functionality with add-to-cart, update-cart, remove-cart, and remove-coupon urls.
     path('cart/', cart, name="cart"),
+    path('checkout/', checkout, name='checkout'),
+    path('payment/', payment, name='payment'),
     path('api/delivery-options/', delivery_options, name='delivery-options'),
     path('api/create-order/', create_payment_order, name='create_payment_order'),
     path('api/verify-payment/', verify_payment, name='verify_payment'),
@@ -50,8 +54,19 @@ urlpatterns = [
     # Order history and details urls
     path('order-history/', order_history, name='order_history'),
     path('order-details/<str:order_id>/', order_details, name='order_details'),
+    path(
+        'order-details/<str:order_id>/review/<uuid:product_uid>/',
+        review_order_product,
+        name='review_order_product',
+    ),
     path('order-cancel/<str:order_id>/<str:access_token>/', cancel_order, name='cancel_order'),
     path('track-order/<str:order_id>/<str:access_token>/', track_order, name='track_order'),
+    path('return/<str:order_id>/', return_request, name='return_request'),
+    path(
+        'return/<str:order_id>/<str:access_token>/',
+        return_request,
+        name='return_request_guest',
+    ),
     path('order-details/<str:order_id>/download/', download_invoice, name='download_invoice'),
 
     # Delete user account url

@@ -67,7 +67,10 @@
         <div class="col-lg-3 col-4">
           <div class="brand-wrap">
             <a href="{% url 'index' %}" class="brand-link" style="text-decoration: none;">
-              <h2 class="logo-text">BundleofGifts</h2>
+              <h2 class="logo-text">
+                <img src="{% static 'images/bundleofgifts-icon.svg' %}" alt="" class="brand-icon" />
+                <span>BundleofGifts</span>
+              </h2>
             </a>
           </div>
         </div>
@@ -105,9 +108,9 @@
             <!-- Profile Icon -->
             <div class="widget-header icontext">
               {% if user.is_authenticated %}
-              {% if user.profile.profile_image %}
+              {% if user.profile.profile_image_file or user.profile.profile_image %}
               <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
-                <img src="{{ user.profile.profile_image }}" alt="Profile Image" class="rounded-circle" width="42"
+                <img src="{% if user.profile.profile_image_file %}{{ user.profile.profile_image_file.url }}{% else %}{{ user.profile.profile_image }}{% endif %}" alt="Profile Image" class="rounded-circle" width="42"
                   height="42" />
               </a>
               {% else %}
@@ -223,12 +226,21 @@
 
   /* Brand Styling */
   .brand-link .logo-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
     color: var(--primary-color);
     font-weight: 800;
     font-size: 1.6rem;
     margin: 0;
     white-space: nowrap;
     transition: all 0.3s ease;
+  }
+
+  .brand-icon {
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
   }
 
   .brand-wrap {

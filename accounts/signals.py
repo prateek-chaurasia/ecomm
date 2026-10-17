@@ -3,8 +3,11 @@ import logging
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
-from accounts.models import Order, Profile
-from base.emails import send_order_status_update_email
+from accounts.models import Order, Profile, ReturnRequest
+from base.emails import (
+    send_order_status_update_email,
+    send_return_status_update_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,3 +48,28 @@ def notify_customer_of_order_status(sender, instance, created, **kwargs):
     except Exception:
         logger.exception(
             'Order status email failed for order %s', instance.order_id)
+
+
+@receiver(pre_save, sender=ReturnRequest)
+def capture_return_status_change(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._return_status_changed = False
+        return
+
+    previous_status = sender.objects.filter(pk=instance.pk).values_list(
+        'status', flat=True).first()
+    instance._return_status_changed = previous_status != instance.status
+
+
+@receiver(post_save, sender=ReturnRequest)
+def notify_customer_of_return_status(sender, instance, created, **kwargs):
+    if not created and not getattr(instance, '_return_status_changed', False):
+        return
+
+    try:
+        send_return_status_update_email(instance)
+    except Exception:
+        logger.exception(
+            'Return status email failed for order %s',
+            instance.order.order_id,
+        )

@@ -21,6 +21,8 @@
 - **Checkout Process:** A smooth checkout flow with an order summary and address management.
 - **Payment Integration:** Integrated with Razorpay for secure online payments.
 - **Order Management:** View order history and track status updates.
+- **Returns and Refunds:** Request an eligible return from order details (or guest order tracking), submit carrier tracking and shipment photos after approval, and follow inspection and refund progress. Customers pay return shipping costs.
+- **Replacements:** Eligible customers can choose a configurable replacement reason, upload photos of a wrong or damaged item, and follow admin review, replacement preparation, dispatch, and completion from the same order return page.
 - **Responsive Design:** A mobile-friendly UI ensures a consistent experience across all devices.
 - **Admin Panel:** Efficiently manage products, orders, and users through Django's admin interface.
 - **URL-Based Images:** All images (products, categories, profiles) use URLs instead of file uploads, reducing storage requirements and enabling external image hosting.
@@ -159,6 +161,8 @@ If you encounter issues during setup, here are some common problems and their so
 ## Usage
 
 - **Admin Panel:** Access the admin panel at `http://127.0.0.1:8000/admin/` to manage products, orders, and users. Update site-wide delivery copy under `Home > Delivery guideline` and return/refund/cancellation copy under `Home > Return and refund policy`. Product-specific return eligibility and conditions remain editable on each product.
+- **Return processing:** Configure the return office address under `Home > Return and refund policy` before approving requests. Review and approve/reject requests under `Accounts > Return requests`; inspect shipment tracking and photos, record condition deductions, mark parcels received, then initiate a Razorpay refund or record a COD refund reference. Razorpay refunds can be refreshed from the admin list while the provider processes them.
+- **Replacement processing:** Manage selectable reasons under `Accounts > Replacement reasons`. Review uploaded item photos in a replacement request, approve or reject it, then use the replacement preparation, dispatch (after entering the outbound tracking number), and completion actions in `Accounts > Return requests`. Replacements send the same item; they do not trigger refunds or ask the customer to ship it back.
 - **Shopping:** Browse products, add items to the cart, proceed to checkout, and make payments using Razorpay.
 - **User Profile:** Users can register, log in, reset their passwords, view their order history, and update their profiles.
 - **Adding Images:** When adding products, categories, or updating your profile, use image URLs from external sources (e.g., image hosting services, CDNs, or direct URLs). The admin interface provides a URL input field for easy image management.

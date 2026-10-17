@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django import forms
 from django.utils.html import format_html
-from base.admin import PaginatedModelAdmin
+from base.admin import FilterCollapsibleModelAdmin, PaginatedModelAdmin
 from .models import *
 
 # Register your models here.
@@ -22,7 +22,7 @@ class CategoryAdminForm(forms.ModelForm):
         # }
 
 
-class CategoryAdmin(admin.ModelAdmin):
+class CategoryAdmin(FilterCollapsibleModelAdmin):
     form = CategoryAdminForm
     list_display = ['category_name', 'image_preview']
 
@@ -166,7 +166,7 @@ class BundleOfferAdminForm(forms.ModelForm):
 
 
 @admin.register(BundleConfiguration)
-class BundleConfigurationAdmin(admin.ModelAdmin):
+class BundleConfigurationAdmin(FilterCollapsibleModelAdmin):
     fields = ['max_products']
 
     def has_add_permission(self, request):
@@ -174,7 +174,7 @@ class BundleConfigurationAdmin(admin.ModelAdmin):
 
 
 @admin.register(BundleOffer)
-class BundleOfferAdmin(admin.ModelAdmin):
+class BundleOfferAdmin(FilterCollapsibleModelAdmin):
     form = BundleOfferAdminForm
     list_display = ['title', 'discount_percentage', 'is_active', 'product_count']
     list_filter = ['is_active']
@@ -187,7 +187,7 @@ class BundleOfferAdmin(admin.ModelAdmin):
 
 
 @admin.register(BundlePackagingOption)
-class BundlePackagingOptionAdmin(admin.ModelAdmin):
+class BundlePackagingOptionAdmin(FilterCollapsibleModelAdmin):
     list_display = ['name', 'price', 'is_active', 'sort_order', 'sample_preview']
     list_filter = ['is_active']
     search_fields = ['name', 'description']
@@ -203,7 +203,7 @@ class BundlePackagingOptionAdmin(admin.ModelAdmin):
     sample_preview.short_description = 'Sample sheet'
 
 
-class ProductImageStandaloneAdmin(admin.ModelAdmin):
+class ProductImageStandaloneAdmin(FilterCollapsibleModelAdmin):
     form = ProductImageAdminForm
     list_display = ['product', 'image_thumbnail']
     readonly_fields = ['img_preview']
@@ -216,25 +216,25 @@ class ProductImageStandaloneAdmin(admin.ModelAdmin):
 
 
 @admin.register(AgeGroup)
-class AgeGroupAdmin(admin.ModelAdmin):
+class AgeGroupAdmin(FilterCollapsibleModelAdmin):
     list_display = ['name']
     search_fields = ['name']
 
 
 @admin.register(Tag)
-class TagAdmin(admin.ModelAdmin):
+class TagAdmin(FilterCollapsibleModelAdmin):
     list_display = ['name', 'slug']
     search_fields = ['name']
 
 
 @admin.register(ColorVariant)
-class ColorVariantAdmin(admin.ModelAdmin):
+class ColorVariantAdmin(FilterCollapsibleModelAdmin):
     list_display = ['color_name', 'price']
     model = ColorVariant
 
 
 @admin.register(SizeVariant)
-class SizeVariantAdmin(admin.ModelAdmin):
+class SizeVariantAdmin(FilterCollapsibleModelAdmin):
     list_display = ['size_name', 'price', 'order']
     model = SizeVariant
 
@@ -244,3 +244,4 @@ admin.site.register(Coupon)
 admin.site.register(Product, ProductAdmin)
 admin.site.register(ProductImage, ProductImageStandaloneAdmin)
 admin.site.register(ProductReview)
+admin.site.register(ReviewPhoto)

@@ -6,6 +6,8 @@
 <style>
   .img-account-profile {
     height: 10rem;
+    width: 10rem;
+    object-fit: cover;
   }
 
   .rounded-circle {
@@ -62,6 +64,38 @@
     color: var(--accent-color);
     border-bottom-color: var(--accent-color);
   }
+
+  .profile-cropper[hidden] {
+    display: none;
+  }
+
+  .profile-crop-stage {
+    position: relative;
+    width: min(100%, 280px);
+    aspect-ratio: 1;
+    margin: 1rem auto;
+    overflow: hidden;
+    border: 2px solid #6366f1;
+    border-radius: 50%;
+    background: #eef2ff;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .profile-crop-stage:active {
+    cursor: grabbing;
+  }
+
+  .profile-crop-stage img {
+    position: absolute;
+    max-width: none;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .profile-crop-error {
+    color: #b42318;
+  }
 </style>
 
 <section class="section-content padding-bottom">
@@ -75,28 +109,47 @@
 
     <hr class="mt-0 mb-4" />
 
-    <!-- Profile Picture Section -->
-    <div class="row">
+    <form method="POST" enctype="multipart/form-data" id="profile-form">
+      {% csrf_token %}
+      <div class="row">
       <div class="col-xl-4">
         <div class="card mb-4 mb-xl-0">
           <div class="card-header">Profile Picture</div>
           <div class="card-body text-center">
-            <form method="POST" enctype="multipart/form-data" data-validate-on-blur>
-              {% csrf_token %}
-
-              {% if user.profile.profile_image %}
-              <img class="img-account-profile rounded-circle mb-2" src="{{ user.profile.profile_image }}"
+              {% if user.profile.profile_image_file %}
+              <img id="profile-image-preview" class="img-account-profile rounded-circle mb-2" src="{{ user.profile.profile_image_file.url }}"
                 alt="Profile Picture" />
-
+              {% elif user.profile.profile_image %}
+              <img id="profile-image-preview" class="img-account-profile rounded-circle mb-2" src="{{ user.profile.profile_image }}"
+                alt="Profile Picture" />
               {% else %}
-              <img class="img-account-profile rounded-circle mb-2" src="{% static 'images/default-profile.png' %}"
+              <img id="profile-image-preview" class="img-account-profile rounded-circle mb-2" src="{% static 'images/default-profile.png' %}"
                 alt="Default Profile Picture" />
               {% endif %}
 
-              <div class="small font-italic text-muted mb-4">
-                JPG or PNG no larger than 5 MB
+              <div class="form-group text-left mt-3">
+                <label for="{{ profile_form.profile_image_file.id_for_label }}">Upload a profile picture</label>
+                {{ profile_form.profile_image_file }}
+                {% for error in profile_form.profile_image_file.errors %}<div class="profile-crop-error">{{ error }}</div>{% endfor %}
+                <small class="form-text text-muted">JPG, PNG, or WebP, up to 5 MB. Drag the image to reposition and use the slider to zoom.</small>
               </div>
-            </form>
+              <div class="profile-cropper" id="profile-cropper" hidden>
+                <div class="profile-crop-stage" id="profile-crop-stage" aria-label="Drag to position your profile photo">
+                  <img id="profile-crop-image" alt="Crop preview">
+                </div>
+                <label for="profile-image-zoom" class="small">Zoom</label>
+                <input id="profile-image-zoom" type="range" min="1" max="3" step="0.01" value="1" class="custom-range">
+                <div class="small text-muted">The circle shows the part of the image that will be saved.</div>
+              </div>
+              {% if profile_form.profile_image_file.errors %}
+              <div class="profile-crop-error" role="alert">Please choose a valid image.</div>
+              {% endif %}
+              {% if profile_form.non_field_errors %}
+              <div class="profile-crop-error" role="alert">{{ profile_form.non_field_errors }}</div>
+              {% endif %}
+              <div class="small font-italic text-muted mt-3">
+                The cropped photo will appear in your profile after you save.
+              </div>
           </div>
         </div>
       </div>
@@ -106,19 +159,193 @@
         <div class="card mb-4">
           <div class="card-header">Account Details</div>
           <div class="card-body">
-            <form method="POST" enctype="multipart/form-data">
-              {% csrf_token %}
               {{ user_form|crispy }}
-              {{ profile_form|crispy }}
+              {{ profile_form.bio|as_crispy_field }}
               <button class="btn btn-primary" type="submit">
                 Update Profile
               </button>
-            </form>
           </div>
         </div>
       </div>
     </div>
+    </form>
   </div>
 </section>
+
+<script>
+  (() => {
+    const form = document.getElementById('profile-form');
+    const fileInput = document.querySelector('[data-profile-image-input]');
+    const cropper = document.getElementById('profile-cropper');
+    const stage = document.getElementById('profile-crop-stage');
+    const cropImage = document.getElementById('profile-crop-image');
+    const zoomInput = document.getElementById('profile-image-zoom');
+    const preview = document.getElementById('profile-image-preview');
+    if (!form || !fileInput || !cropper || !stage || !cropImage || !zoomInput || !preview) return;
+
+    const maxUploadSize = 5 * 1024 * 1024;
+    let imageUrl = null;
+    let imageState = null;
+    let pointer = null;
+    let submitting = false;
+
+    function positionImage() {
+      if (!imageState) return;
+      const scale = imageState.baseScale * Number(zoomInput.value);
+      const width = cropImage.naturalWidth * scale;
+      const height = cropImage.naturalHeight * scale;
+      const size = stage.clientWidth;
+      imageState.x = Math.min(0, Math.max(size - width, imageState.x));
+      imageState.y = Math.min(0, Math.max(size - height, imageState.y));
+      cropImage.style.width = `${width}px`;
+      cropImage.style.height = `${height}px`;
+      cropImage.style.left = `${imageState.x}px`;
+      cropImage.style.top = `${imageState.y}px`;
+      imageState.scale = scale;
+      previewCanvas();
+    }
+
+    function previewCanvas() {
+      if (!imageState || !imageState.canvasContext) return;
+      const context = imageState.canvasContext;
+      const sourceX = Math.max(0, -imageState.x / imageState.scale);
+      const sourceY = Math.max(0, -imageState.y / imageState.scale);
+      const sourceSize = stage.clientWidth / imageState.scale;
+      context.clearRect(0, 0, 512, 512);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, 512, 512);
+      context.drawImage(
+        cropImage,
+        sourceX,
+        sourceY,
+        sourceSize,
+        sourceSize,
+        0,
+        0,
+        512,
+        512,
+      );
+      imageState.canvas.toBlob((blob) => {
+        if (!blob || !imageState) return;
+        if (imageState.previewUrl) URL.revokeObjectURL(imageState.previewUrl);
+        imageState.previewUrl = URL.createObjectURL(blob);
+        preview.src = imageState.previewUrl;
+      }, 'image/jpeg', 0.92);
+    }
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        fileInput.setCustomValidity('Choose a JPG, PNG, or WebP image.');
+        fileInput.reportValidity();
+        fileInput.value = '';
+        return;
+      }
+      if (file.size > maxUploadSize) {
+        fileInput.setCustomValidity('Image must be no larger than 5 MB.');
+        fileInput.reportValidity();
+        fileInput.value = '';
+        return;
+      }
+      fileInput.setCustomValidity('');
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      imageUrl = URL.createObjectURL(file);
+      preview.src = imageUrl;
+      cropImage.onload = () => {
+        cropper.hidden = false;
+        const size = stage.clientWidth;
+        if (!size) {
+          fileInput.setCustomValidity('The crop area could not be displayed. Please reload and try again.');
+          fileInput.reportValidity();
+          return;
+        }
+        const baseScale = Math.max(
+          size / cropImage.naturalWidth,
+          size / cropImage.naturalHeight,
+        );
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        imageState = {
+          baseScale,
+          scale: baseScale,
+          x: (size - cropImage.naturalWidth * baseScale) / 2,
+          y: (size - cropImage.naturalHeight * baseScale) / 2,
+          canvas,
+          canvasContext: canvas.getContext('2d'),
+          previewUrl: null,
+        };
+        zoomInput.value = '1';
+        positionImage();
+      };
+      cropImage.onerror = () => {
+        fileInput.setCustomValidity('The selected file could not be read as an image.');
+        fileInput.reportValidity();
+        fileInput.value = '';
+        cropper.hidden = true;
+      };
+      cropImage.src = imageUrl;
+    });
+
+    zoomInput.addEventListener('input', positionImage);
+    stage.addEventListener('pointerdown', (event) => {
+      if (!imageState) return;
+      pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      stage.setPointerCapture(event.pointerId);
+    });
+    stage.addEventListener('pointermove', (event) => {
+      if (!pointer || pointer.id !== event.pointerId || !imageState) return;
+      imageState.x += event.clientX - pointer.x;
+      imageState.y += event.clientY - pointer.y;
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      positionImage();
+    });
+    stage.addEventListener('pointerup', () => { pointer = null; });
+    stage.addEventListener('pointercancel', () => { pointer = null; });
+
+    form.addEventListener('submit', async (event) => {
+      if (submitting || !fileInput.files.length) return;
+      event.preventDefault();
+      if (!form.reportValidity() || !imageState) return;
+      submitting = true;
+      const context = imageState.canvasContext;
+      const sourceX = Math.max(0, -imageState.x / imageState.scale);
+      const sourceY = Math.max(0, -imageState.y / imageState.scale);
+      const sourceSize = stage.clientWidth / imageState.scale;
+      context.clearRect(0, 0, 512, 512);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, 512, 512);
+      context.drawImage(
+        cropImage,
+        sourceX,
+        sourceY,
+        sourceSize,
+        sourceSize,
+        0,
+        0,
+        512,
+        512,
+      );
+      const blob = await new Promise((resolve) => {
+        imageState.canvas.toBlob(resolve, 'image/jpeg', 0.92);
+      });
+      if (!blob) {
+        submitting = false;
+        fileInput.setCustomValidity('Could not crop this image. Please choose it again.');
+        fileInput.reportValidity();
+        return;
+      }
+      const croppedImage = new File([blob], 'profile-picture.jpg', {
+        type: 'image/jpeg',
+      });
+      const transfer = new DataTransfer();
+      transfer.items.add(croppedImage);
+      fileInput.files = transfer.files;
+      HTMLFormElement.prototype.submit.call(form);
+    });
+  })();
+</script>
 
 {% endblock %}

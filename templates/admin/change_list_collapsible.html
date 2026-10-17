@@ -1,0 +1,124 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_list %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    #changelist {
+      position: relative;
+      flex-wrap: nowrap;
+    }
+
+    #changelist .changelist-form-container {
+      order: 0;
+      min-width: 0;
+    }
+
+    #changelist-filter {
+      flex: 0 0 auto;
+      order: 1;
+      margin: 0 0 0 24px;
+      background: transparent;
+    }
+
+    #changelist-filter:not([open]) {
+      margin-left: auto;
+    }
+
+    #changelist-filter > summary {
+      display: list-item;
+      width: fit-content;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--body-bg);
+      color: var(--body-fg);
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    #changelist-filter > summary:hover,
+    #changelist-filter > summary:focus {
+      background: var(--darkened-bg);
+    }
+
+    #changelist-filter[open] {
+      flex: 0 0 240px;
+      margin-left: 24px;
+      background: var(--darkened-bg);
+    }
+
+    #changelist-filter[open] > summary {
+      width: auto;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    #changelist-filter-content {
+      padding: 0 15px 12px;
+    }
+
+    @media (max-width: 767px) {
+      #changelist {
+        display: block;
+        padding-top: 44px;
+      }
+
+      #changelist .changelist-form-container {
+        width: 100%;
+      }
+
+      #changelist-filter {
+        position: absolute;
+        top: 0;
+        right: 0;
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+      }
+
+      #changelist-filter[open] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        z-index: 10;
+        width: min(240px, calc(100vw - 40px));
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+        margin: 0;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block filters %}
+  {% if cl.has_filters %}
+    <details id="changelist-filter"{% if cl.has_active_filters %} open{% endif %}>
+      <summary id="changelist-filter-header">{% translate 'Filter' %}{% if cl.has_active_filters %} · {% translate 'Active' %}{% endif %}</summary>
+      <nav id="changelist-filter-content" aria-labelledby="changelist-filter-header">
+        {% if cl.is_facets_optional or cl.has_active_filters %}
+          <div id="changelist-filter-extra-actions">
+            {% if cl.is_facets_optional %}
+              <h3>
+                {% if cl.add_facets %}
+                  <a href="{{ cl.remove_facet_link }}" class="hidelink">{% translate "Hide counts" %}</a>
+                {% else %}
+                  <a href="{{ cl.add_facet_link }}" class="viewlink">{% translate "Show counts" %}</a>
+                {% endif %}
+              </h3>
+            {% endif %}
+            {% if cl.has_active_filters %}
+              <h3><a href="{{ cl.clear_all_filters_qs }}">&#10006; {% translate "Clear all filters" %}</a></h3>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% for spec in cl.filter_specs %}
+          {% admin_list_filter cl spec %}
+        {% endfor %}
+      </nav>
+    </details>
+  {% endif %}
+{% endblock %}

@@ -11,7 +11,10 @@ from products.models import *
 from django.urls import reverse
 from django.conf import settings
 from django.contrib import messages
+from django.forms import ImageField
 from django.http import JsonResponse
+from django.core.exceptions import ValidationError
+from django.http import Http404
 from home.models import City, DeliveryGuideline, ShippingAddress, State
 from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
@@ -20,12 +23,15 @@ from django.contrib.auth.models import User
 from django.template.loader import get_template
 from accounts.models import (
     Profile, Cart, CartItem, Order, OrderItem, BundleCartItem,
-    BundleOrderItem, BundleOrderProduct, ServiceablePincode,
+    BundleOrderItem, BundleOrderProduct, ServiceablePincode, ReturnRequest,
+    ReturnShipmentImage, ReturnRequestImage,
 )
 from base.emails import (
     send_account_activation_email,
     send_admin_new_order_email,
     send_admin_order_cancelled_email,
+    send_admin_return_request_email,
+    send_admin_return_shipment_email,
     send_order_cancelled_customer_email,
     send_order_confirmation_email,
 )
@@ -41,8 +47,14 @@ from django.utils import timezone
 from django.shortcuts import redirect, render, get_object_or_404
 from accounts.forms import (
     UserUpdateForm, UserProfileForm, RegistrationForm, ShippingAddressForm,
-    GuestShippingAddressForm, CustomPasswordChangeForm,
+    GuestShippingAddressForm, CustomPasswordChangeForm, ReturnRequestForm,
 )
+from products.forms import ReviewForm
+from accounts.returns import (
+    return_eligibility_error,
+    return_request_timeline,
+)
+from home.models import ReturnRefundPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +99,37 @@ def _cart_delivery_fee(cart):
         DeliveryGuideline.get_solo(),
         cart.get_cart_total_price_after_coupon(),
     )
+
+
+def _cart_pricing_context(cart):
+    delivery_guideline = DeliveryGuideline.get_solo()
+    cart_total_after_coupon = cart.get_cart_total_price_after_coupon()
+    cart_has_items = cart.cart_items.exists() or cart.bundle_items.exists()
+    delivery_fee = (
+        get_delivery_fee(delivery_guideline, cart_total_after_coupon)
+        if cart_has_items else None
+    )
+    if delivery_fee is None:
+        delivery_fee_reason = ''
+    elif delivery_guideline.delivery_charge_threshold is None:
+        delivery_fee_reason = 'No free-delivery threshold is configured.'
+    elif cart_total_after_coupon < delivery_guideline.delivery_charge_threshold:
+        delivery_fee_reason = (
+            f'Applies because the order total is below the '
+            f'₹{delivery_guideline.delivery_charge_threshold} free-delivery threshold.'
+        )
+    else:
+        delivery_fee_reason = ''
+
+    return {
+        'cart_has_items': cart_has_items,
+        'cart_subtotal': cart.get_cart_total() + (delivery_fee or 0),
+        'cart_discount': cart.get_cart_total() - cart_total_after_coupon,
+        'delivery_fee': delivery_fee,
+        'delivery_fee_reason': delivery_fee_reason,
+        'cart_total_after_delivery': cart_total_after_coupon + (delivery_fee or 0),
+    }
+
 
 def generate_order_id():
     return f'BOG-{timezone.localdate():%Y%m%d}-{uuid.uuid4().hex[:6].upper()}'
@@ -227,6 +270,8 @@ def cart_owner_filter(request):
 
 @require_POST
 def add_to_cart(request, uid):
+    buy_now = request.POST.get('buy_now') == '1'
+    buy_now_added = False
     try:
         variant = request.POST.get('size') or request.GET.get('size')
         product = get_object_or_404(Product, uid=uid)
@@ -235,20 +280,38 @@ def add_to_cart(request, uid):
         except (TypeError, ValueError):
             quantity = 1
 
+        gift_wrap = (request.POST.get('gift_wrap') or request.GET.get('gift_wrap')) == '1' and product.gift_wrap_available
+        size_variant = get_object_or_404(
+            SizeVariant, size_name=variant) if variant else None
+        if buy_now:
+            existing_cart = get_active_cart(request)
+            existing_item = (
+                CartItem.objects.filter(
+                    cart=existing_cart,
+                    product=product,
+                    size_variant=size_variant,
+                    color_variant=None,
+                ).first()
+                if existing_cart else None
+            )
+            if existing_item:
+                if existing_item.gift_wrap != gift_wrap:
+                    existing_item.gift_wrap = gift_wrap
+                    existing_item.save(update_fields=['gift_wrap', 'updated_at'])
+                return redirect(
+                    'checkout' if request.user.is_authenticated else 'guest-checkout')
+
         if product.stock_quantity < 1:
             messages.warning(request, 'This product is out of stock.')
             return redirect(reverse('get_product', kwargs={'slug': product.slug}))
 
-        gift_wrap = (request.POST.get('gift_wrap') or request.GET.get('gift_wrap')) == '1' and product.gift_wrap_available
         cart = get_active_cart(request, create=True)
-        size_variant = get_object_or_404(
-            SizeVariant, size_name=variant) if variant else None
 
         cart_item = CartItem.objects.filter(
             cart=cart,
             product=product,
             size_variant=size_variant,
-            gift_wrap=gift_wrap,
+            color_variant=None,
         ).first()
         already_in_cart = cart_item.quantity if cart_item else 0
         quantity_after_add = already_in_cart + quantity
@@ -265,10 +328,11 @@ def add_to_cart(request, uid):
                 cart=cart,
                 product=product,
                 size_variant=size_variant,
-                gift_wrap=gift_wrap,
-                defaults={'quantity': quantity},
+                color_variant=None,
+                defaults={'quantity': quantity, 'gift_wrap': gift_wrap},
             )
             if created:
+                buy_now_added = True
                 messages.success(request, 'Item added to cart successfully.')
             else:
                 quantity_after_add = cart_item.quantity + quantity
@@ -284,12 +348,18 @@ def add_to_cart(request, uid):
                     )
                 else:
                     cart_item.quantity = quantity_after_add
+                    cart_item.gift_wrap = gift_wrap
                     cart_item.save()
+                    buy_now_added = True
                     messages.success(request, 'Item added to cart successfully.')
 
     except Exception as e:
         logger.exception("Add to cart failed for product %s", uid)
         messages.error(request, 'Error adding item to cart.')
+
+    if buy_now and buy_now_added:
+        return redirect(
+            'checkout' if request.user.is_authenticated else 'guest-checkout')
 
     next_url = request.POST.get('next')
     if next_url and url_has_allowed_host_and_scheme(
@@ -302,8 +372,6 @@ def add_to_cart(request, uid):
 
 
 def cart(request):
-    cart_obj = None
-    payment = None
     cart_obj = get_active_cart(request)
     if not cart_obj:
         messages.warning(
@@ -316,83 +384,146 @@ def cart(request):
 
         if not coupon_obj:
             messages.error(request, 'Invalid coupon code.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            return redirect('cart')
 
         if cart_obj and cart_obj.coupon:
-            messages.error(request, 'Coupon already exists.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            messages.error(
+                request, 'Remove the applied coupon before applying another one.')
+            return redirect('cart')
 
         if coupon_obj and coupon_obj.is_expired:
             messages.error(request, 'Coupon code expired.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            return redirect('cart')
 
         if cart_obj and coupon_obj and cart_obj.get_cart_total() < coupon_obj.minimum_amount:
             messages.error(
                 request, f'Amount should be greater than {coupon_obj.minimum_amount}')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            return redirect('cart')
 
         if cart_obj and coupon_obj:
             cart_obj.coupon = coupon_obj
             cart_obj.save()
             messages.success(request, 'Coupon applied successfully.')
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            return redirect('cart')
 
-    saved_addresses = []
-    selected_address_id = None
-    if request.user.is_authenticated:
-        saved_addresses = list(ShippingAddress.objects.filter(user=request.user).order_by('-is_default', '-created_at'))
-        default_address = next((address for address in saved_addresses if address.is_default), None)
-        if default_address:
-            selected_address_id = str(default_address.uid)
-        elif saved_addresses:
-            selected_address_id = str(saved_addresses[0].uid)
-
-    delivery_guideline = DeliveryGuideline.get_solo()
-    cart_total_after_coupon = cart_obj.get_cart_total_price_after_coupon()
-    cart_has_items = cart_obj.cart_items.exists() or cart_obj.bundle_items.exists()
-    delivery_fee = (
-        get_delivery_fee(delivery_guideline, cart_total_after_coupon)
-        if cart_has_items else None
-    )
-    if delivery_fee is None:
-        delivery_fee_reason = ''
-    elif delivery_guideline.delivery_charge_threshold is None:
-        delivery_fee_reason = 'No free-delivery threshold is configured.'
-    elif cart_total_after_coupon < delivery_guideline.delivery_charge_threshold:
-        delivery_fee_reason = (
-            f'Applies because the order total is below the '
-            f'₹{delivery_guideline.delivery_charge_threshold} free-delivery threshold.'
-        )
-    else:
-        delivery_fee_reason = (
-            f'Free delivery because the order total meets the '
-            f'₹{delivery_guideline.delivery_charge_threshold} threshold.'
-        )
-    cart_subtotal_with_delivery = cart_obj.get_cart_total() + (delivery_fee or 0)
+    cart_items = list(cart_obj.cart_items.select_related('product'))
+    stock_notices = []
+    for cart_item in cart_items:
+        available_quantity = cart_item.product.stock_quantity if cart_item.product else 0
+        if available_quantity and cart_item.quantity > available_quantity:
+            stock_notices.append({
+                'product_name': cart_item.product.product_name,
+                'available_quantity': available_quantity,
+            })
+            cart_item.quantity = available_quantity
+            cart_item.save(update_fields=['quantity', 'updated_at'])
 
     context = {
         'cart': cart_obj,
-        'payment': payment,
-        'razorpay_key_id': settings.RAZORPAY_KEY_ID,
-        'online_payment_enabled': settings.ONLINE_PAYMENT_ENABLED,
-        'quantity_range': range(1, 6),
+        'cart_items': cart_items,
+        'stock_notices': stock_notices,
+        'current_step': 'cart',
         'base_url': settings.BASE_URL,
-        'saved_addresses': saved_addresses,
-        'selected_address_id': selected_address_id,
-        'delivery_guideline': delivery_guideline,
-        'cart_has_items': cart_has_items,
-        'cart_subtotal': cart_subtotal_with_delivery,
-        'cart_discount': (
-            cart_obj.get_cart_total() - cart_obj.get_cart_total_price_after_coupon()
-        ),
-        'delivery_fee': delivery_fee,
-        'delivery_fee_reason': delivery_fee_reason,
-        'cart_total_after_delivery': (
-            cart_total_after_coupon + delivery_fee
-            if delivery_fee is not None else None
-        ),
+        'available_coupons': Coupon.objects.filter(
+            is_expired=False,
+        ).order_by('minimum_amount', 'coupon_code'),
+        **_cart_pricing_context(cart_obj),
     }
     return render(request, 'accounts/cart.html', context)
+
+
+@login_required
+def checkout(request):
+    cart_obj = get_active_cart(request)
+    if not cart_obj or not cart_obj.cart_items.exists() and not cart_obj.bundle_items.exists():
+        messages.warning(request, 'Your cart is empty. Please add a product to cart.')
+        return redirect('cart')
+
+    addresses = list(
+        ShippingAddress.objects.filter(user=request.user)
+        .order_by('-is_default', '-created_at')
+    )
+    selected_address_id = (
+        request.POST.get('selected_address_id')
+        or request.GET.get('address')
+    )
+    selected_address = None
+    if selected_address_id:
+        selected_address = next(
+            (address for address in addresses if str(address.uid) == selected_address_id),
+            None,
+        )
+        if selected_address is None:
+            messages.error(request, 'Please choose a valid delivery address.')
+            return redirect('checkout')
+
+    if request.method == 'POST':
+        if not selected_address:
+            messages.error(request, 'Please choose a delivery address.')
+        elif not _cart_has_available_stock(cart_obj):
+            messages.error(
+                request,
+                'One or more products are no longer available in the requested quantity.',
+            )
+        else:
+            return redirect(f'{reverse("payment")}?address={selected_address.uid}')
+
+    if selected_address is None and addresses:
+        profile = Profile.objects.filter(user=request.user).select_related(
+            'shipping_address',
+        ).first()
+        profile_address = profile.shipping_address if profile else None
+        if profile_address and profile_address.user_id == request.user.id:
+            selected_address = next(
+                (address for address in addresses if address.pk == profile_address.pk),
+                None,
+            )
+        if selected_address is None:
+            selected_address = next(
+                (address for address in addresses if address.is_default),
+                addresses[0],
+            )
+
+    context = {
+        'cart': cart_obj,
+        'current_step': 'checkout',
+        'addresses': addresses,
+        'selected_address_id': str(selected_address.uid) if selected_address else '',
+        **_cart_pricing_context(cart_obj),
+    }
+    return render(request, 'accounts/checkout.html', context)
+
+
+@login_required
+def payment(request):
+    cart_obj = get_active_cart(request)
+    if not cart_obj or not cart_obj.cart_items.exists() and not cart_obj.bundle_items.exists():
+        messages.warning(request, 'Your cart is empty. Please add a product to cart.')
+        return redirect('cart')
+
+    address_id = request.GET.get('address')
+    selected_address = ShippingAddress.objects.filter(
+        user=request.user, uid=address_id,
+    ).first() if address_id else None
+    if not selected_address:
+        messages.error(request, 'Please choose a valid delivery address before payment.')
+        return redirect('checkout')
+    if not _cart_has_available_stock(cart_obj):
+        messages.error(
+            request,
+            'One or more products are no longer available in the requested quantity.',
+        )
+        return redirect('cart')
+
+    context = {
+        'cart': cart_obj,
+        'current_step': 'payment',
+        'selected_address': selected_address,
+        'razorpay_key_id': settings.RAZORPAY_KEY_ID,
+        'online_payment_enabled': settings.ONLINE_PAYMENT_ENABLED,
+        **_cart_pricing_context(cart_obj),
+    }
+    return render(request, 'accounts/payment.html', context)
 
 
 @require_POST
@@ -594,9 +725,13 @@ def verify_payment(request):
     profile.save(update_fields=['shipping_address', 'updated_at'])
 
     try:
-        order = create_order(cart_obj, shipping_address=(
-            selected_address
-        ), delivery_option=delivery_option, delivery_distance_km=delivery_distance)
+        order = create_order(
+            cart_obj,
+            shipping_address=selected_address,
+            delivery_option=delivery_option,
+            delivery_distance_km=delivery_distance,
+            razorpay_payment_id=payment_id,
+        )
     except ValueError as error:
         logger.warning("Payment %s could not reserve inventory: %s", payment_id, error)
         try:
@@ -617,7 +752,7 @@ def verify_payment(request):
     try:
         send_admin_new_order_email(order)
     except Exception:
-        logger.exception("Admin order notification failed for order %s", order.order_id)
+        logger.exception("Seller order notification failed for order %s", order.order_id)
     return JsonResponse({
         'success': True,
         'redirect_url': f'{reverse("success")}?order_id={order.order_id}',
@@ -716,7 +851,7 @@ def place_cod_order(request):
     try:
         send_admin_new_order_email(order)
     except Exception:
-        logger.exception("Admin order notification failed for order %s", order.order_id)
+        logger.exception("Seller order notification failed for order %s", order.order_id)
 
     return JsonResponse({
         'success': True,
@@ -810,7 +945,7 @@ def guest_checkout(request):
                         try:
                             send_admin_new_order_email(order)
                         except Exception:
-                            logger.exception("Admin order notification failed for order %s", order.order_id)
+                            logger.exception("Seller order notification failed for order %s", order.order_id)
                         request.session.flush()
                         return redirect(
                             f'{reverse("success")}?order_id={order.order_id}'
@@ -973,7 +1108,7 @@ def remove_coupon(request, cart_id):
     cart.save()
 
     messages.success(request, 'Coupon Removed.')
-    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+    return redirect('cart')
 
 
 def success(request):
@@ -1159,11 +1294,238 @@ def track_order(request, order_id, access_token):
     return render(request, 'accounts/order_tracking.html', {'order': order})
 
 
+def return_request(request, order_id, access_token=None):
+    if access_token:
+        order = get_object_or_404(
+            Order,
+            order_id=order_id,
+            user__isnull=True,
+            guest_access_token=access_token,
+        )
+    elif request.user.is_authenticated:
+        order = get_object_or_404(
+            Order, order_id=order_id, user=request.user)
+    else:
+        return redirect('login')
+
+    current_request = ReturnRequest.objects.filter(order=order).first()
+    form = ReturnRequestForm(order=order)
+    eligibility_errors = {
+        ReturnRequest.RequestType.RETURN: return_eligibility_error(order),
+        ReturnRequest.RequestType.REPLACEMENT: return_eligibility_error(
+            order, ReturnRequest.RequestType.REPLACEMENT),
+    }
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'request':
+            if current_request:
+                messages.error(
+                    request,
+                    'A return or replacement request already exists for this order.',
+                )
+            else:
+                form = ReturnRequestForm(request.POST, order=order)
+                request_type = request.POST.get(
+                    'request_type', ReturnRequest.RequestType.RETURN)
+                eligibility_error = eligibility_errors.get(
+                    request_type, 'Choose a valid request type.')
+                if eligibility_error:
+                    messages.error(request, eligibility_error)
+                elif not form.is_valid():
+                    messages.error(request, 'Please correct the request details below.')
+                elif not 1 <= len(request.FILES.getlist('request_images')) <= 5:
+                    image_error = (
+                        'Upload 1–5 clear photos of the product and its condition.'
+                    )
+                    messages.error(
+                        request, image_error,
+                    )
+                    form.add_error(None, image_error)
+                elif any(
+                    image.size > 5 * 1024 * 1024
+                    for image in request.FILES.getlist('request_images')
+                ):
+                    image_error = 'Each photo must be 5 MB or smaller.'
+                    messages.error(request, image_error)
+                    form.add_error(None, image_error)
+                else:
+                    request_images = request.FILES.getlist('request_images')
+                    image_field = ImageField()
+                    try:
+                        validated_images = [
+                            image_field.clean(image) for image in request_images
+                        ]
+                    except ValidationError:
+                        messages.error(
+                            request,
+                            'Upload valid image files in JPG, PNG, or another supported image format.',
+                        )
+                        validated_images = []
+                        form.add_error(
+                            None,
+                            'Upload valid image files in JPG, PNG, or another supported image format.',
+                        )
+                    if (
+                        validated_images
+                        and form.is_valid()
+                    ):
+                        with transaction.atomic():
+                            current_request = form.save(commit=False)
+                            current_request.order = order
+                            current_request.save()
+                            for image in validated_images:
+                                ReturnRequestImage.objects.create(
+                                    return_request=current_request,
+                                    image=image,
+                                )
+                        try:
+                            send_admin_return_request_email(current_request)
+                        except Exception:
+                            logger.exception(
+                                'Return/replacement request notification failed for order %s',
+                                order.order_id,
+                            )
+                            messages.error(
+                                request,
+                                'Your request was saved, but the seller notification could not be sent. Please contact support and quote your order number.',
+                            )
+                        else:
+                            request_label = (
+                                'replacement' if request_type == ReturnRequest.RequestType.REPLACEMENT
+                                else 'return'
+                            )
+                            messages.success(
+                                request,
+                                f'Your {request_label} request has been submitted for seller review.',
+                            )
+                        route_name = (
+                            'return_request_guest' if access_token else 'return_request'
+                        )
+                        return redirect(
+                            route_name,
+                            **(
+                                {'order_id': order.order_id, 'access_token': access_token}
+                                if access_token
+                                else {'order_id': order.order_id}
+                            ),
+                        )
+        elif action == 'shipment':
+            current_request = get_object_or_404(
+                ReturnRequest, order=order)
+            if (
+                current_request.request_type != ReturnRequest.RequestType.RETURN
+                or current_request.status != ReturnRequest.Status.APPROVED
+            ):
+                messages.error(
+                    request,
+                    'Shipment details can only be submitted after the return is approved.',
+                )
+            else:
+                courier_partner_name = (
+                    request.POST.get('courier_partner_name') or ''
+                ).strip()
+                tracking_number = (request.POST.get('tracking_number') or '').strip()
+                images = request.FILES.getlist('shipment_images')
+                image_field = ImageField()
+                if not courier_partner_name:
+                    messages.error(request, 'Enter the courier partner name.')
+                elif len(courier_partner_name) > 120:
+                    messages.error(request, 'The courier partner name is too long.')
+                elif not tracking_number:
+                    messages.error(request, 'Enter the shipment tracking number.')
+                elif len(tracking_number) > 120:
+                    messages.error(request, 'The tracking number is too long.')
+                elif not 1 <= len(images) <= 5:
+                    messages.error(
+                        request, 'Upload between 1 and 5 shipment photos.')
+                elif any(image.size > 5 * 1024 * 1024 for image in images):
+                    messages.error(
+                        request, 'Each shipment photo must be 5 MB or smaller.')
+                else:
+                    try:
+                        validated_images = [
+                            image_field.clean(image) for image in images
+                        ]
+                    except ValidationError:
+                        messages.error(
+                            request,
+                            'Upload valid image files in JPG, PNG, or another supported image format.',
+                        )
+                    else:
+                        with transaction.atomic():
+                            for image in validated_images:
+                                ReturnShipmentImage.objects.create(
+                                    return_request=current_request,
+                                    image=image,
+                                )
+                            current_request.courier_partner_name = (
+                                courier_partner_name
+                            )
+                            current_request.tracking_number = tracking_number
+                            current_request.shipped_at = timezone.now()
+                            current_request.status = ReturnRequest.Status.SHIPPED
+                            current_request.save(update_fields=[
+                                'courier_partner_name', 'tracking_number',
+                                'shipped_at', 'status', 'updated_at',
+                            ])
+                        try:
+                            send_admin_return_shipment_email(current_request)
+                        except Exception:
+                            logger.exception(
+                                'Return shipment notification failed for order %s',
+                                order.order_id,
+                            )
+                        messages.success(
+                            request,
+                            'Your shipment details and photos have been submitted.',
+                        )
+                        route_name = (
+                            'return_request_guest' if access_token else 'return_request'
+                        )
+                        return redirect(
+                            route_name,
+                            **(
+                                {'order_id': order.order_id, 'access_token': access_token}
+                                if access_token
+                                else {'order_id': order.order_id}
+                            ),
+                        )
+
+    if current_request:
+        current_request = ReturnRequest.objects.prefetch_related(
+            'shipment_images').get(pk=current_request.pk)
+    policy = ReturnRefundPolicy.get_solo()
+    return render(request, 'accounts/return_request.html', {
+        'order': order,
+        'order_items': order.order_items.select_related(
+            'product', 'size_variant', 'color_variant',
+        ),
+        'bundle_items': order.bundle_items.prefetch_related(
+            'selected_products__product',
+        ),
+        'return_request': current_request,
+        'return_timeline': (
+            return_request_timeline(current_request)
+            if current_request else []
+        ),
+        'form': form,
+        'return_eligibility_error': eligibility_errors[
+            ReturnRequest.RequestType.RETURN],
+        'replacement_eligibility_error': eligibility_errors[
+            ReturnRequest.RequestType.REPLACEMENT],
+        'return_shipping_address': policy.return_shipping_address,
+        'access_token': access_token,
+        'is_cod_order': order.payment_mode == 'Cash on Delivery',
+    })
+
+
 # Create an order view
 def create_order(
     cart, order_id=None, payment_status='Paid', payment_mode='Razorpay',
     shipping_address=None, delivery_pincode='', guest_access_token=None,
     guest_name='', guest_email='', delivery_option='', delivery_distance_km=None,
+    razorpay_payment_id='',
 ):
     with transaction.atomic():
         cart_items = list(CartItem.objects.select_related(
@@ -1216,6 +1578,7 @@ def create_order(
             delivery_distance_km=delivery_distance_km,
             additional_delivery_fee=delivery_fee or None,
             payment_status=payment_status,
+            razorpay_payment_id=razorpay_payment_id,
             shipping_address=str(selected_address) if selected_address else '',
             payment_mode=payment_mode,
             order_total_price=cart.get_cart_total(),
@@ -1268,17 +1631,113 @@ def order_details(request, order_id):
     if not order.guest_access_token:
         order.guest_access_token = uuid.uuid4().hex
         order.save(update_fields=['guest_access_token', 'updated_at'])
-    order_items = OrderItem.objects.filter(order=order)
-    bundle_items = order.bundle_items.prefetch_related('selected_products__product')
+    order_items = OrderItem.objects.filter(order=order).select_related(
+        'product', 'size_variant', 'color_variant').prefetch_related(
+            'product__product_images')
+    bundle_items = order.bundle_items.prefetch_related(
+        'selected_products__product__product_images')
+    review_products = {}
+    for item in order_items:
+        if item.product_id:
+            review_products.setdefault(item.product_id, item.product)
+    for bundle_item in bundle_items:
+        for selected_product in bundle_item.selected_products.all():
+            review_products.setdefault(
+                selected_product.product_id, selected_product.product)
+    existing_reviews = ProductReview.objects.filter(
+        user=request.user,
+        product_id__in=review_products,
+    ).prefetch_related('photos')
+    reviews_by_product = {
+        review.product_id: review for review in existing_reviews
+    }
+    for product in review_products.values():
+        product.review_image = next(iter(product.product_images.all()), None)
+        product.order_review = reviews_by_product.get(product.pk)
+        product.review_stars = (
+            product.order_review.stars if product.order_review else 0
+        )
+        product.review_photo_count = (
+            len(product.order_review.photos.all())
+            if product.order_review else 0
+        )
+        product.review_photo_remaining = 5 - product.review_photo_count
+    return_request_obj = ReturnRequest.objects.filter(order=order).first()
     context = {
         'order': order,
         'order_items': order_items,
         'bundle_items': bundle_items,
+        'review_products': list(review_products.values()),
+        'return_request': return_request_obj,
+        'return_timeline': (
+            return_request_timeline(return_request_obj)
+            if return_request_obj else []
+        ),
+        'return_eligibility_error': return_eligibility_error(order),
+        'replacement_eligibility_error': return_eligibility_error(
+            order, ReturnRequest.RequestType.REPLACEMENT),
         'order_total_price': sum(item.get_total_price() for item in order_items),
         'coupon_discount': order.coupon.discount_amount if order.coupon else 0,
         'grand_total': order.get_order_total_price()
     }
     return render(request, 'accounts/order_details.html', context)
+
+
+@login_required
+@require_POST
+def review_order_product(request, order_id, product_uid):
+    order = get_object_or_404(
+        Order, order_id=order_id, user=request.user)
+    if order.status != Order.Status.DELIVERED:
+        messages.error(request, 'You can review products after the order is delivered.')
+        return redirect('order_details', order_id=order.order_id)
+
+    product = get_object_or_404(Product, uid=product_uid)
+    is_ordered_product = (
+        OrderItem.objects.filter(order=order, product=product).exists()
+        or BundleOrderProduct.objects.filter(
+            bundle_item__order=order, product=product).exists()
+    )
+    if not is_ordered_product:
+        raise Http404
+
+    review = ProductReview.objects.filter(
+        user=request.user, product=product).first()
+    review_form = ReviewForm(
+        request.POST,
+        request.FILES,
+        instance=review,
+    )
+    if not review_form.is_valid():
+        errors = '; '.join(
+            f'{field}: {", ".join(field_errors)}'
+            for field, field_errors in review_form.errors.items()
+        )
+        messages.error(request, f'Your review could not be saved. {errors}')
+        return redirect('order_details', order_id=order.order_id)
+
+    photos = review_form.cleaned_data['photos']
+    existing_photo_count = review.photos.count() if review else 0
+    if existing_photo_count + len(photos) > 5:
+        messages.error(
+            request,
+            'A review can have up to five photos in total. Remove some photos or choose fewer new ones.',
+        )
+        return redirect('order_details', order_id=order.order_id)
+
+    with transaction.atomic():
+        review = review_form.save(commit=False)
+        review.product = product
+        review.user = request.user
+        review.save()
+        for photo in photos:
+            ReviewPhoto.objects.create(review=review, image=photo)
+
+    messages.success(
+        request,
+        f'Your review for {product.product_name} has been saved.',
+    )
+    return redirect('order_details', order_id=order.order_id)
 
 
 @require_POST
@@ -1301,7 +1760,7 @@ def cancel_order(request, order_id, access_token):
         if not order.can_be_cancelled:
             messages.error(
                 request,
-                f'Orders can only be cancelled within {order.cancellation_window_hours} hours of placement and before dispatch.',
+                'Orders can only be cancelled before dispatch.',
             )
         else:
             quantities = Counter()
@@ -1348,7 +1807,7 @@ def cancel_order(request, order_id, access_token):
             send_admin_order_cancelled_email(order)
         except Exception:
             logger.exception(
-                'Admin cancellation email failed for order %s', order.order_id)
+                'Seller cancellation email failed for order %s', order.order_id)
 
     if request.user.is_authenticated:
         return redirect('order_details', order_id=order.order_id)

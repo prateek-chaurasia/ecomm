@@ -166,6 +166,10 @@ class ReturnRefundPolicy(models.Model):
         default='Approved refunds are issued to the original payment method where possible.')
     refund_details = models.TextField(
         default='Contact our support team with your order details to request help with a refund.')
+    return_shipping_address = models.TextField(
+        blank=True,
+        help_text='The address customers must ship approved returns to, at their own cost.',
+    )
     cancellation_window_hours = models.PositiveSmallIntegerField(
         default=24,
         validators=[MinValueValidator(1)],

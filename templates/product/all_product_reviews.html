@@ -16,33 +16,46 @@
   <div class="row">
     {% for review in reviews %}
     <div class="col-md-6 col-lg-4 mb-4">
-      <div class="card h-100 shadow-sm rounded">
-        <div class="row g-0 align-items-center">
-          <!-- Product Image -->
-          <div class="col-4">
-            <img src="{{ review.product.product_images.first.image_url.url }}" class="img-fluid rounded-start"
-              alt="{{ review.product.product_name }}" style="width: 100%; height: auto; object-fit: cover" />
-          </div>
+      <article class="card h-100 shadow-sm rounded review-card">
+        <div class="review-card-main">
+          <a href="{% url 'get_product' review.product.slug %}" class="review-image-frame"
+            aria-label="View {{ review.product.product_name }}">
+            {% with product_image=review.product.product_images.first %}
+            {% if product_image and product_image.image_url %}
+            <img src="{{ product_image.image_url.url }}" alt="{{ review.product.product_name }}" />
+            {% else %}
+            <span class="review-image-placeholder" aria-hidden="true">
+              <i class="fas fa-image"></i>
+            </span>
+            {% endif %}
+            {% endwith %}
+          </a>
 
-          <!-- Review Details -->
-          <div class="col-8">
-            <div class="card-body">
-              <h5 class="card-title">
-                <a href="{% url 'get_product' review.product.slug %}" class="text-decoration-none">
-                  {{ review.product.product_name }}
-                </a>
-              </h5>
-              <small class="text-muted">Posted on {{ review.date_added|date:"M d, Y" }}</small>
-              <p class="mt-2"><strong>Rating:</strong> {{ review.stars }}/5</p>
-              <p class="card-text" title="{{ review.content }}">
-                <strong>Comment:</strong> {{ review.content|truncatechars:50 }}
-              </p>
+          <div class="review-card-content">
+            <h5 class="card-title review-product-title">
+              <a href="{% url 'get_product' review.product.slug %}" class="text-decoration-none">
+                {{ review.product.product_name }}
+              </a>
+            </h5>
+            <small class="text-muted">Posted on {{ review.date_added|date:"M d, Y" }}</small>
+            <div class="review-rating mt-2" role="img" aria-label="{{ review.stars }} out of 5 stars">
+              {% for star in "12345" %}
+              {% if forloop.counter <= review.stars %}
+              <i class="fas fa-star" aria-hidden="true"></i>
+              {% else %}
+              <i class="far fa-star" aria-hidden="true"></i>
+              {% endif %}
+              {% endfor %}
             </div>
+            {% if review.content %}
+            <p class="card-text review-comment" title="{{ review.content }}">
+              <strong>Comment:</strong> {{ review.content|truncatechars:80 }}
+            </p>
+            {% endif %}
           </div>
         </div>
 
-        <!-- Buttons -->
-        <div class="card-footer bg-white border-top-0 d-flex justify-content-between">
+        <div class="card-footer bg-white border-top-0 d-flex justify-content-between review-card-actions">
           <button class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center"
             style="width: 45%; border-radius: 30px; font-weight: 500" data-bs-toggle="modal"
             data-bs-target="#editReviewModal" data-review-id="{{ review.uid }}" data-review-stars="{{ review.stars }}"
@@ -60,7 +73,7 @@
             </button>
           </form>
         </div>
-      </div>
+      </article>
     </div>
     {% endfor %}
   </div>
@@ -195,6 +208,96 @@
     background-color: var(--accent-color);
     border-color: var(--accent-color);
     color: var(--text-dark);
+  }
+
+  .review-card {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.9rem;
+  }
+
+  .review-card-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .review-image-frame {
+    display: flex;
+    flex: 0 0 7rem;
+    width: 7rem;
+    height: 7rem;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #dbe3ef;
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    padding: 0.4rem;
+  }
+
+  .review-image-frame img {
+    width: 100%;
+    height: 100%;
+    border-radius: 0.45rem;
+    object-fit: contain;
+  }
+
+  .review-image-placeholder {
+    color: #94a3b8;
+    font-size: 2rem;
+  }
+
+  .review-card-content {
+    min-width: 0;
+    padding: 0.15rem 0;
+  }
+
+  .review-product-title {
+    margin-bottom: 0.35rem;
+    font-size: 1.05rem;
+    line-height: 1.35;
+  }
+
+  .review-rating {
+    display: flex;
+    gap: 0.2rem;
+    color: #f5a623;
+    font-size: 0.95rem;
+  }
+
+  .review-comment {
+    margin: 0.75rem 0 0;
+    color: #475569;
+    line-height: 1.5;
+  }
+
+  .review-card-actions {
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
+  }
+
+  .review-card-actions > button,
+  .review-card-actions > form {
+    flex: 1 1 0;
+  }
+
+  @media (max-width: 575.98px) {
+    .review-card-main {
+      gap: 0.8rem;
+      padding: 0.85rem;
+    }
+
+    .review-image-frame {
+      flex-basis: 5.5rem;
+      width: 5.5rem;
+      height: 5.5rem;
+    }
+
+    .review-card-actions {
+      padding: 0 0.85rem 0.85rem;
+    }
   }
 </style>
 

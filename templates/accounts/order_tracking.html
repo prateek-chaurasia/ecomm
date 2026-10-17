@@ -22,25 +22,65 @@
           {% endif %}
           {% endfor %}
         </div>
-        <div class="alert alert-light border">Current status: <strong>{{ order.get_status_display }}</strong></div>
+        <div class="current-status-callout">
+          <span class="current-status-label">Current status</span>
+          <strong class="current-status-value">{{ order.get_status_display }}</strong>
+        </div>
         {% endif %}
 
-        <div class="row mt-4">
-          <div class="col-md-6"><strong>Delivery address</strong><p class="text-muted">{{ order.shipping_address|default:"Not provided" }}</p></div>
-          <div class="col-md-6">
-            {% if order.outside_service_area %}<strong>Delivery area</strong><p class="text-muted">Outside Standard Service Area (estimated 4–6 days)</p>{% endif %}
-            {% if order.delivery_option %}<strong>Delivery option</strong><p class="text-muted">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}</p>{% endif %}
-            <strong>Delivery charges</strong><p class="text-muted">{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</p>
-            <strong>Order total</strong><p class="text-muted">INR {{ order.grand_total }}</p>
+        <section class="order-delivery-card mt-4" aria-labelledby="delivery-details-heading">
+          <div class="order-delivery-heading">
+            <span class="order-delivery-icon" aria-hidden="true"><i class="fas fa-truck"></i></span>
+            <div>
+              <h2 id="delivery-details-heading">Delivery details</h2>
+              <p>Destination and charges for this order</p>
+            </div>
           </div>
+          <div class="order-delivery-grid">
+            <div class="order-delivery-address">
+              <span class="order-delivery-label"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> Delivery address</span>
+              <p>{{ order.shipping_address|default:"Not provided" }}</p>
+            </div>
+            <div class="order-delivery-facts">
+              {% if order.outside_service_area %}
+              <div class="order-delivery-fact">
+                <span class="order-delivery-label">Delivery area</span>
+                <p>Outside Standard Service Area <span class="text-muted">(estimated 4–6 days)</span></p>
+              </div>
+              {% endif %}
+              {% if order.delivery_option %}
+              <div class="order-delivery-fact">
+                <span class="order-delivery-label">Delivery option</span>
+                <p>{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} <span class="text-muted">({{ order.delivery_distance_km }} km from office)</span>{% endif %}</p>
+              </div>
+              {% endif %}
+              <div class="order-delivery-fact">
+                <span class="order-delivery-label">Delivery charges</span>
+                <p>{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</p>
+              </div>
+              <div class="order-delivery-fact">
+                <span class="order-delivery-label">Order total</span>
+                <p class="order-delivery-total">INR {{ order.grand_total }}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        {% if order.can_be_cancelled or order.user or order.status == 'delivered' %}
+        <div class="order-tracking-actions" aria-label="Order actions">
+          {% if order.can_be_cancelled %}
+          <form method="post" action="{% url 'cancel_order' order.order_id order.guest_access_token %}" onsubmit="return confirm('Cancel this order?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger"><i class="fas fa-times mr-1"></i>Cancel Order</button>
+          </form>
+          {% endif %}
+          {% if order.user %}
+          <a href="{% url 'order_details' order.order_id %}" class="btn btn-outline-primary">View full order details</a>
+          {% endif %}
+          {% if order.status == 'delivered' %}
+          <a href="{% url 'return_request_guest' order.order_id order.guest_access_token %}" class="btn btn-outline-primary">Returns and refunds</a>
+          {% endif %}
         </div>
-        {% if order.can_be_cancelled %}
-        <form method="post" action="{% url 'cancel_order' order.order_id order.guest_access_token %}" class="mb-3" onsubmit="return confirm('Cancel this order?');">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-danger"><i class="fas fa-times mr-1"></i>Cancel Order</button>
-        </form>
         {% endif %}
-        {% if order.user %}<a href="{% url 'order_details' order.order_id %}" class="btn btn-outline-primary">View full order details</a>{% endif %}
       </div>
     </div>
   </div>
@@ -53,7 +93,37 @@
   .progress-step.complete:not(:last-child)::after { background: #198754; }
   .progress-dot { z-index: 1; width: 32px; height: 32px; display: grid; place-items: center; border: 2px solid #dee2e6; border-radius: 50%; background: #fff; }
   .complete .progress-dot { border-color: #198754; background: #198754; color: #fff; }
-  .current .progress-dot { box-shadow: 0 0 0 4px rgba(25, 135, 84, .16); }
-  @media (max-width: 575px) { .order-progress { flex-direction: column; align-items: flex-start; gap: 16px; } .progress-step { flex-direction: row; text-align: left; } .progress-step:not(:last-child)::after { top: 32px; left: 15px; width: 2px; height: 16px; } }
+  .progress-step.current { color: #856404; font-weight: 600; }
+  .progress-step.current .progress-dot { border-color: #ffc107; background: #ffc107; color: #212529; box-shadow: 0 0 0 4px rgba(255, 193, 7, .24); }
+  .current-status-callout { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #ffc107; border-left: 5px solid #ffc107; border-radius: 8px; background: #fff3cd; color: #664d03; }
+  .current-status-label { font-weight: 600; }
+  .current-status-value { padding: 4px 10px; border-radius: 999px; background: #ffc107; color: #212529; }
+  .order-delivery-card { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+  .order-delivery-heading { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  .order-delivery-icon { display: grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: #e0e7ff; color: #4f46e5; }
+  .order-delivery-heading h2 { margin: 0; color: #1e293b; font-size: 1.1rem; font-weight: 700; }
+  .order-delivery-heading p { margin: 3px 0 0; color: #64748b; font-size: .875rem; }
+  .order-delivery-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px; }
+  .order-delivery-address { min-width: 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fbfdff; }
+  .order-delivery-label { display: block; margin-bottom: 7px; color: #64748b; font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .order-delivery-label i { margin-right: 5px; color: #6366f1; }
+  .order-delivery-address p, .order-delivery-fact p { margin: 0; color: #1e293b; line-height: 1.55; overflow-wrap: anywhere; }
+  .order-delivery-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .order-delivery-fact { min-width: 0; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; }
+  .order-delivery-fact p { font-size: .95rem; }
+  .order-delivery-total { font-weight: 700; }
+  .order-tracking-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; }
+  .order-tracking-actions form { margin: 0; }
+  .order-tracking-actions .btn { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+  @media (max-width: 767.98px) { .order-delivery-grid { grid-template-columns: 1fr; gap: 14px; padding: 14px; } }
+  @media (max-width: 575px) {
+    .order-progress { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .progress-step { flex-direction: row; text-align: left; }
+    .progress-step:not(:last-child)::after { top: 32px; left: 15px; width: 2px; height: 16px; }
+    .order-delivery-heading { padding: 15px; }
+    .order-delivery-facts { grid-template-columns: 1fr; gap: 10px; }
+    .order-tracking-actions { flex-direction: column; align-items: stretch; gap: 10px; }
+    .order-tracking-actions form, .order-tracking-actions .btn { width: 100%; }
+  }
 </style>
 {% endblock %}

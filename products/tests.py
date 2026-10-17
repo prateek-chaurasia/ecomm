@@ -1,15 +1,22 @@
+from io import BytesIO
+import tempfile
+
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+
+from PIL import Image
 
 from accounts.models import Cart, CartItem
 from home.models import ReturnRefundPolicy
 from products.admin import ProductAdmin, ProductAdminForm, ReturnDetailsInlineForm, restock_selected
 from products.models import (
-    Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ReturnDetails, ProductReview,
+    Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ColorVariant,
+    ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
 
@@ -130,16 +137,21 @@ class ProductAdminPaginationTests(TestCase):
         response = self.client.get(url, {
             'per_page': '25',
             'q': 'Page size product',
-            'category__id__exact': Category.objects.get(
-                category_name='Pagination Products').pk,
+            'newest_product__exact': '0',
         })
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['cl'].list_per_page, 25)
         self.assertEqual(len(response.context['cl'].result_list), 25)
+        self.assertTrue(response.context['cl'].has_active_filters)
         self.assertContains(response, 'Records per page:')
+        self.assertContains(
+            response,
+            '<details id="changelist-filter" open>',
+            html=False,
+        )
         self.assertContains(response, 'name="q" value="Page size product"')
-        self.assertContains(response, 'name="category__id__exact"')
+        self.assertContains(response, 'name="newest_product__exact"')
 
         response = self.client.get(url, {'per_page': '50'})
         self.assertEqual(response.context['cl'].list_per_page, 50)
@@ -448,10 +460,50 @@ class ProductReturnDetailsTests(TestCase):
         self.assertContains(response, 'Return Details')
         self.assertContains(response, '14 days')
         self.assertContains(response, 'Refunds for this product are store credit only.')
+        self.assertContains(response, 'class="return-policy-cards"')
+        self.assertContains(response, 'class="product-return-badge">Returnable</span>')
+        self.assertContains(response, 'Guidelines:</strong> Item must be unused')
         self.assertNotContains(response, 'Generic return summary.')
         self.assertNotContains(response, 'Generic refund summary.')
         self.assertContains(response, '<details class="return-policy-section"', html=False)
         self.assertContains(response, 'Buy Now')
+
+    def test_product_page_shows_status_and_window_for_each_return_policy(self):
+        category = Category.objects.create(category_name='Accessories')
+        product = Product.objects.create(
+            product_name='Leather wallet',
+            category=category,
+            price=1200,
+            product_desription='Handmade leather wallet',
+        )
+        return_details = ReturnDetails.objects.create(
+            product=product,
+            return_window_days=10,
+        )
+
+        for policy, status, guidance in (
+            ('returnable', 'Returnable', 'Return requests can be submitted within 10 days'),
+            ('replaceable', 'Replaceable', 'Replacement requests can be submitted within 10 days'),
+            ('non_returnable', 'Non-returnable', 'This product is not eligible for return or replacement.'),
+        ):
+            with self.subTest(policy=policy):
+                return_details.return_policy = policy
+                return_details.save()
+
+                response = self.client.get(reverse('get_product', args=[product.slug]))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'>{status}</span>')
+                if policy == 'non_returnable':
+                    self.assertNotContains(response, guidance)
+                else:
+                    self.assertContains(response, guidance)
+                page = response.content.decode()
+                details_end = page.index(
+                    '</details>', page.index('<details class="return-policy-section"'))
+                badge_position = page.index(
+                    '<span class="product-return-badge', details_end)
+                self.assertLess(details_end, badge_position)
 
     def test_generic_policy_is_used_when_product_has_no_return_details(self):
         generic_policy = ReturnRefundPolicy.get_solo()
@@ -543,8 +595,37 @@ class ProductCartStateTests(TestCase):
 
         self.assertEqual(response.context['product_cart_item'], cart_item)
         self.assertContains(response, '3 items added')
+        self.assertContains(response, f'<a href="{reverse("cart")}" id="go-to-cart-link"')
+        self.assertContains(response, 'id="go-to-cart-link" class="btn btn-outline-primary"')
         self.assertContains(response, 'id="add-to-cart-btn" class="btn btn-primary" hidden')
         self.assertContains(response, 'id="add-to-cart-form" class="d-inline-block d-none"')
+
+    def test_buy_now_redirects_authenticated_customer_directly_to_checkout(self):
+        response = self.client.post(
+            reverse('add_to_cart', args=[self.product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('checkout'))
+        self.assertTrue(
+            CartItem.objects.filter(
+                cart__user=self.user, product=self.product, quantity=1,
+            ).exists())
+
+    def test_product_quantity_is_capped_at_available_inventory(self):
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'max="8"')
+        self.assertContains(response, 'In stock')
+        self.assertNotContains(response, '8 available')
+        self.assertContains(response, 'handleProductQuantityInput(quantityInput)')
+        self.assertContains(
+            response,
+            'Requested quantity exceeds available stock. Choose a lower quantity.',
+        )
+        self.assertContains(response, 'quantityInput.value = String(maximum)')
+        self.assertContains(response, 'if (targetQuantity > maximum)')
+        self.assertContains(response, 'id="go-to-cart-link" class="btn btn-outline-primary" hidden')
 
     def test_product_page_shows_add_button_when_not_in_cart(self):
         response = self.client.get(reverse('get_product', args=[self.product.slug]))
@@ -552,6 +633,61 @@ class ProductCartStateTests(TestCase):
         self.assertIsNone(response.context['product_cart_item'])
         self.assertContains(response, 'Add to cart')
         self.assertNotContains(response, 'added to cart')
+        self.assertContains(response, f'<a href="{reverse("cart")}" id="go-to-cart-link"')
+        self.assertContains(response, 'id="go-to-cart-link" class="btn btn-outline-primary" hidden')
+
+    def test_default_size_does_not_change_product_or_cart_price(self):
+        default_size = SizeVariant.objects.create(
+            size_name='Default Size',
+            price=450,
+        )
+        large_size = SizeVariant.objects.create(size_name='Large', price=100)
+        self.product.size_variant.add(default_size, large_size)
+
+        response = self.client.get(
+            reverse('get_product', args=[self.product.slug]),
+            {'size': default_size.size_name},
+        )
+
+        self.assertEqual(response.context['updated_price'], self.product.price)
+        self.assertContains(response, f'₹{self.product.price}.00')
+        self.assertEqual(
+            self.product.get_product_price_by_size(default_size.size_name),
+            self.product.price,
+        )
+        self.assertEqual(
+            self.product.get_product_price_by_size(large_size.size_name),
+            self.product.price + large_size.price,
+        )
+
+        cart = Cart.objects.create(user=self.user)
+        cart_item = CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            size_variant=default_size,
+            quantity=2,
+        )
+        self.assertEqual(cart_item.get_product_price(), self.product.price * 2)
+        cart_item.size_variant = large_size
+        self.assertEqual(
+            cart_item.get_product_price(),
+            self.product.price * 2 + large_size.price,
+        )
+
+    def test_adding_product_shows_go_to_cart_link_after_redirect(self):
+        response = self.client.post(
+            reverse('add_to_cart', args=[self.product.uid]),
+            {
+                'quantity': 2,
+                'next': reverse('get_product', args=[self.product.slug]),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request['PATH_INFO'], reverse('get_product', args=[self.product.slug]))
+        self.assertContains(response, '2 items added')
+        self.assertContains(response, 'Go to Cart')
 
     def test_product_page_hides_suitable_for_when_no_age_group_is_selected(self):
         response = self.client.get(reverse('get_product', args=[self.product.slug]))
@@ -721,6 +857,11 @@ class WishlistBackInStockTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ['wishlist@example.com'])
         self.assertIn(self.product.product_name, mail.outbox[0].subject)
         self.assertIn(self.product.slug, mail.outbox[0].body)
+        self.assertEqual(mail.outbox[0].alternatives[0][1], 'text/html')
+        self.assertIn(
+            'cid:bundleofgifts-brand-icon',
+            mail.outbox[0].alternatives[0][0],
+        )
         wishlist_item.refresh_from_db()
         self.assertTrue(wishlist_item.restock_notification_sent)
 
@@ -728,23 +869,157 @@ class WishlistBackInStockTests(TestCase):
         self.product.save(update_fields=['stock_quantity', 'updated_at'])
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_back_in_stock_email_embeds_a_product_thumbnail_when_available(self):
+        image_bytes = BytesIO()
+        Image.new('RGB', (240, 120), 'blue').save(image_bytes, format='PNG')
+        Wishlist.objects.create(
+            user=self.user,
+            product=self.product,
+            notify_on_restock=True,
+        )
+
+        with tempfile.TemporaryDirectory() as media_dir:
+            with override_settings(MEDIA_ROOT=media_dir):
+                ProductImage.objects.create(
+                    product=self.product,
+                    image_url=SimpleUploadedFile(
+                        'restock-product.png',
+                        image_bytes.getvalue(),
+                        content_type='image/png',
+                    ),
+                )
+                self.product.stock_quantity = 3
+                self.product.save(update_fields=['stock_quantity', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        html = email.alternatives[0][0]
+        self.assertIn('src="cid:product-', html)
+        image_attachment = next(
+            attachment for attachment in email.message().walk()
+            if attachment.get('Content-ID')
+            and attachment.get('Content-ID').startswith('<product-')
+        )
+        content_id = (
+            'product-'
+            + html.split('src="cid:product-', 1)[1].split('"', 1)[0]
+        )
+        self.assertEqual(image_attachment.get('Content-ID'), f'<{content_id}>')
+        self.assertEqual(image_attachment.get_content_type(), 'image/jpeg')
+
 
 class ProductReviewPageTests(TestCase):
-    def test_product_reviews_page_is_scoped_and_sortable(self):
+    def setUp(self):
+        self.media_dir = tempfile.TemporaryDirectory()
+        media_settings = override_settings(MEDIA_ROOT=self.media_dir.name)
+        media_settings.enable()
+        self.addCleanup(media_settings.disable)
+        self.addCleanup(self.media_dir.cleanup)
         category = Category.objects.create(category_name='Games')
-        product = Product.objects.create(
+        self.product = Product.objects.create(
             product_name='Strategy Game',
             category=category,
             price=1200,
             product_desription='A strategy game',
         )
+        self.user = User.objects.create_user(
+            username='reviewer', password='secret123')
+        self.client.force_login(self.user)
+
+    @staticmethod
+    def create_test_image(name):
+        image_data = BytesIO()
+        Image.new('RGB', (1, 1), color='red').save(image_data, format='PNG')
+        return SimpleUploadedFile(
+            name, image_data.getvalue(), content_type='image/png')
+
+    def test_review_can_be_posted_without_photos(self):
+        response = self.client.post(
+            reverse('get_product', args=[self.product.slug]),
+            {'stars': 5, 'content': 'Great game'},
+        )
+
+        self.assertRedirects(response, reverse('get_product', args=[self.product.slug]))
+        review = ProductReview.objects.get(product=self.product, user=self.user)
+        self.assertEqual(review.photos.count(), 0)
+        response = self.client.get(
+            reverse('get_product', args=[self.product.slug]))
+        self.assertNotContains(response, 'Share Your Experience')
+
+    def test_share_experience_is_shown_when_signed_in_user_has_not_reviewed(self):
+        response = self.client.get(
+            reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'Share Your Experience')
+        self.assertRegex(
+            response.content.decode(),
+            r'<details class="review-form-disclosure">\s*<summary',
+        )
+        self.assertRegex(
+            response.content.decode(),
+            r'class="review-form-fields"\s+hidden',
+        )
+        self.assertEqual(response.content.count(b'data-rating="'), 5)
+        self.assertContains(response, 'id="reviewPhotos"')
+        self.assertNotRegex(
+            response.content.decode(),
+            r'<input[^>]*id="reviewPhotos"[^>]*required',
+        )
+
+    def test_review_can_be_posted_with_multiple_photos(self):
+        response = self.client.post(
+            reverse('get_product', args=[self.product.slug]),
+            {
+                'stars': 5,
+                'content': 'Great game',
+                'photos': [
+                    self.create_test_image('game-one.png'),
+                    self.create_test_image('game-two.png'),
+                ],
+            },
+        )
+
+        self.assertRedirects(response, reverse('get_product', args=[self.product.slug]))
+        review = ProductReview.objects.get(product=self.product, user=self.user)
+        self.assertEqual(review.photos.count(), 2)
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+        self.assertContains(response, 'class="product-review-list"')
+        self.assertContains(response, 'class="product-review-item"')
+        self.assertContains(response, 'class="product-review-rating" aria-label="5 out of 5 stars"')
+        self.assertContains(response, 'reviewer')
+        self.assertContains(response, 'aria-label="Review photos"')
+        self.assertContains(response, 'game-one')
+        response = self.client.get(
+            reverse('product_reviews_for_product', args=[self.product.slug]))
+        self.assertContains(response, 'aria-label="Review photos"')
+
+    def test_review_rejects_more_than_five_photos(self):
+        response = self.client.post(
+            reverse('get_product', args=[self.product.slug]),
+            {
+                'stars': 5,
+                'content': 'Great game',
+                'photos': [
+                    self.create_test_image(f'game-{index}.png')
+                    for index in range(6)
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'You can upload up to five review photos.')
+        self.assertContains(response, '<details class="review-form-disclosure" open>')
+        self.assertFalse(
+            ProductReview.objects.filter(product=self.product, user=self.user).exists())
+
+    def test_product_reviews_page_is_scoped_and_sortable(self):
         low_reviewer = User.objects.create_user(username='low-reviewer')
         high_reviewer = User.objects.create_user(username='high-reviewer')
-        ProductReview.objects.create(product=product, user=low_reviewer, stars=2, content='Not great')
-        ProductReview.objects.create(product=product, user=high_reviewer, stars=5, content='Excellent')
+        ProductReview.objects.create(product=self.product, user=low_reviewer, stars=2, content='Not great')
+        ProductReview.objects.create(product=self.product, user=high_reviewer, stars=5, content='Excellent')
 
         response = self.client.post(
-            reverse('product_reviews_for_product', args=[product.slug]),
+            reverse('product_reviews_for_product', args=[self.product.slug]),
             {'sort': 'rating_desc'},
         )
 
@@ -758,6 +1033,159 @@ class ProductReviewPageTests(TestCase):
 
 
 class ProductQuantityTests(TestCase):
+    def test_add_to_cart_merges_matching_product_size_and_color(self):
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden Puzzle',
+            category=category,
+            price=600,
+            product_desription='A wooden puzzle',
+            stock_quantity=5,
+            gift_wrap_available=True,
+            gift_wrap_price=30,
+        )
+        size = SizeVariant.objects.create(size_name='Medium')
+        product.size_variant.add(size)
+
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'size': 'Medium', 'quantity': 1, 'gift_wrap': '0'},
+        )
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'size': 'Medium', 'quantity': 1, 'gift_wrap': '1'},
+        )
+
+        cart_items = CartItem.objects.filter(
+            cart__session_key=self.client.session.session_key,
+            product=product,
+            size_variant=size,
+            color_variant=None,
+        )
+        self.assertEqual(cart_items.count(), 1)
+        self.assertEqual(cart_items.get().quantity, 2)
+        self.assertTrue(cart_items.get().gift_wrap)
+
+    def test_same_product_can_have_distinct_size_and_color_combinations(self):
+        user = User.objects.create_user(username='variant-customer')
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden Puzzle',
+            category=category,
+            price=600,
+            product_desription='A wooden puzzle',
+            stock_quantity=5,
+        )
+        cart = Cart.objects.create(user=user)
+        small = SizeVariant.objects.create(size_name='Small')
+        large = SizeVariant.objects.create(size_name='Large')
+        red = ColorVariant.objects.create(color_name='Red')
+        blue = ColorVariant.objects.create(color_name='Blue')
+
+        CartItem.objects.create(
+            cart=cart, product=product, size_variant=small, color_variant=red)
+        CartItem.objects.create(
+            cart=cart, product=product, size_variant=large, color_variant=red)
+        CartItem.objects.create(
+            cart=cart, product=product, size_variant=small, color_variant=blue)
+
+        self.assertEqual(cart.cart_items.count(), 3)
+        self.client.force_login(user)
+        response = self.client.get(reverse('cart'))
+        self.assertContains(response, 'Color: Red', count=2)
+        self.assertContains(response, 'Color: Blue', count=1)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CartItem.objects.create(
+                    cart=cart,
+                    product=product,
+                    size_variant=small,
+                    color_variant=red,
+                    gift_wrap=True,
+                )
+
+    def test_buy_now_redirects_to_guest_checkout_without_adding_existing_item_again(self):
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden Puzzle',
+            category=category,
+            price=600,
+            product_desription='A wooden puzzle',
+            stock_quantity=5,
+        )
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1},
+        )
+
+        response = self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('guest-checkout'))
+        cart_items = CartItem.objects.filter(
+            cart__session_key=self.client.session.session_key,
+            product=product,
+        )
+        self.assertEqual(cart_items.count(), 1)
+        self.assertEqual(cart_items.get().quantity, 1)
+
+    def test_buy_now_updates_gift_wrap_for_existing_cart_item(self):
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden Puzzle',
+            category=category,
+            price=600,
+            product_desription='A wooden puzzle',
+            stock_quantity=5,
+            gift_wrap_available=True,
+            gift_wrap_price=30,
+        )
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'gift_wrap': '0'},
+        )
+
+        response = self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'gift_wrap': '1', 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('guest-checkout'))
+        cart_item = CartItem.objects.get(
+            cart__session_key=self.client.session.session_key,
+            product=product,
+        )
+        self.assertEqual(cart_item.quantity, 1)
+        self.assertTrue(cart_item.gift_wrap)
+        self.assertEqual(cart_item.get_product_price(), 630)
+        cart_response = self.client.get(reverse('cart'))
+        self.assertContains(cart_response, 'Gift wrapped (+₹30 per item)')
+        self.assertContains(cart_response, '₹630')
+
+    def test_buy_now_adds_product_when_it_is_not_already_in_cart(self):
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Wooden Puzzle',
+            category=category,
+            price=600,
+            product_desription='A wooden puzzle',
+            stock_quantity=5,
+        )
+
+        response = self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 2, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('guest-checkout'))
+        cart_item = CartItem.objects.get(
+            cart__session_key=self.client.session.session_key,
+            product=product,
+        )
+        self.assertEqual(cart_item.quantity, 2)
+
     def test_add_to_cart_respects_requested_quantity_and_stock_limit(self):
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(

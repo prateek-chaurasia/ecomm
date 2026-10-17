@@ -1,7 +1,6 @@
 
-from datetime import timedelta
-
 from django.db import models
+from django.core.validators import MinValueValidator
 from django.contrib.auth.models import User
 from django.utils import timezone
 from base.models import BaseModel
@@ -9,9 +8,10 @@ from products.models import (
     Product, ColorVariant, SizeVariant, Coupon, BundleOffer,
     BundlePackagingOption,
 )
-from home.models import ReturnRefundPolicy, ShippingAddress
+from home.models import ShippingAddress
 from django.conf import settings
 import os
+import uuid
 # Create your models here.
 
 
@@ -21,6 +21,11 @@ class Profile(BaseModel):
     is_email_verified = models.BooleanField(default=False)
     email_token = models.CharField(max_length=100, null=True, blank=True)
     profile_image = models.URLField(max_length=500, blank=True, null=True)
+    profile_image_file = models.ImageField(
+        upload_to='profile/%Y/%m/%d/',
+        blank=True,
+        null=True,
+    )
     bio = models.TextField(null=True, blank=True)
     shipping_address = models.ForeignKey(
         ShippingAddress, on_delete=models.CASCADE, related_name="shipping_address", null=True, blank=True)
@@ -80,6 +85,25 @@ class CartItem(BaseModel):
     quantity = models.IntegerField(default=1)
     gift_wrap = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                models.F('cart'),
+                models.F('product'),
+                models.functions.Coalesce(
+                    'size_variant',
+                    models.Value(
+                        uuid.UUID(int=0), output_field=models.UUIDField()),
+                ),
+                models.functions.Coalesce(
+                    'color_variant',
+                    models.Value(
+                        uuid.UUID(int=0), output_field=models.UUIDField()),
+                ),
+                name='unique_cart_product_size_color',
+            ),
+        ]
+
     def get_product_price(self):
         price = self.product.price * self.quantity
 
@@ -87,7 +111,7 @@ class CartItem(BaseModel):
             price += self.color_variant.price
 
         if self.size_variant:
-            price += self.size_variant.price
+            price += self.size_variant.price_adjustment
 
         if self.gift_wrap and self.product.gift_wrap_available:
             price += self.product.gift_wrap_price * self.quantity
@@ -175,7 +199,9 @@ class Order(BaseModel):
     guest_name = models.CharField(max_length=200, blank=True)
     guest_email = models.EmailField(blank=True)
     order_date = models.DateTimeField(auto_now_add=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
     payment_status = models.CharField(max_length=100)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True)
     shipping_address = models.TextField(blank=True, null=True)
     payment_mode = models.CharField(max_length=100)
     order_total_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -195,12 +221,16 @@ class Order(BaseModel):
         owner = self.user.username if self.user else 'Guest'
         return f"Order {self.order_id} by {owner}"
 
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if self.status == self.Status.DELIVERED and not self.delivered_at:
+            self.delivered_at = timezone.now()
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'delivered_at'}
+        super().save(*args, **kwargs)
+
     def get_order_total_price(self):
         return self.order_total_price
-
-    @property
-    def cancellation_window_hours(self):
-        return ReturnRefundPolicy.get_solo().cancellation_window_hours
 
     @property
     def can_be_cancelled(self):
@@ -209,10 +239,7 @@ class Order(BaseModel):
             self.Status.ACCEPTED,
             self.Status.PACKING,
         }
-        return (
-            self.status in cancellable_statuses and
-            timezone.now() <= self.order_date + timedelta(hours=self.cancellation_window_hours)
-        )
+        return self.status in cancellable_statuses
 
     @property
     def status_index(self):
@@ -252,6 +279,136 @@ class OrderItem(BaseModel):
             gift_wrap=self.gift_wrap,
         )
         return cart_item.get_product_price()
+
+
+class ReturnRequest(BaseModel):
+    class RequestType(models.TextChoices):
+        RETURN = 'return', 'Return and refund'
+        REPLACEMENT = 'replacement', 'Replacement'
+
+    class RefundMethod(models.TextChoices):
+        UPI = 'upi', 'UPI ID'
+        BANK_ACCOUNT = 'bank_account', 'Bank account'
+
+    class Status(models.TextChoices):
+        REQUESTED = 'requested', 'Requested'
+        APPROVED = 'approved', 'Approved'
+        SHIPPED = 'shipped', 'Shipped by customer'
+        RECEIVED = 'received', 'Received - awaiting inspection'
+        REFUND_PENDING = 'refund_pending', 'Refund initiated'
+        REFUND_FAILED = 'refund_failed', 'Refund failed'
+        REPLACEMENT_PREPARING = 'replacement_preparing', 'Replacement being prepared'
+        REPLACEMENT_DISPATCHED = 'replacement_dispatched', 'Replacement dispatched'
+        REPLACEMENT_COMPLETED = 'replacement_completed', 'Replacement completed'
+        REJECTED = 'rejected', 'Rejected'
+        REFUNDED = 'refunded', 'Refund processed'
+
+    class ItemCondition(models.TextChoices):
+        NOT_REVIEWED = 'not_reviewed', 'Not reviewed'
+        GOOD = 'good', 'Good'
+        MINOR_DAMAGE = 'minor_damage', 'Minor damage'
+        DAMAGED = 'damaged', 'Damaged'
+
+    order = models.OneToOneField(
+        Order, on_delete=models.CASCADE, related_name='return_request')
+    request_type = models.CharField(
+        max_length=20, choices=RequestType.choices, default=RequestType.RETURN)
+    replacement_reason = models.ForeignKey(
+        'accounts.ReplacementReason',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='requests',
+    )
+    status = models.CharField(
+        max_length=30, choices=Status.choices, default=Status.REQUESTED)
+    reason = models.TextField()
+    admin_note = models.TextField(blank=True)
+    courier_partner_name = models.CharField(max_length=120, blank=True)
+    tracking_number = models.CharField(max_length=120, blank=True)
+    refund_method = models.CharField(
+        max_length=20, choices=RefundMethod.choices, blank=True)
+    refund_upi_id = models.CharField(max_length=120, blank=True)
+    refund_account_holder_name = models.CharField(max_length=150, blank=True)
+    refund_account_number = models.CharField(max_length=34, blank=True)
+    refund_ifsc_code = models.CharField(max_length=11, blank=True)
+    replacement_tracking_number = models.CharField(max_length=120, blank=True)
+    shipped_at = models.DateTimeField(null=True, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    replacement_dispatched_at = models.DateTimeField(null=True, blank=True)
+    item_condition = models.CharField(
+        max_length=20,
+        choices=ItemCondition.choices,
+        default=ItemCondition.NOT_REVIEWED,
+    )
+    deduction_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+    )
+    deduction_reason = models.TextField(blank=True)
+    refund_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True)
+    razorpay_refund_id = models.CharField(max_length=100, blank=True)
+    refund_reference = models.CharField(max_length=120, blank=True)
+    refunded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Return for {self.order.order_id}'
+
+    @property
+    def calculated_refund_amount(self):
+        return max(self.order.grand_total - self.deduction_amount, 0)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if (
+            self.request_type == self.RequestType.REPLACEMENT
+            and not self.replacement_reason_id
+        ):
+            raise ValidationError({
+                'replacement_reason': 'Choose a reason for the replacement.',
+            })
+        if (
+            self.order_id
+            and self.deduction_amount > self.order.grand_total
+        ):
+            raise ValidationError({
+                'deduction_amount': 'The deduction cannot exceed the order total.',
+            })
+        if self.deduction_amount and not self.deduction_reason.strip():
+            raise ValidationError({
+                'deduction_reason': (
+                    'Enter a reason for the condition deduction.'
+                ),
+            })
+
+
+class ReplacementReason(BaseModel):
+    name = models.CharField(max_length=120, unique=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class ReturnShipmentImage(BaseModel):
+    return_request = models.ForeignKey(
+        ReturnRequest, on_delete=models.CASCADE, related_name='shipment_images')
+    image = models.ImageField(upload_to='returns/%Y/%m/%d/')
+
+
+class ReturnRequestImage(BaseModel):
+    return_request = models.ForeignKey(
+        ReturnRequest, on_delete=models.CASCADE, related_name='request_images')
+    image = models.ImageField(upload_to='returns/request-evidence/%Y/%m/%d/')
 
 
 class BundleOrderItem(BaseModel):

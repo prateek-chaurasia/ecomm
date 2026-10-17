@@ -1,0 +1,989 @@
+{% extends 'base/base.html' %}
+{% block title %}Return or replacement {{ order.order_id }}{% endblock title %}
+{% block start %}
+<style>
+  .return-page {
+    --return-ink: #18324b;
+    --return-muted: #64748b;
+    --return-line: #e2e8f0;
+    --return-accent: #167d72;
+    --return-soft: #f3f8f8;
+    padding: 2.5rem 0 4rem;
+    background: #f6f8fb;
+  }
+
+  .return-page .container {
+    max-width: 1120px;
+  }
+
+  .return-page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .return-page-header h1 {
+    margin: 0.25rem 0;
+    color: var(--return-ink);
+    font-size: clamp(1.65rem, 3vw, 2.25rem);
+    font-weight: 750;
+    letter-spacing: -0.035em;
+  }
+
+  .return-eyebrow {
+    color: var(--return-accent);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .return-order-reference {
+    color: var(--return-muted);
+    margin: 0;
+  }
+
+  .return-order-reference strong {
+    color: var(--return-ink);
+    font-weight: 700;
+  }
+
+  .return-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+    padding: 0.65rem 0.9rem;
+    border: 1px solid var(--return-line);
+    border-radius: 0.65rem;
+    background: #fff;
+    color: var(--return-ink);
+    font-weight: 650;
+    text-decoration: none;
+  }
+
+  .return-back-link:hover,
+  .return-back-link:focus {
+    border-color: #b8d8d4;
+    background: var(--return-soft);
+    color: var(--return-accent);
+    text-decoration: none;
+  }
+
+  .return-card {
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    border: 1px solid #e7edf3;
+    border-radius: 0.9rem;
+    background: #fff;
+    box-shadow: 0 0.35rem 1.2rem rgba(24, 50, 75, 0.055);
+  }
+
+  .return-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #edf1f5;
+    background: linear-gradient(110deg, #fff, #f8fbfc);
+  }
+
+  .return-card-header h2,
+  .return-card-header h3 {
+    margin: 0;
+    color: var(--return-ink);
+    font-size: 1.05rem;
+    font-weight: 750;
+  }
+
+  .return-card-header p {
+    margin: 0.25rem 0 0;
+    color: var(--return-muted);
+    font-size: 0.88rem;
+  }
+
+  .return-card-body {
+    padding: 1.25rem;
+  }
+
+  .return-item-table {
+    min-width: 620px;
+    margin: 0;
+  }
+
+  .return-item-table thead th {
+    padding: 0.75rem 1rem;
+    border: 0;
+    background: #f5f8fa;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .return-item-table tbody td {
+    padding: 1rem;
+    border-top: 1px solid #edf1f5;
+    color: #334155;
+    vertical-align: middle;
+  }
+
+  .return-item-name {
+    display: block;
+    color: var(--return-ink);
+    font-weight: 700;
+  }
+
+  .return-item-meta {
+    display: block;
+    margin-top: 0.2rem;
+    color: var(--return-muted);
+    font-size: 0.82rem;
+  }
+
+  .return-item-amount {
+    color: var(--return-ink);
+    font-weight: 750;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .return-status-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e8f1f0;
+    background: var(--return-soft);
+  }
+
+  .return-status-icon {
+    display: grid;
+    width: 2.6rem;
+    height: 2.6rem;
+    flex: 0 0 2.6rem;
+    place-items: center;
+    border-radius: 50%;
+    background: #d9efec;
+    color: var(--return-accent);
+    font-size: 1.05rem;
+  }
+
+  .return-status-label {
+    display: block;
+    color: var(--return-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .return-status-value {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--return-ink);
+    font-size: 1.05rem;
+    font-weight: 750;
+  }
+
+  .return-status-timeline {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.6rem;
+    padding: 1.25rem;
+    margin: 0;
+    list-style: none;
+  }
+
+  .return-timeline-heading {
+    padding: 1.1rem 1.25rem 0;
+    margin: 0;
+    color: var(--return-ink);
+    font-size: 0.95rem;
+    font-weight: 750;
+  }
+
+  .return-status-step {
+    min-width: 0;
+    padding: 0.8rem 0.65rem;
+    border: 1px solid #e8edf2;
+    border-radius: 0.7rem;
+    background: #fbfcfd;
+    color: #7b8794;
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .return-status-step.complete {
+    border-color: #c8e5df;
+    background: #f1faf7;
+    color: #287668;
+  }
+
+  .return-status-step.current {
+    border-color: #8ec9be;
+    background: #eaf7f4;
+    color: #145f56;
+    box-shadow: 0 0 0 2px rgba(22, 125, 114, 0.08);
+    font-weight: 750;
+  }
+
+  .return-status-marker {
+    display: grid;
+    width: 1.7rem;
+    height: 1.7rem;
+    place-items: center;
+    margin-bottom: 0.55rem;
+    border: 1px solid #d5dde5;
+    border-radius: 50%;
+    background: #fff;
+    color: inherit;
+    font-size: 0.76rem;
+    font-weight: 750;
+  }
+
+  .return-status-step.complete .return-status-marker,
+  .return-status-step.current .return-status-marker {
+    border-color: currentColor;
+  }
+
+  .return-status-step time {
+    display: block;
+    margin-top: 0.35rem;
+    color: #718096;
+    font-size: 0.72rem;
+    font-weight: 400;
+  }
+
+  .return-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin: 0;
+  }
+
+  .return-detail {
+    padding: 0.9rem 1rem;
+    border: 1px solid #edf1f5;
+    border-radius: 0.65rem;
+    background: #fbfcfd;
+  }
+
+  .return-detail dt {
+    margin-bottom: 0.3rem;
+    color: var(--return-muted);
+    font-size: 0.76rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .return-detail dd {
+    margin: 0;
+    color: var(--return-ink);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .return-form-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(240px, 0.8fr);
+    gap: 1.25rem;
+    align-items: start;
+  }
+
+  .return-form-card {
+    padding: 1.25rem;
+  }
+
+  .return-form-card > h2 {
+    margin: 0 0 0.35rem;
+    color: var(--return-ink);
+    font-size: 1.2rem;
+    font-weight: 750;
+  }
+
+  .return-form-intro {
+    margin: 0 0 1.25rem;
+    color: var(--return-muted);
+  }
+
+  .return-form-section {
+    padding: 1rem 0;
+    border-top: 1px solid #edf1f5;
+  }
+
+  .return-form-section:first-of-type {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .return-form-section legend,
+  .return-form-section-title {
+    display: block;
+    width: 100%;
+    margin-bottom: 0.75rem;
+    color: var(--return-ink);
+    font-size: 0.95rem;
+    font-weight: 750;
+  }
+
+  .return-choice-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .return-choice {
+    position: relative;
+    min-height: 100%;
+    padding: 1rem 1rem 1rem 2.7rem;
+    border: 1px solid var(--return-line);
+    border-radius: 0.7rem;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .return-choice:has(input:checked) {
+    border-color: #70b5aa;
+    background: #f3faf8;
+    box-shadow: 0 0 0 2px rgba(22, 125, 114, 0.08);
+  }
+
+  .return-choice input {
+    position: absolute;
+    top: 1.15rem;
+    left: 1rem;
+    accent-color: var(--return-accent);
+  }
+
+  .return-choice-label {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--return-ink);
+    font-weight: 750;
+  }
+
+  .return-choice-description {
+    display: block;
+    color: var(--return-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .return-form-card .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .return-form-card label {
+    margin-bottom: 0.4rem;
+    color: #334155;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .return-form-card .form-control {
+    min-height: 44px;
+    border-color: #d7e0e8;
+    border-radius: 0.55rem;
+  }
+
+  .return-form-card textarea.form-control {
+    min-height: 110px;
+  }
+
+  .return-form-card .form-control:focus {
+    border-color: #70b5aa;
+    box-shadow: 0 0 0 0.18rem rgba(22, 125, 114, 0.12);
+  }
+
+  .return-upload-box {
+    padding: 1rem;
+    border: 1px dashed #b8c9d5;
+    border-radius: 0.7rem;
+    background: #f9fbfc;
+  }
+
+  .return-guidance-card {
+    padding: 1.1rem;
+  }
+
+  .return-guidance-card h2 {
+    margin: 0 0 0.65rem;
+    color: var(--return-ink);
+    font-size: 1rem;
+    font-weight: 750;
+  }
+
+  .return-guidance-card p,
+  .return-guidance-card li {
+    color: #526477;
+    font-size: 0.88rem;
+    line-height: 1.55;
+  }
+
+  .return-guidance-card address {
+    padding: 0.85rem;
+    margin: 0.75rem 0;
+    border: 1px solid #d8e9e6;
+    border-radius: 0.6rem;
+    background: #f4faf9;
+    color: var(--return-ink);
+    font-weight: 650;
+    line-height: 1.5;
+  }
+
+  .return-guidance-card ul {
+    padding-left: 1.15rem;
+    margin: 0;
+  }
+
+  .return-submit {
+    min-height: 46px;
+    padding: 0.7rem 1.2rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: var(--return-accent);
+    box-shadow: 0 0.3rem 0.75rem rgba(22, 125, 114, 0.2);
+    font-weight: 750;
+  }
+
+  .return-submit:hover,
+  .return-submit:focus {
+    background: #116b62;
+  }
+
+  .return-notice {
+    padding: 0.9rem 1rem;
+    border: 1px solid #dbe9e7;
+    border-radius: 0.65rem;
+    background: #f3f9f8;
+    color: #385b59;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  .return-photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .return-photo {
+    display: grid;
+    aspect-ratio: 1;
+    place-items: center;
+    border: 1px solid var(--return-line);
+    border-radius: 0.65rem;
+    background: #f8fafc;
+  }
+
+  .return-photo img {
+    width: 100%;
+    height: 100%;
+    padding: 0.35rem;
+    object-fit: contain;
+  }
+
+  .return-page [hidden] {
+    display: none !important;
+  }
+
+  @media (max-width: 767.98px) {
+    .return-page {
+      padding: 1.5rem 0 3rem;
+    }
+
+    .return-page-header {
+      align-items: flex-start;
+    }
+
+    .return-back-link {
+      padding: 0.55rem 0.65rem;
+      font-size: 0.82rem;
+    }
+
+    .return-status-timeline {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      padding: 1rem;
+    }
+
+    .return-form-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .return-page-header {
+      flex-direction: column;
+    }
+
+    .return-card-header,
+    .return-card-body,
+    .return-form-card {
+      padding: 1rem;
+    }
+
+    .return-status-timeline {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem;
+    }
+
+    .return-detail-grid,
+    .return-choice-list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<section class="return-page">
+  <div class="container">
+    {% include 'base/alert.html' %}
+    <header class="return-page-header">
+      <div>
+        <span class="return-eyebrow">Order support</span>
+        <h1>Returns &amp; replacements</h1>
+        <p class="return-order-reference">Order <strong>{{ order.order_id }}</strong> · Placed {{ order.order_date|date:"M j, Y" }}</p>
+      </div>
+      {% if order.user %}
+      <a href="{% url 'order_details' order.order_id %}" class="return-back-link">
+        <i class="fas fa-arrow-left" aria-hidden="true"></i> Back to order
+      </a>
+      {% else %}
+      <a href="{% url 'track_order' order.order_id access_token %}" class="return-back-link">
+        <i class="fas fa-arrow-left" aria-hidden="true"></i> Back to order
+      </a>
+      {% endif %}
+    </header>
+
+    <section class="return-card" aria-labelledby="return-items-heading">
+      <div class="return-card-header">
+        <div>
+          <h2 id="return-items-heading">Items in this order</h2>
+          <p>Review the items connected to your return or replacement request.</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table return-item-table">
+          <thead>
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col">Options</th>
+              <th scope="col" class="text-center">Qty</th>
+              <th scope="col" class="text-right">Line total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in order_items %}
+            <tr>
+              <td>
+                <span class="return-item-name">{{ item.product.product_name|default:"Product no longer available" }}</span>
+                {% if item.gift_wrap %}<span class="return-item-meta"><i class="fas fa-gift mr-1" aria-hidden="true"></i>Gift wrapped</span>{% endif %}
+              </td>
+              <td>
+                <span class="return-item-meta">
+                  {% if item.size_variant %}Size: {{ item.size_variant.size_name }}{% endif %}
+                  {% if item.size_variant and item.color_variant %}<br>{% endif %}
+                  {% if item.color_variant %}Color: {{ item.color_variant.color_name }}{% endif %}
+                  {% if not item.size_variant and not item.color_variant %}Standard item{% endif %}
+                </span>
+              </td>
+              <td class="text-center">{{ item.quantity }}</td>
+              <td class="return-item-amount">₹{{ item.product_price|default:"0.00" }}</td>
+            </tr>
+            {% endfor %}
+            {% for item in bundle_items %}
+            <tr>
+              <td>
+                <span class="return-item-name">{{ item.title }}</span>
+                <span class="return-item-meta">
+                  {% for selected in item.selected_products.all %}{{ selected.product.product_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                  {% if item.packaging_name %}<br><i class="fas fa-box-open mr-1" aria-hidden="true"></i>{{ item.packaging_name }}{% endif %}
+                </span>
+              </td>
+              <td><span class="return-item-meta">Gift bundle</span></td>
+              <td class="text-center">{{ item.quantity }}</td>
+              <td class="return-item-amount">₹{{ item.get_total_price }}</td>
+            </tr>
+            {% endfor %}
+            {% if not order_items and not bundle_items %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">No order items are available to display.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if return_request %}
+    <section class="return-card" aria-labelledby="return-status-heading">
+      <div class="return-status-banner">
+        <span class="return-status-icon" aria-hidden="true"><i class="fas fa-sync-alt"></i></span>
+        <div>
+          <span class="return-status-label" id="return-status-heading">Current request status</span>
+          <strong class="return-status-value">{{ return_request.get_status_display }}</strong>
+        </div>
+      </div>
+      <h2 class="return-timeline-heading">Request status cycle</h2>
+      <ol class="return-status-timeline" aria-label="Return request progress">
+        {% for step in return_timeline %}
+        <li class="return-status-step {{ step.state }}">
+          <span class="return-status-marker" aria-hidden="true">
+            {% if step.state == 'complete' %}<i class="fas fa-check"></i>{% elif step.state == 'current' %}<i class="fas fa-circle"></i>{% else %}{{ forloop.counter }}{% endif %}
+          </span>
+          <span>
+            {{ step.label }}
+            {% if step.timestamp %}
+            <time datetime="{{ step.timestamp|date:'c' }}">{{ step.timestamp|date:'M j, Y, P' }}</time>
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section class="return-card" aria-labelledby="return-details-heading">
+      <div class="return-card-header">
+        <div>
+          <h2 id="return-details-heading">Request details</h2>
+          <p>Information submitted for this return or replacement.</p>
+        </div>
+      </div>
+      <div class="return-card-body">
+        <dl class="return-detail-grid">
+          <div class="return-detail">
+            <dt>Request type</dt>
+            <dd>{{ return_request.get_request_type_display }}</dd>
+          </div>
+          <div class="return-detail">
+            <dt>Reason</dt>
+            <dd>{{ return_request.reason }}</dd>
+          </div>
+          {% if return_request.admin_note %}
+          <div class="return-detail">
+            <dt>Update from support</dt>
+            <dd>{{ return_request.admin_note }}</dd>
+          </div>
+          {% endif %}
+          {% if return_request.courier_partner_name %}
+          <div class="return-detail">
+            <dt>Courier partner</dt>
+            <dd>{{ return_request.courier_partner_name }}</dd>
+          </div>
+          {% endif %}
+          {% if return_request.tracking_number %}
+          <div class="return-detail">
+            <dt>Return tracking number</dt>
+            <dd>{{ return_request.tracking_number }}</dd>
+          </div>
+          {% endif %}
+          {% if return_request.replacement_tracking_number %}
+          <div class="return-detail">
+            <dt>Replacement tracking</dt>
+            <dd>{{ return_request.replacement_tracking_number }}</dd>
+          </div>
+          {% endif %}
+          {% if return_request.refund_amount is not None %}
+          <div class="return-detail">
+            <dt>Refund amount</dt>
+            <dd>₹{{ return_request.refund_amount }}</dd>
+          </div>
+          {% endif %}
+          {% if return_request.deduction_amount %}
+          <div class="return-detail">
+            <dt>Condition deduction</dt>
+            <dd>₹{{ return_request.deduction_amount }}{% if return_request.deduction_reason %} — {{ return_request.deduction_reason }}{% endif %}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+    </section>
+
+    {% if return_request.request_type == 'return' and return_request.status == 'approved' %}
+    <div class="return-form-layout">
+      <section class="return-card return-guidance-card" aria-labelledby="return-shipping-heading">
+        <h2 id="return-shipping-heading"><i class="fas fa-box-open mr-2" aria-hidden="true"></i>Ship your return</h2>
+        <p>Ship the item to our office at your own cost. Once the item is received and inspected, we’ll continue processing your refund.</p>
+        {% if return_shipping_address %}
+        <address>{{ return_shipping_address|linebreaksbr }}</address>
+        {% else %}
+        <div class="alert alert-warning mb-0">The return shipping address is not configured yet. Please contact support before shipping.</div>
+        {% endif %}
+        <ul class="mt-3">
+          <li>Enter the courier partner and tracking number.</li>
+          <li>Upload 1–5 clear photos of the parcel and item condition.</li>
+          <li>Each image must be 5 MB or smaller.</li>
+        </ul>
+      </section>
+      {% if return_shipping_address %}
+      <section class="return-card return-form-card" aria-labelledby="shipment-details-heading">
+        <h2 id="shipment-details-heading">Shipment details</h2>
+        <p class="return-form-intro">Add the details so our team can track your return.</p>
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="shipment">
+          <div class="form-group">
+            <label for="courier_partner_name">Courier partner</label>
+            <input class="form-control" id="courier_partner_name" name="courier_partner_name" maxlength="120" required>
+          </div>
+          <div class="form-group">
+            <label for="tracking_number">Tracking number</label>
+            <input class="form-control" id="tracking_number" name="tracking_number" maxlength="120" required>
+          </div>
+          <div class="form-group">
+            <label for="shipment_images">Shipment photos</label>
+            <div class="return-upload-box">
+              <input class="form-control-file" id="shipment_images" name="shipment_images" type="file" accept="image/*" multiple required>
+              <small class="form-text text-muted">Choose 1–5 photos, up to 5 MB each.</small>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block return-submit" type="submit">Submit shipment details</button>
+        </form>
+      </section>
+      {% endif %}
+    </div>
+    {% elif return_request.request_type == 'replacement' and return_request.status == 'approved' %}
+    <div class="return-notice mb-3"><i class="fas fa-check-circle mr-2" aria-hidden="true"></i>Your replacement request is approved. Our team will prepare the same item; you do not need to ship anything back unless we contact you.</div>
+    {% elif return_request.status == 'replacement_preparing' %}
+    <div class="return-notice mb-3"><i class="fas fa-box mr-2" aria-hidden="true"></i>Your replacement item is being prepared.</div>
+    {% elif return_request.status == 'replacement_dispatched' %}
+    <div class="return-notice mb-3"><i class="fas fa-truck mr-2" aria-hidden="true"></i>Your replacement item has been dispatched{% if return_request.replacement_tracking_number %} with tracking number <strong>{{ return_request.replacement_tracking_number }}</strong>{% endif %}.</div>
+    {% elif return_request.status == 'replacement_completed' %}
+    <div class="return-notice mb-3"><i class="fas fa-check-circle mr-2" aria-hidden="true"></i>Your replacement has been completed.</div>
+    {% elif return_request.status == 'received' %}
+    <div class="return-notice mb-3"><i class="fas fa-clipboard-check mr-2" aria-hidden="true"></i>Your return has arrived and is being reviewed. Any condition-based deduction will be shown before the refund is finalized.</div>
+    {% elif return_request.status == 'refund_pending' %}
+    <div class="return-notice mb-3"><i class="fas fa-hourglass-half mr-2" aria-hidden="true"></i>Your refund has been initiated. Processing time depends on your payment provider.</div>
+    {% elif return_request.status == 'refund_failed' %}
+    <div class="alert alert-warning"><i class="fas fa-exclamation-circle mr-2" aria-hidden="true"></i>The payment provider could not complete the refund. Our team will review it and contact you.</div>
+    {% endif %}
+
+    {% if return_request.shipment_images.exists %}
+    <section class="return-card" aria-labelledby="shipment-photos-heading">
+      <div class="return-card-header">
+        <div>
+          <h2 id="shipment-photos-heading">Submitted shipment photos</h2>
+          <p>Photos of your return parcel and item condition.</p>
+        </div>
+      </div>
+      <div class="return-card-body return-photo-grid">
+        {% for photo in return_request.shipment_images.all %}
+        <a class="return-photo" href="{{ photo.image.url }}" target="_blank" rel="noopener">
+          <img src="{{ photo.image.url }}" alt="Return shipment photo">
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+    {% if return_request.request_images.exists %}
+    <section class="return-card" aria-labelledby="request-photos-heading">
+      <div class="return-card-header">
+        <div>
+          <h2 id="request-photos-heading">Photos submitted with your request</h2>
+          <p>Product photos included for review.</p>
+        </div>
+      </div>
+      <div class="return-card-body return-photo-grid">
+        {% for photo in return_request.request_images.all %}
+        <a class="return-photo" href="{{ photo.image.url }}" target="_blank" rel="noopener">
+          <img src="{{ photo.image.url }}" alt="Item condition evidence">
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% else %}
+    <div class="return-form-layout">
+      <section class="return-card return-form-card" aria-labelledby="request-form-heading">
+        <h2 id="request-form-heading">Start a return or replacement</h2>
+        <p class="return-form-intro">Choose the option that best fits your order and share the requested details with us.</p>
+        <form method="post" enctype="multipart/form-data" id="return-request-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="request">
+          <fieldset class="return-form-section">
+            <legend>What would you like to do?</legend>
+            <div class="return-choice-list">
+              {% for choice in form.request_type %}
+              <label class="return-choice" for="{{ choice.id_for_label }}">
+                {{ choice.tag }}
+                <span class="return-choice-label">{{ choice.choice_label }}</span>
+                <span class="return-choice-description">{% if choice.data.value == 'return' %}Send an eligible item back for a refund after inspection.{% else %}Request the same item again if the wrong or a damaged item arrived.{% endif %}</span>
+              </label>
+              {% endfor %}
+            </div>
+            {% for error in form.request_type.errors %}<div class="text-danger mt-2">{{ error }}</div>{% endfor %}
+          </fieldset>
+          {% if return_eligibility_error %}
+          <div class="alert alert-warning" data-eligibility="return"><i class="fas fa-info-circle mr-1" aria-hidden="true"></i>{{ return_eligibility_error }}</div>
+          {% endif %}
+          {% if replacement_eligibility_error %}
+          <div class="alert alert-warning" data-eligibility="replacement"><i class="fas fa-info-circle mr-1" aria-hidden="true"></i>{{ replacement_eligibility_error }}</div>
+          {% endif %}
+
+          <div class="return-form-section form-group" id="replacement-reason-field">
+            <label for="{{ form.replacement_reason.id_for_label }}">Replacement reason</label>
+            {{ form.replacement_reason }}
+            {% for error in form.replacement_reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="return-form-section form-group" id="return-reason-field">
+            <label for="{{ form.return_reason.id_for_label }}">Reason for return</label>
+            {{ form.return_reason }}
+            {% for error in form.return_reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="form-group" id="reason-details-field">
+            <label for="{{ form.reason.id_for_label }}" id="reason-details-label">Additional details</label>
+            {{ form.reason }}
+            {% for error in form.reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+          </div>
+
+          {% if is_cod_order %}
+          <section class="return-form-section" id="cod-refund-details">
+            <h3 class="return-form-section-title">Refund payment details</h3>
+            <p class="text-muted small">For a Cash on Delivery order, choose where to receive your refund. These details are only available to authorized staff processing the return.</p>
+            <div class="form-group">
+              <label for="{{ form.refund_method.id_for_label }}">Refund method</label>
+              {{ form.refund_method }}
+              {% for error in form.refund_method.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="form-group" id="refund-upi-field" hidden>
+              <label for="{{ form.refund_upi_id.id_for_label }}">UPI ID</label>
+              {{ form.refund_upi_id }}
+              {% for error in form.refund_upi_id.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <fieldset id="refund-bank-fields" hidden>
+              <legend class="return-form-section-title">Bank account details</legend>
+              <div class="form-group">
+                <label for="{{ form.refund_account_holder_name.id_for_label }}">Account holder name</label>
+                {{ form.refund_account_holder_name }}
+                {% for error in form.refund_account_holder_name.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+              </div>
+              <div class="form-group">
+                <label for="{{ form.refund_account_number.id_for_label }}">Account number</label>
+                {{ form.refund_account_number }}
+                {% for error in form.refund_account_number.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+              </div>
+              <div class="form-group mb-0">
+                <label for="{{ form.refund_ifsc_code.id_for_label }}">IFSC code</label>
+                {{ form.refund_ifsc_code }}
+                {% for error in form.refund_ifsc_code.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+              </div>
+            </fieldset>
+          </section>
+          {% endif %}
+
+          <section class="return-form-section" id="request-images-field">
+            <label class="return-form-section-title" for="request_images">Product photos</label>
+            <div class="return-upload-box">
+              <input class="form-control-file" id="request_images" name="request_images" type="file" accept="image/*" multiple required>
+              <small class="form-text text-muted">Upload 1–5 clear photos of the product and its condition, each no larger than 5 MB.</small>
+            </div>
+          </section>
+          <div class="return-notice mb-3" id="return-shipping-notice">
+            <i class="fas fa-undo mr-2" aria-hidden="true"></i>If approved, you’ll ship the item to our office at your own cost. Refunds are processed after the item is received and inspected.
+          </div>
+          <div class="return-notice mb-3" id="replacement-notice">
+            <i class="fas fa-exchange-alt mr-2" aria-hidden="true"></i>If approved, we’ll send the same item as a replacement. Do not ship anything back unless our team contacts you.
+          </div>
+          {% for error in form.non_field_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+          <button class="btn btn-primary btn-block return-submit" type="submit">Submit request</button>
+        </form>
+      </section>
+
+      <aside>
+        <section class="return-card return-guidance-card">
+          <h2><i class="fas fa-clipboard-check mr-2" aria-hidden="true"></i>Before you submit</h2>
+          <ul>
+            <li>Choose the correct return or replacement option.</li>
+            <li>Include clear photos so the team can review your request.</li>
+            <li>Our support team will review your request and update its status here.</li>
+          </ul>
+        </section>
+        <section class="return-card return-guidance-card">
+          <h2><i class="fas fa-info-circle mr-2" aria-hidden="true"></i>Need help?</h2>
+          <p class="mb-0">If you’re unsure which option to choose, contact our support team and include your order number.</p>
+        </section>
+      </aside>
+    </div>
+    {% endif %}
+  </div>
+</section>
+<script>
+  (function () {
+    const form = document.getElementById('return-request-form');
+    if (!form) return;
+    const returnReasonField = document.getElementById('return-reason-field');
+    const returnReason = document.getElementById('return-reason');
+    const replacementReason = document.getElementById('replacement-reason-field');
+    const imagesInput = document.getElementById('request_images');
+    const returnNotice = document.getElementById('return-shipping-notice');
+    const replacementNotice = document.getElementById('replacement-notice');
+    const detailsLabel = form.querySelector('label[for="{{ form.reason.id_for_label }}"]');
+    const reasonDetailsField = document.getElementById('reason-details-field');
+    const reasonDetailsInput = document.getElementById('{{ form.reason.id_for_label }}');
+    const returnEligibility = form.querySelector('[data-eligibility="return"]');
+    const replacementEligibility = form.querySelector('[data-eligibility="replacement"]');
+    const codRefundDetails = document.getElementById('cod-refund-details');
+    const refundMethod = document.getElementById('{{ form.refund_method.id_for_label }}');
+    const refundUpiField = document.getElementById('refund-upi-field');
+    const refundUpiInput = document.getElementById('{{ form.refund_upi_id.id_for_label }}');
+    const refundBankFields = document.getElementById('refund-bank-fields');
+    const refundBankInputs = [
+      document.getElementById('{{ form.refund_account_holder_name.id_for_label }}'),
+      document.getElementById('{{ form.refund_account_number.id_for_label }}'),
+      document.getElementById('{{ form.refund_ifsc_code.id_for_label }}'),
+    ];
+
+    function updateRequestType() {
+      const selected = form.querySelector('input[name="request_type"]:checked');
+      const isReplacement = selected && selected.value === 'replacement';
+      const needsRefundDetails = codRefundDetails && !isReplacement;
+      const needsCustomReturnReason = returnReason && returnReason.value === 'not_defined';
+      returnReasonField.hidden = Boolean(isReplacement);
+      if (returnReason) returnReason.required = !isReplacement;
+      replacementReason.hidden = !isReplacement;
+      imagesInput.required = true;
+      returnNotice.hidden = Boolean(isReplacement);
+      replacementNotice.hidden = !isReplacement;
+      reasonDetailsField.hidden = !isReplacement && !needsCustomReturnReason;
+      reasonDetailsInput.required = !isReplacement && Boolean(needsCustomReturnReason);
+      if (detailsLabel) {
+        detailsLabel.textContent = isReplacement
+          ? 'Additional details'
+          : 'Tell us more';
+      }
+      if (returnEligibility) returnEligibility.hidden = Boolean(isReplacement);
+      if (replacementEligibility) replacementEligibility.hidden = !isReplacement;
+      if (codRefundDetails) codRefundDetails.hidden = !needsRefundDetails;
+      if (refundMethod) refundMethod.required = Boolean(needsRefundDetails);
+      updateRefundMethod(needsRefundDetails);
+    }
+
+    function updateRefundMethod(isVisible) {
+      if (!refundMethod || !refundUpiField || !refundBankFields) return;
+      const isUpi = isVisible && refundMethod.value === 'upi';
+      const isBank = isVisible && refundMethod.value === 'bank_account';
+      refundUpiField.hidden = !isUpi;
+      refundUpiInput.required = isUpi;
+      refundBankFields.hidden = !isBank;
+      refundBankInputs.forEach(input => {
+        input.required = isBank;
+      });
+    }
+
+    form.addEventListener('change', event => {
+      updateRequestType();
+      if (event.target === refundMethod) {
+        updateRefundMethod(Boolean(codRefundDetails) && !codRefundDetails.hidden);
+      }
+    });
+    updateRequestType();
+  })();
+</script>
+{% endblock %}

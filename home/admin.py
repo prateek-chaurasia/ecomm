@@ -1,4 +1,5 @@
 from django.contrib import admin
+from base.admin import FilterCollapsibleModelAdmin
 from .models import (
     City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
     DeliveryGuideline, ReturnRefundPolicy,
@@ -10,21 +11,21 @@ admin.site.register(ShippingAddress)
 
 
 @admin.register(State)
-class StateAdmin(admin.ModelAdmin):
+class StateAdmin(FilterCollapsibleModelAdmin):
     list_display = ('name', 'country')
     list_filter = ('country',)
     search_fields = ('name', 'country__name', 'country__code')
 
 
 @admin.register(City)
-class CityAdmin(admin.ModelAdmin):
+class CityAdmin(FilterCollapsibleModelAdmin):
     list_display = ('name', 'state', 'normalized_name')
     list_filter = ('state__country', 'state')
     search_fields = ('name', 'state__name')
 
 
 @admin.register(DeliveryGuideline)
-class DeliveryGuidelineAdmin(admin.ModelAdmin):
+class DeliveryGuidelineAdmin(FilterCollapsibleModelAdmin):
     fields = (
         'title',
         'operational_office_city',
@@ -48,11 +49,12 @@ class DeliveryGuidelineAdmin(admin.ModelAdmin):
 
 
 @admin.register(ReturnRefundPolicy)
-class ReturnRefundPolicyAdmin(admin.ModelAdmin):
+class ReturnRefundPolicyAdmin(FilterCollapsibleModelAdmin):
     fields = (
         'return_title', 'return_summary', 'return_details',
         'refund_title', 'refund_summary', 'refund_details',
-        'cancellation_window_hours', 'cancellation_policy',
+        'return_shipping_address',
+        'cancellation_policy',
     )
 
     def has_add_permission(self, request):
@@ -60,7 +62,7 @@ class ReturnRefundPolicyAdmin(admin.ModelAdmin):
 
 
 @admin.register(HomeBanner)
-class HomeBannerAdmin(admin.ModelAdmin):
+class HomeBannerAdmin(FilterCollapsibleModelAdmin):
     list_display = ('title', 'is_active', 'starts_at', 'ends_at')
     list_filter = ('is_active',)
     search_fields = ('title', 'subtitle')
@@ -68,7 +70,7 @@ class HomeBannerAdmin(admin.ModelAdmin):
 
 
 @admin.register(MarqueeAnnouncement)
-class MarqueeAnnouncementAdmin(admin.ModelAdmin):
+class MarqueeAnnouncementAdmin(FilterCollapsibleModelAdmin):
     list_display = ('text', 'is_active', 'display_order', 'updated_at')
     list_editable = ('is_active', 'display_order')
     list_filter = ('is_active',)

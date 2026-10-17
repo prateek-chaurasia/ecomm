@@ -1,0 +1,24 @@
+{% extends "emails/base_email.html" %}
+
+{% block email_title %}{{ product.product_name }} is back in stock{% endblock %}
+{% block email_preheader %}An item on your wishlist is available again.{% endblock %}
+{% block email_content %}
+<h1 style="margin:0 0 18px; color:#243047; font-size:24px; line-height:1.3;">It’s back in stock!</h1>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="10" border="0" style="margin:0 0 18px; border-collapse:collapse; font-size:14px;">
+  <tr><td colspan="2">Hello {{ customer_name }},</td></tr>
+  <tr>
+    <td width="112" style="border-top:1px solid #e2e8f0;">
+      {% if product_thumbnail_cid %}<img src="cid:{{ product_thumbnail_cid }}" width="96" height="96" alt="{{ product.product_name }}" style="display:block; width:96px; height:96px; object-fit:contain; border:1px solid #e2e8f0; border-radius:8px;">{% endif %}
+    </td>
+    <td style="border-top:1px solid #e2e8f0; overflow-wrap:anywhere;"><strong>{{ product.product_name }}</strong><br>From your wishlist, available again.</td>
+  </tr>
+</table>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
+  <tr>
+    <td align="center" style="border-radius:7px; background-color:#4f46e5;">
+      <a href="{{ product_url }}" style="display:inline-block; padding:13px 22px; color:#ffffff; font-weight:700; text-decoration:none;">View product</a>
+    </td>
+  </tr>
+</table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="8" border="0"><tr><td>Thank you for shopping with BundleofGifts.</td></tr></table>
+{% endblock %}

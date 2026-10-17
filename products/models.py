@@ -61,6 +61,12 @@ class SizeVariant(BaseModel):
     price = models.IntegerField(default=0)
     order = models.IntegerField(default=0)
 
+    @property
+    def price_adjustment(self):
+        if self.size_name.strip().casefold() in {'default', 'default size'}:
+            return 0
+        return self.price
+
     def __str__(self) -> str:
         return self.size_name
 
@@ -195,7 +201,8 @@ class Product(BaseModel):
         return self.product_name
 
     def get_product_price_by_size(self, size):
-        return self.price + SizeVariant.objects.get(size_name=size).price
+        size_variant = self.size_variant.get(size_name=size)
+        return self.price + size_variant.price_adjustment
 
     def get_rating(self):
         total = sum(int(review['stars']) for review in self.reviews.values())
@@ -335,6 +342,15 @@ class ProductReview(BaseModel):
 
     def dislike_count(self):
         return self.dislikes.count()
+
+
+class ReviewPhoto(BaseModel):
+    review = models.ForeignKey(
+        ProductReview, on_delete=models.CASCADE, related_name='photos')
+    image = models.ImageField(upload_to='product_reviews/%Y/%m/%d/')
+
+    def __str__(self):
+        return f'Photo for review by {self.review.user}'
 
 
 class Wishlist(BaseModel):

@@ -1,0 +1,26 @@
+<div class="cart-charge-breakdown">
+  <div class="d-flex justify-content-between">
+    <span>Items subtotal</span>
+    <span>₹{{ cart.get_cart_total }}</span>
+  </div>
+  {% if cart_discount %}
+  <div class="d-flex justify-content-between mt-2">
+    <span>Coupon discount{% if cart.coupon %} ({{ cart.coupon.coupon_code }}){% endif %}</span>
+    <span class="text-success">−₹{{ cart_discount }}</span>
+  </div>
+  {% endif %}
+  {% if cart_has_items %}
+  <div class="d-flex justify-content-between mt-2">
+    <span>Delivery fee</span>
+    <span>{% if delivery_fee %}₹{{ delivery_fee }}{% else %}Free{% endif %}</span>
+  </div>
+  {% if delivery_fee_reason %}
+  <small class="text-muted d-block">{{ delivery_fee_reason }}</small>
+  {% endif %}
+  {% endif %}
+  <hr>
+  <div class="d-flex justify-content-between font-weight-bold">
+    <span>Total</span>
+    <span>₹{{ cart_total_after_delivery }}</span>
+  </div>
+</div>
