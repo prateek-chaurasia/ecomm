@@ -281,6 +281,17 @@ class ReturnRefundPolicyTests(TestCase):
 
 
 class HomeBannerTests(TestCase):
+    def test_home_page_shop_by_category_button_opens_categories(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Shop by Category')
+        self.assertContains(
+            response,
+            f'href="{reverse("categories")}"',
+        )
+        self.assertNotContains(response, 'Explore gifts')
+
     def test_active_banners_are_shown_on_home_page(self):
         banner = HomeBanner.objects.create(
             title='Diwali Sale',
