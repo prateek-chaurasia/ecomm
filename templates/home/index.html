@@ -65,6 +65,39 @@
     color: #fff;
   }
 
+  .category-coming-soon {
+    padding: 56px 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    background: radial-gradient(circle at top, #fff 0%, #f8fafc 72%);
+    text-align: center;
+  }
+
+  .category-coming-soon-icon {
+    display: inline-flex;
+    width: 64px;
+    height: 64px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 1.6rem;
+  }
+
+  .category-coming-soon h2 {
+    margin: 18px 0 8px;
+    color: #0f172a;
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    font-weight: 800;
+  }
+
+  .category-coming-soon p {
+    margin: 0;
+    color: #64748b;
+    font-size: 1.05rem;
+  }
+
   @media (max-width: 767.98px) {
     .brand-masthead {
       display: block;
@@ -388,7 +421,17 @@
 
   <!-- Product List -->
   <div class="row" id="product-grid">
+    {% if category_has_products == False %}
+    <div class="col-12">
+      <section class="category-coming-soon" aria-labelledby="category-coming-soon-title">
+        <span class="category-coming-soon-icon" aria-hidden="true"><i class="fas fa-gift"></i></span>
+        <h2 id="category-coming-soon-title">Coming soon</h2>
+        <p>We're preparing something special for {{ selected_category }}.</p>
+      </section>
+    </div>
+    {% else %}
     {% include 'product_parts/product_cards.html' with products=products %}
+    {% endif %}
   </div>
 
   <div id="product-load-status" class="text-center text-muted py-3" aria-live="polite"></div>

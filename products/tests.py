@@ -289,6 +289,18 @@ class CategoryPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Trail Runner')
 
+    def test_category_page_shows_coming_soon_when_category_has_no_products(self):
+        empty_category = Category.objects.create(category_name='Watches')
+
+        response = self.client.get(
+            reverse('category_products', args=[empty_category.slug]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Coming soon')
+        self.assertContains(response, "We're preparing something special for Watches.")
+        self.assertNotContains(response, 'Trail Runner')
+
     def test_category_page_hides_products_disabled_from_catalog(self):
         hidden_product = Product.objects.create(
             product_name='Bundle-only Gift',

@@ -258,6 +258,7 @@ def category_products(request, slug):
         'products': products,
         'categories': categories,
         'selected_category': category.category_name,
+        'category_has_products': category.products.exists(),
         'selected_sort': '',
         'selected_query': search_term,
         'selected_tag': selected_tag,
