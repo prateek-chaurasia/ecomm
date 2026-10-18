@@ -183,6 +183,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 8px;
     min-width: 130px;
     margin-left: auto;
   }
@@ -272,7 +273,8 @@
     }
 
     .filter-actions {
-      justify-content: stretch;
+      flex-direction: column;
+      align-items: stretch;
     }
 
     .clear-filter-btn {
@@ -328,11 +330,11 @@
   <!-- Filter Section -->
   <div class="filter-section">
     <div class="filter-shell">
-      <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="false" aria-controls="filterContent">
+      <button type="button" class="filter-toggle" id="filterToggle" aria-expanded="{% if selected_query or selected_brand or selected_age_group or selected_sort or selected_tag or selected_category and not is_category_page %}true{% else %}false{% endif %}" aria-controls="filterContent">
         <span>Filters</span>
         <span class="filter-toggle-icon" aria-hidden="true">&#9662;</span>
       </button>
-      <div class="filter-content" id="filterContent">
+      <div class="filter-content{% if selected_query or selected_brand or selected_age_group or selected_sort or selected_tag or selected_category and not is_category_page %} is-open{% endif %}" id="filterContent">
         <form method="GET" class="filter-form">
         {% if selected_category %}
         <div class="filter-field">
@@ -341,9 +343,10 @@
         </div>
         {% endif %}
 
+        {% if not is_category_page %}
         <div class="filter-field">
           <label for="category">Category</label>
-          <select id="category" name="category" class="form-control" onchange="this.form.submit()">
+          <select id="category" name="category" class="form-control">
             <option value="">All</option>
             {% for category in categories %}
             <option value="{{ category.category_name }}" {% if selected_category == category.category_name %}selected{%endif %}>
@@ -352,19 +355,11 @@
             {% endfor %}
           </select>
         </div>
-
-        <div class="filter-field">
-          <label for="sort">Reviews</label>
-          <select id="sort" name="sort" class="form-control" onchange="this.form.submit()">
-            <option value="">All Reviews</option>
-            <option value="ratingAsc" {% if selected_sort == 'ratingAsc' %}selected{% endif %}>Low to High</option>
-            <option value="ratingDesc" {% if selected_sort == 'ratingDesc' %}selected{% endif %}>High to Low</option>
-          </select>
-        </div>
+        {% endif %}
 
         <div class="filter-field">
           <label for="brand">Brand</label>
-          <select id="brand" name="brand" class="form-control" onchange="this.form.submit()">
+          <select id="brand" name="brand" class="form-control">
             <option value="">All Brands</option>
             {% for brand in brands %}
             <option value="{{ brand }}" {% if selected_brand == brand %}selected{% endif %}>{{ brand }}</option>
@@ -374,7 +369,7 @@
 
         <div class="filter-field">
           <label for="age_group">Age Group</label>
-          <select id="age_group" name="age_group" class="form-control" onchange="this.form.submit()">
+          <select id="age_group" name="age_group" class="form-control">
             <option value="">All Ages</option>
             {% for group in age_groups %}
             <option value="{{ group }}" {% if selected_age_group == group %}selected{% endif %}>{{ group }}</option>
@@ -383,16 +378,19 @@
         </div>
 
         <div class="filter-field">
-          <label for="sort_order">Sort by</label>
-          <select id="sort_order" name="sort" class="form-control" onchange="this.form.submit()">
+          <label for="sort">Sort by</label>
+          <select id="sort" name="sort" class="form-control">
             <option value="">Default</option>
             <option value="newest" {% if selected_sort == 'newest' %}selected{% endif %}>Newest</option>
             <option value="priceAsc" {% if selected_sort == 'priceAsc' %}selected{% endif %}>Price: Low-High</option>
             <option value="priceDesc" {% if selected_sort == 'priceDesc' %}selected{% endif %}>Price: High-Low</option>
+            <option value="ratingAsc" {% if selected_sort == 'ratingAsc' %}selected{% endif %}>Rating: Low-High</option>
+            <option value="ratingDesc" {% if selected_sort == 'ratingDesc' %}selected{% endif %}>Rating: High-Low</option>
           </select>
         </div>
 
         <div class="filter-actions">
+          <button type="submit" class="clear-filter-btn">Apply filters</button>
           <button type="button" class="clear-filter-btn" onclick="window.location.href='{{ request.path }}';">
             Clear Filters
           </button>

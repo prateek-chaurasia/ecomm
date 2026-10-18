@@ -297,7 +297,7 @@ class HomeBannerTests(TestCase):
             title='Diwali Sale',
             subtitle='Flat 30% off on festive essentials',
             button_text='Shop Now',
-            link_url='https://example.com/diwali',
+            link_url='https://bundleofgifts.com/diwali',
             image=SimpleUploadedFile(
                 'banner.png',
                 b'fake-image-data',
@@ -333,6 +333,19 @@ class HomeBannerTests(TestCase):
         self.assertContains(response, 'First announcement')
         self.assertContains(response, 'Second announcement')
         self.assertNotContains(response, 'Inactive announcement')
+
+
+class SitemapTests(TestCase):
+    @override_settings(PUBLIC_BASE_URL='https://bundleofgifts.com')
+    def test_sitemap_uses_public_domain_instead_of_sites_framework_domain(self):
+        response = self.client.get(reverse('sitemap'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<loc>https://bundleofgifts.com/product/bundles/</loc>',
+        )
+        self.assertNotContains(response, 'https://example.com/')
 
 
 class InfiniteProductLoadingTests(TestCase):

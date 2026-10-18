@@ -1,7 +1,8 @@
 import random
 import logging
 from .forms import ReviewForm
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Avg
+from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.contrib import messages
 from accounts.models import Cart, CartItem, BundleCartItem, BundleCartProduct
@@ -240,6 +241,9 @@ def category_products(request, slug):
     search_term = (request.GET.get('q', '') or '').strip()
     products = Product.objects.filter(show_in_catalog=True, category=category).select_related('category').prefetch_related('product_images', 'age_groups', 'tags').order_by('product_name', 'uid')
 
+    selected_brand = request.GET.get('brand')
+    selected_age_group = request.GET.get('age_group')
+    selected_sort = request.GET.get('sort', '')
     selected_tag = request.GET.get('tag')
     if search_term:
         products = products.filter(
@@ -250,18 +254,52 @@ def category_products(request, slug):
             Q(tags__name__icontains=search_term)
         ).distinct()
 
+    if selected_brand:
+        products = products.filter(brand_name=selected_brand)
+
+    if selected_age_group:
+        products = products.filter(age_groups__name=selected_age_group).distinct()
+
     if selected_tag:
         products = products.filter(tags__name=selected_tag).distinct()
+
+    if selected_sort == 'newest':
+        products = products.filter(newest_product=True).order_by('category_id', 'uid')
+    elif selected_sort == 'priceAsc':
+        products = products.order_by('price', 'uid')
+    elif selected_sort == 'priceDesc':
+        products = products.order_by('-price', 'uid')
+    elif selected_sort == 'ratingAsc':
+        products = products.annotate(
+            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+        ).order_by('avg_rating', 'product_name', 'uid')
+    elif selected_sort == 'ratingDesc':
+        products = products.annotate(
+            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+        ).order_by('-avg_rating', 'product_name', 'uid')
 
     categories = Category.objects.all()
     context = {
         'products': products,
         'categories': categories,
         'selected_category': category.category_name,
+        'is_category_page': True,
         'category_has_products': category.products.exists(),
-        'selected_sort': '',
+        'selected_sort': selected_sort,
+        'selected_brand': selected_brand,
+        'selected_age_group': selected_age_group,
         'selected_query': search_term,
         'selected_tag': selected_tag,
+        'brands': Product.objects.filter(
+            show_in_catalog=True,
+            category=category,
+        ).exclude(brand_name='').values_list('brand_name', flat=True).distinct().order_by('brand_name'),
+        'age_groups': sorted(set(
+            Product.objects.filter(
+                show_in_catalog=True,
+                category=category,
+            ).exclude(age_groups__isnull=True).values_list('age_groups__name', flat=True)
+        )),
         'tags': Tag.objects.order_by('name'),
     }
     return render(request, 'home/index.html', context)

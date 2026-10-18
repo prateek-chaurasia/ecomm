@@ -1,10 +1,21 @@
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
 from products.models import BundleOffer, Category, Product
 
 
-class ProductSitemap(Sitemap):
+class PublicSitemap(Sitemap):
+    def get_domain(self, site=None):
+        return urlsplit(settings.PUBLIC_BASE_URL).netloc
+
+    def get_protocol(self, protocol=None):
+        return urlsplit(settings.PUBLIC_BASE_URL).scheme
+
+
+class ProductSitemap(PublicSitemap):
     changefreq = 'weekly'
     priority = 0.8
 
@@ -15,7 +26,7 @@ class ProductSitemap(Sitemap):
         return reverse('get_product', kwargs={'slug': item.slug})
 
 
-class CategorySitemap(Sitemap):
+class CategorySitemap(PublicSitemap):
     changefreq = 'weekly'
     priority = 0.7
 
@@ -26,7 +37,7 @@ class CategorySitemap(Sitemap):
         return reverse('category_products', kwargs={'slug': item.slug})
 
 
-class BundleOfferSitemap(Sitemap):
+class BundleOfferSitemap(PublicSitemap):
     changefreq = 'weekly'
     priority = 0.7
 
@@ -37,7 +48,7 @@ class BundleOfferSitemap(Sitemap):
         return reverse('bundle_builder', kwargs={'slug': item.slug})
 
 
-class StaticSitemap(Sitemap):
+class StaticSitemap(PublicSitemap):
     changefreq = 'monthly'
     priority = 0.5
 

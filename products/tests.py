@@ -319,6 +319,8 @@ class CategoryPagesTests(TestCase):
         response = self.client.get(reverse('category_products', args=[self.category.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Search in Shoes:')
+        self.assertContains(response, 'Apply filters')
+        self.assertNotContains(response, 'onchange="this.form.submit()"')
 
     def test_home_page_does_not_show_duplicate_search_box(self):
         response = self.client.get(reverse('index'))
@@ -379,6 +381,35 @@ class SearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Trail Runner')
         self.assertNotContains(response, 'Beach Sandal')
+        self.assertContains(response, 'aria-expanded="true"')
+
+    def test_category_search_combines_search_brand_age_and_sort_filters(self):
+        age_group = AgeGroup.objects.create(name='Adults')
+        self.runner.brand_name = 'Stride'
+        self.runner.age_groups.add(age_group)
+        self.runner.save()
+
+        response = self.client.get(
+            reverse('category_products', args=[self.shoes.slug]),
+            {
+                'q': 'trail',
+                'brand': 'Stride',
+                'age_group': 'Adults',
+                'sort': 'priceDesc',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['products']), [self.runner])
+        self.assertEqual(response.context['selected_brand'], 'Stride')
+        self.assertEqual(response.context['selected_age_group'], 'Adults')
+        self.assertEqual(response.context['selected_sort'], 'priceDesc')
+
+    def test_home_filters_wait_for_apply_button(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(response, 'Apply filters')
+        self.assertNotContains(response, 'onchange="this.form.submit()"')
 
 
 class CampaignTagTests(TestCase):

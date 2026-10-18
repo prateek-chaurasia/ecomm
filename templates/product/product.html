@@ -452,12 +452,36 @@
 
   @media (max-width: 575.98px) {
     .purchase-actions {
+      flex-direction: column;
       align-items: stretch;
       width: 100%;
     }
 
+    .purchase-actions .quantity-panel {
+      width: 100%;
+      margin-right: 0 !important;
+    }
+
+    .purchase-actions .gift-wrap-option {
+      margin-left: 0 !important;
+    }
+
     .purchase-actions .btn {
-      margin: 8px 0 0 !important;
+      margin: 0 !important;
+      width: 100%;
+    }
+
+    .purchase-actions > .d-sm-flex {
+      display: flex !important;
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      margin-right: 0 !important;
+      gap: 0.5rem;
+    }
+
+    .wishlist-product-action,
+    .wishlist-product-action form {
       width: 100%;
     }
 
