@@ -40,6 +40,11 @@ class ProductImageAdminForm(forms.ModelForm):
     class Meta:
         model = ProductImage
         fields = '__all__'
+        widgets = {
+            'image_url': forms.ClearableFileInput(
+                attrs={'accept': '.avif,.jpg,.jpeg,.png,.webp'}
+            ),
+        }
         # widgets = {
         #     'image_url': forms.URLInput(attrs={
         #         'placeholder': 'Enter image URL or upload a file below',

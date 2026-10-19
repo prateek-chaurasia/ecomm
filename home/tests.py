@@ -1,9 +1,10 @@
 from datetime import timedelta
 from decimal import Decimal
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from PIL import Image
 from django.core import mail
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,6 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from home.admin import HomeBannerAdminForm
 from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
     validate_delivery_selection,
@@ -284,6 +286,38 @@ class ReturnRefundPolicyTests(TestCase):
 
 
 class HomeBannerTests(TestCase):
+    def test_admin_accepts_webp_and_avif_banner_uploads(self):
+        for image_format, extension, content_type in (
+            ('WEBP', 'webp', 'image/webp'),
+            ('AVIF', 'avif', 'image/avif'),
+        ):
+            with self.subTest(image_format=image_format):
+                image_data = BytesIO()
+                Image.new('RGB', (2, 2), 'blue').save(
+                    image_data,
+                    format=image_format,
+                )
+                form = HomeBannerAdminForm(
+                    data={
+                        'title': f'{image_format} banner',
+                        'button_text': 'Shop Now',
+                        'starts_at': timezone.now(),
+                    },
+                    files={
+                        'image': SimpleUploadedFile(
+                            f'banner.{extension}',
+                            image_data.getvalue(),
+                            content_type=content_type,
+                        ),
+                    },
+                )
+
+                self.assertIn(
+                    f'.{extension}',
+                    form.fields['image'].widget.attrs['accept'],
+                )
+                self.assertTrue(form.is_valid(), form.errors)
+
     def test_fontawesome_and_footer_styles_load_with_initial_page_styles(self):
         response = self.client.get(reverse('index'))
 

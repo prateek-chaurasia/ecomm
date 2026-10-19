@@ -13,7 +13,10 @@ from PIL import Image
 
 from accounts.models import Cart, CartItem
 from home.models import ReturnRefundPolicy
-from products.admin import ProductAdmin, ProductAdminForm, ReturnDetailsInlineForm, restock_selected
+from products.admin import (
+    ProductAdmin, ProductAdminForm, ProductImageAdminForm,
+    ReturnDetailsInlineForm, restock_selected,
+)
 from products.models import (
     Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ColorVariant,
     ReturnDetails, ProductReview,
@@ -339,6 +342,43 @@ class CategoryPagesTests(TestCase):
         )
         response = self.client.get(reverse('category_products', args=[self.category.slug]))
         self.assertEqual(response.status_code, 200)
+
+
+class ProductImageAdminUploadTests(TestCase):
+    def test_admin_accepts_webp_and_avif_product_images(self):
+        category = Category.objects.create(category_name='AVIF products')
+        product = Product.objects.create(
+            product_name='AVIF product',
+            category=category,
+            price=100,
+            product_desription='Product with AVIF image',
+        )
+        for image_format, extension, content_type in (
+            ('WEBP', 'webp', 'image/webp'),
+            ('AVIF', 'avif', 'image/avif'),
+        ):
+            with self.subTest(image_format=image_format):
+                image_data = BytesIO()
+                Image.new('RGB', (2, 2), 'green').save(
+                    image_data,
+                    format=image_format,
+                )
+                form = ProductImageAdminForm(
+                    data={'product': product.pk},
+                    files={
+                        'image_url': SimpleUploadedFile(
+                            f'product.{extension}',
+                            image_data.getvalue(),
+                            content_type=content_type,
+                        ),
+                    },
+                )
+
+                self.assertIn(
+                    f'.{extension}',
+                    form.fields['image_url'].widget.attrs['accept'],
+                )
+                self.assertTrue(form.is_valid(), form.errors)
 
 
 class BundleOffersPageTests(TestCase):

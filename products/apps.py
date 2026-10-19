@@ -6,4 +6,5 @@ class ProductsConfig(AppConfig):
     name = 'products'
 
     def ready(self):
+        import pillow_avif
         import products.signals

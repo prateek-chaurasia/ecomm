@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django import forms
 from base.admin import FilterCollapsibleModelAdmin
 from .models import (
     City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
@@ -61,8 +62,20 @@ class ReturnRefundPolicyAdmin(FilterCollapsibleModelAdmin):
         return not ReturnRefundPolicy.objects.exists()
 
 
+class HomeBannerAdminForm(forms.ModelForm):
+    class Meta:
+        model = HomeBanner
+        fields = '__all__'
+        widgets = {
+            'image': forms.ClearableFileInput(
+                attrs={'accept': '.avif,.jpg,.jpeg,.png,.webp'}
+            ),
+        }
+
+
 @admin.register(HomeBanner)
 class HomeBannerAdmin(FilterCollapsibleModelAdmin):
+    form = HomeBannerAdminForm
     list_display = ('title', 'is_active', 'starts_at', 'ends_at')
     list_filter = ('is_active',)
     search_fields = ('title', 'subtitle')
