@@ -351,7 +351,7 @@ class BundleOffersPageTests(TestCase):
             response,
             "We're putting together thoughtful bundles for every occasion. Check back soon!",
         )
-        self.assertContains(response, reverse('create_custom_bundle'))
+        self.assertNotContains(response, 'Create your own bundle')
 
     def test_bundles_page_shows_active_offers_without_coming_soon_banner(self):
         offer = BundleOffer.objects.create(
@@ -364,6 +364,8 @@ class BundleOffersPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, offer.title)
         self.assertNotContains(response, 'Gift bundles are coming soon')
+        self.assertContains(response, 'Create your own bundle')
+        self.assertContains(response, reverse('create_custom_bundle'))
 
 
 class SearchTests(TestCase):
