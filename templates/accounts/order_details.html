@@ -12,7 +12,7 @@
       <div class="col-12">
         <div class="order-header d-flex justify-content-between align-items-center p-4 rounded-lg shadow-sm">
           <div>
-            <h2 class="order-title mb-2">Order Details</h2>
+            <h1 class="h2 order-title mb-2">Order Details</h1>
             <p class="order-subtitle mb-0">Order #{{ order.order_id }}</p>
           </div>
           <div class="order-actions d-flex flex-wrap justify-content-end gap-2">
@@ -36,17 +36,17 @@
     {% if return_request %}
     <div class="card modern-card mb-5">
       <div class="card-header">
-        <h4 class="card-title mb-0">
+        <h2 class="h4 card-title mb-0">
           <i class="fas fa-sync-alt me-2"></i>
           {% if return_request.request_type == 'replacement' %}Replacement{% else %}Return{% endif %} status
-        </h4>
+        </h2>
       </div>
       <div class="card-main-body p-4">
         <div class="current-status-callout mb-3">
           <span class="current-status-label">Current status</span>
           <strong class="current-status-value">{{ return_request.get_status_display }}</strong>
         </div>
-        <h5 class="return-timeline-heading">Request status cycle</h5>
+        <h3 class="h5 return-timeline-heading">Request status cycle</h3>
         <ol class="return-status-timeline" aria-label="Return request progress">
           {% for step in return_timeline %}
           <li class="return-status-step {{ step.state }}">
@@ -66,7 +66,7 @@
     </div>
     {% else %}
     <div class="card modern-card mb-5">
-      <div class="card-header"><h4 class="card-title mb-0"><i class="fas fa-route me-2"></i>Delivery progress</h4></div>
+      <div class="card-header"><h2 class="h4 card-title mb-0"><i class="fas fa-route me-2"></i>Delivery progress</h2></div>
       <div class="card-main-body p-4">
         <div class="order-progress">
           {% for value, label in order.Status.choices %}
@@ -91,9 +91,9 @@
       <div class="col-12">
         <div class="card modern-card">
           <div class="card-header">
-            <h4 class="card-title mb-0">
+            <h2 class="h4 card-title mb-0">
               <i class="fas fa-shopping-bag me-2"></i>Order Items
-            </h4>
+            </h2>
           </div>
           <div class="card-main-body p-0">
             <div class="table-responsive">
@@ -158,9 +158,9 @@
     {% if order.status == order.Status.DELIVERED and review_products %}
     <section class="card modern-card mb-5" aria-labelledby="order-reviews-heading">
       <div class="card-header">
-        <h4 class="card-title mb-0" id="order-reviews-heading">
+        <h2 class="h4 card-title mb-0" id="order-reviews-heading">
           <i class="fas fa-star me-2"></i>Review your delivered products
-        </h4>
+        </h2>
       </div>
       <div class="card-main-body p-3 p-md-4">
         <p class="text-muted mb-3">Rate each product and share feedback. Photos are optional.</p>
@@ -176,9 +176,9 @@
                   <span aria-hidden="true"><i class="fas fa-gift"></i></span>
                   {% endif %}
                 </a>
-                <h5 class="order-review-product-name">
+                <h3 class="h5 order-review-product-name">
                   <a href="{% url 'get_product' product.slug %}">{{ product.product_name }}</a>
-                </h5>
+                </h3>
               </div>
               {% if product.order_review %}
               <div class="order-review-summary">
@@ -272,9 +272,9 @@
       <div class="col-lg-8 mb-4">
         <div class="card modern-card">
           <div class="card-header">
-            <h4 class="card-title mb-0">
+            <h2 class="h4 card-title mb-0">
               <i class="fas fa-info-circle me-2"></i>Order Information
-            </h4>
+            </h2>
           </div>
           <div class="card-main-body">
             <div class="order-info-grid">
@@ -336,9 +336,9 @@
       <div class="col-lg-4 mb-4">
         <div class="card modern-card payment-summary-card">
           <div class="card-header">
-            <h4 class="card-title mb-0">
+            <h2 class="h4 card-title mb-0">
               <i class="fas fa-receipt me-2"></i>Payment Summary
-            </h4>
+            </h2>
           </div>
           <div class="card-main-body">
             <div class="summary-item">
@@ -364,7 +364,7 @@
     </div>
     <div class="card modern-card mb-5">
       <div class="card-header">
-        <h4 class="card-title mb-0"><i class="fas fa-undo me-2"></i>Returns</h4>
+        <h2 class="h4 card-title mb-0"><i class="fas fa-undo me-2"></i>Returns</h2>
       </div>
       <div class="card-main-body p-4">
         {% if return_request %}

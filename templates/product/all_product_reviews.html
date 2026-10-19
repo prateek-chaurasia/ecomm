@@ -7,7 +7,7 @@
 {% block start %} {% load static %}
 
 <div class="container mt-4">
-  <h3 class="form-group mb-4">Product Reviews</h3>
+  <h1 class="h3 form-group mb-4">Product Reviews</h1>
 </div>
 
 <div class="container my-3 p-4 rounded">
@@ -32,11 +32,11 @@
           </a>
 
           <div class="review-card-content">
-            <h5 class="card-title review-product-title">
+            <h2 class="h5 card-title review-product-title">
               <a href="{% url 'get_product' review.product.slug %}" class="text-decoration-none">
                 {{ review.product.product_name }}
               </a>
-            </h5>
+            </h2>
             <small class="text-muted">Posted on {{ review.date_added|date:"M d, Y" }}</small>
             <div class="review-rating mt-2" role="img" aria-label="{{ review.stars }} out of 5 stars">
               {% for star in "12345" %}
@@ -83,7 +83,7 @@
       <div class="empty-state-icon mb-4">
         <i class="fas fa-star" style="font-size: 4rem; color: #e2e8f0;"></i>
       </div>
-      <h3 class="empty-state-title mb-3" style="color: #64748b; font-weight: 600;">No Reviews Yet</h3>
+      <h2 class="h3 empty-state-title mb-3" style="color: #64748b; font-weight: 600;">No Reviews Yet</h2>
       <p class="empty-state-subtitle mb-4" style="color: #94a3b8; font-size: 1.1rem;">
         You haven't written any product reviews yet. Start shopping and share your experience with others.
       </p>
@@ -100,9 +100,9 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="deleteReviewModalLabel">
+          <h2 class="h5 modal-title" id="deleteReviewModalLabel">
             Confirm Delete
-          </h5>
+          </h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -126,7 +126,7 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="editReviewModalLabel">Edit Review</h5>
+          <h2 class="h5 modal-title" id="editReviewModalLabel">Edit Review</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <form id="editReviewForm" method="POST">

@@ -1,10 +1,12 @@
 from datetime import timedelta
 from decimal import Decimal
+from html.parser import HTMLParser
 from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from PIL import Image
+from django.contrib.auth.models import User
 from django.core import mail
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -23,6 +25,16 @@ from home.models import (
     ReturnRefundPolicy, State,
 )
 from products.models import Category, Product
+
+
+class HeadingLevelParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.levels = []
+
+    def handle_starttag(self, tag, attrs):
+        if len(tag) == 2 and tag[0] == 'h' and tag[1] in '123456':
+            self.levels.append(int(tag[1]))
 
 
 class ContactFormTests(TestCase):
@@ -286,6 +298,29 @@ class ReturnRefundPolicyTests(TestCase):
 
 
 class HomeBannerTests(TestCase):
+    def test_public_pages_do_not_skip_heading_levels(self):
+        for route_name in (
+            'index',
+            'about',
+            'contact',
+            'privacy-policy',
+            'terms-and-conditions',
+            'categories',
+            'product_search',
+        ):
+            with self.subTest(route=route_name):
+                response = self.client.get(reverse(route_name))
+
+                self.assertEqual(response.status_code, 200)
+                parser = HeadingLevelParser()
+                parser.feed(response.content.decode())
+                for previous, current in zip(parser.levels, parser.levels[1:]):
+                    self.assertLessEqual(
+                        current,
+                        previous + 1,
+                        f'{route_name} skips from h{previous} to h{current}',
+                    )
+
     def test_admin_accepts_webp_and_avif_banner_uploads(self):
         for image_format, extension, content_type in (
             ('WEBP', 'webp', 'image/webp'),
@@ -324,6 +359,16 @@ class HomeBannerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
+            '<button class="btn btn-primary" type="submit" aria-label="Search products">',
+        )
+        self.assertContains(
+            response,
+            '<i class="fa fa-search" aria-hidden="true"></i>',
+        )
+        self.assertContains(response, 'aria-label="Shopping cart"')
+        self.assertContains(response, 'aria-label="Sign in to your account"')
+        self.assertContains(
+            response,
             'href="/static/fonts/fontawesome/css/all.min.css" type="text/css" rel="stylesheet"',
         )
         self.assertContains(
@@ -337,6 +382,18 @@ class HomeBannerTests(TestCase):
         self.assertContains(
             response,
             'href="/static/css/ui.min.css" rel="stylesheet"',
+        )
+
+    def test_authenticated_nav_profile_link_has_a_unique_accessible_name(self):
+        user = User.objects.create_user(username='screen-reader-user')
+        self.client.force_login(user)
+
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "aria-label=\"View screen-reader-user's profile\"",
         )
 
     def test_home_page_shop_by_category_button_opens_categories(self):

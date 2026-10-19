@@ -67,10 +67,10 @@
         <div class="col-lg-3 col-4">
           <div class="brand-wrap">
             <a href="{% url 'index' %}" class="brand-link" style="text-decoration: none;">
-              <h2 class="logo-text">
+              <div class="logo-text">
                 <img src="{% static 'images/bundleofgifts-icon.svg' %}" alt="" class="brand-icon" />
                 <span>BundleofGifts</span>
-              </h2>
+              </div>
             </a>
           </div>
         </div>
@@ -79,8 +79,8 @@
             <div class="input-group w-100" style="position: relative;">
               <input type="text" class="form-control" name="q" id="globalSearchInput" placeholder="Search products" value="{{ query|default:"" }}" autocomplete="off" />
               <div class="input-group-append">
-                <button class="btn btn-primary" type="submit">
-                  <i class="fa fa-search"></i>
+                <button class="btn btn-primary" type="submit" aria-label="Search products">
+                  <i class="fa fa-search" aria-hidden="true"></i>
                 </button>
               </div>
               <div id="searchSuggestions" class="list-group" style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; display: none; margin-top: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.12);"></div>
@@ -93,8 +93,8 @@
 
             <!-- Cart Icon with badge -->
             <div class="widget-header mr-3 header-cart-widget">
-              <a href="{% url 'cart' %}" class="icon icon-sm rounded-circle border">
-                <i class="fa fa-shopping-cart"></i>
+              <a href="{% url 'cart' %}" class="icon icon-sm rounded-circle border" aria-label="Shopping cart">
+                <i class="fa fa-shopping-cart" aria-hidden="true"></i>
               </a>
               {% if user.is_authenticated %}
               {% with cart_count=request.user.profile.get_cart_count %}
@@ -109,18 +109,18 @@
             <div class="widget-header icontext header-account-widget">
               {% if user.is_authenticated %}
               {% if user.profile.profile_image_file or user.profile.profile_image %}
-              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
-                <img src="{% if user.profile.profile_image_file %}{{ user.profile.profile_image_file.url }}{% else %}{{ user.profile.profile_image }}{% endif %}" alt="Profile Image" class="rounded-circle" width="42"
+              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border" aria-label="View {{ user.username }}'s profile">
+                <img src="{% if user.profile.profile_image_file %}{{ user.profile.profile_image_file.url }}{% else %}{{ user.profile.profile_image }}{% endif %}" alt="" class="rounded-circle" width="42"
                   height="42" />
               </a>
               {% else %}
-              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
-                <i class="fa fa-user"></i>
+              <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border" aria-label="View {{ user.username }}'s profile">
+                <i class="fa fa-user" aria-hidden="true"></i>
               </a>
               {% endif %}
               {% else %}
-              <a href="{% url 'login' %}" class="icon icon-sm rounded-circle border">
-                <i class="fa fa-user"></i>
+              <a href="{% url 'login' %}" class="icon icon-sm rounded-circle border" aria-label="Sign in to your account">
+                <i class="fa fa-user" aria-hidden="true"></i>
               </a>
               {% endif %}
 
