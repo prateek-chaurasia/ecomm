@@ -24,7 +24,7 @@
   <link href="{% static 'css/ui.min.css' %}" rel="stylesheet" type="text/css" />
   <link href="{% static 'css/responsive.min.css' %}" rel="stylesheet" />
   <link href="{% static 'css/footer.min.css' %}" rel="stylesheet" type="text/css" />
-  {% if request.resolver_match.url_name == 'register' %}
+  {% if request.resolver_match.url_name == 'register' or request.resolver_match.url_name == 'login' %}
   <link href="{% static 'css/register.min.css' %}" rel="stylesheet" type="text/css" />
   {% endif %}
   {% if request.resolver_match.url_name == 'contact' %}

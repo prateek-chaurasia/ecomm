@@ -1264,7 +1264,16 @@ class RegistrationTests(TestCase):
         self.assertContains(response, 'type="email"')
         self.assertContains(response, '/static/js/form-validation.js')
         self.assertContains(response, '/static/css/register.min.css')
+        self.assertContains(response, 'class="fab fa-facebook-f facebook-icon"')
         self.assertNotContains(response, '/static/css/contact.min.css')
+
+    def test_login_page_loads_styles_for_social_sign_in_images(self):
+        response = self.client.get(reverse('login'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '/static/css/register.min.css')
+        self.assertContains(response, 'class="google-img"')
+        self.assertContains(response, 'class="fab fa-facebook-f facebook-icon"')
 
     def test_invalid_email_stays_in_registration_form_with_inline_error(self):
         response = self.client.post(reverse('register'), {
