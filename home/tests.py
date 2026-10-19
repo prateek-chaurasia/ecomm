@@ -284,17 +284,17 @@ class ReturnRefundPolicyTests(TestCase):
 
 
 class HomeBannerTests(TestCase):
-    def test_non_critical_stylesheets_do_not_block_initial_render(self):
+    def test_fontawesome_and_footer_styles_load_with_initial_page_styles(self):
         response = self.client.get(reverse('index'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            'rel="preload" as="style" href="/static/fonts/fontawesome/css/all.min.css"',
+            'href="/static/fonts/fontawesome/css/all.min.css" type="text/css" rel="stylesheet"',
         )
         self.assertContains(
             response,
-            'rel="preload" as="style" href="/static/css/footer.min.css"',
+            'href="/static/css/footer.min.css" rel="stylesheet" type="text/css"',
         )
         self.assertContains(
             response,
