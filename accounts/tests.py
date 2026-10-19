@@ -1258,6 +1258,8 @@ class RegistrationTests(TestCase):
         self.assertContains(response, 'data-validate-on-blur')
         self.assertContains(response, 'type="email"')
         self.assertContains(response, '/static/js/form-validation.js')
+        self.assertContains(response, '/static/css/register.min.css')
+        self.assertNotContains(response, '/static/css/contact.min.css')
 
     def test_invalid_email_stays_in_registration_form_with_inline_error(self):
         response = self.client.post(reverse('register'), {
