@@ -442,5 +442,14 @@ class InfiniteProductLoadingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['html'])
+        self.assertTrue(response.json()['has_next'])
+        self.assertIn('Toy 08', response.json()['html'])
+
+        response = self.client.get(
+            reverse('index') + '?page=3',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['has_next'])
         self.assertIn('Toy 20', response.json()['html'])

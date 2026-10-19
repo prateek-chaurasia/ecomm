@@ -5,8 +5,7 @@
       {% with image=product.product_images.first %}
       {% if image and image.image_url %}
       <img src="{{ image.image_url.url }}" alt="{{ product.product_name }}"
-        loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async"
-        {% if forloop.first %}fetchpriority="high"{% endif %} />
+        loading="lazy" decoding="async" />
       {% else %}
       <span class="product-catalog-placeholder" aria-hidden="true"><i class="fas fa-gift"></i></span>
       {% endif %}

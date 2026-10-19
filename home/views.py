@@ -82,7 +82,7 @@ def index(request):
             query = query.annotate(avg_rating=Coalesce(Avg('reviews__stars'), 0.0)).order_by('-avg_rating', 'product_name', 'uid')
 
     page = request.GET.get('page', 1)
-    paginator = Paginator(query, 20)
+    paginator = Paginator(query, 8)
 
     try:
         products = paginator.page(page)
