@@ -21,7 +21,7 @@
       <div class="col-md-3">
         <figure class="card card-product-grid">
           <div class="img-wrap">
-            <img src="{{product.product_images.first.image_url.url}}" alt="{{ product.product_name }}" loading="lazy" decoding="async" />
+            <img src="{{product.product_images.first.thumbnail_url}}" alt="{{ product.product_name }}" loading="lazy" decoding="async" />
           </div>
           <figcaption class="info-wrap border-top">
             <a href="{% url 'get_product' product.slug %}" class="title">

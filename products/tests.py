@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -22,6 +23,7 @@ from products.models import (
     ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
+from products.image_utils import product_thumbnail_name
 
 
 class CategoryAdminThumbnailTests(TestCase):
@@ -305,6 +307,28 @@ class CategoryPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Trail Runner')
 
+    def test_category_product_cards_use_generated_webp_thumbnail(self):
+        image_data = BytesIO()
+        Image.new('RGB', (900, 700), 'blue').save(image_data, format='JPEG')
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                image = ProductImage.objects.create(
+                    product=self.product,
+                    image_url=SimpleUploadedFile(
+                        'trail-runner.jpg',
+                        image_data.getvalue(),
+                        content_type='image/jpeg',
+                    ),
+                )
+
+                response = self.client.get(
+                    reverse('category_products', args=[self.category.slug]),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'src="{image.thumbnail_url}"')
+                self.assertTrue(image.thumbnail_url.endswith('.webp'))
+
     def test_category_page_shows_coming_soon_when_category_has_no_products(self):
         empty_category = Category.objects.create(category_name='Watches')
 
@@ -358,6 +382,46 @@ class CategoryPagesTests(TestCase):
 
 
 class ProductImageAdminUploadTests(TestCase):
+    def test_saving_product_image_creates_webp_thumbnail_without_changing_original(self):
+        with tempfile.TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                category = Category.objects.create(
+                    category_name='Thumbnail products',
+                )
+                product = Product.objects.create(
+                    product_name='Thumbnail product',
+                    category=category,
+                    price=100,
+                    product_desription='Product used to test thumbnails',
+                )
+                image_data = BytesIO()
+                Image.new('RGB', (1200, 900), 'green').save(
+                    image_data,
+                    format='JPEG',
+                )
+
+                product_image = ProductImage.objects.create(
+                    product=product,
+                    image_url=SimpleUploadedFile(
+                        'thumbnail-source.jpg',
+                        image_data.getvalue(),
+                        content_type='image/jpeg',
+                    ),
+                )
+
+                self.assertTrue(product_image.thumbnail_url.endswith('.webp'))
+                with product_image.image_url.open('rb') as original_file:
+                    with Image.open(original_file) as original:
+                        self.assertEqual(original.size, (1200, 900))
+
+                thumbnail_name = product_thumbnail_name(
+                    product_image.image_url.name,
+                )
+                with default_storage.open(thumbnail_name, 'rb') as thumbnail_file:
+                    with Image.open(thumbnail_file) as thumbnail:
+                        self.assertEqual(thumbnail.format, 'WEBP')
+                        self.assertEqual(thumbnail.size, (640, 480))
+
     def test_admin_accepts_webp_and_avif_product_images(self):
         category = Category.objects.create(category_name='AVIF products')
         product = Product.objects.create(

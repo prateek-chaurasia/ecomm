@@ -4,7 +4,7 @@
     <a href="{% url 'get_product' product.slug %}" class="product-catalog-media" aria-label="View {{ product.product_name }}">
       {% with image=product.product_images.first %}
       {% if image and image.image_url %}
-      <img src="{{ image.image_url.url }}" alt="{{ product.product_name }}"
+      <img src="{{ image.thumbnail_url }}" alt="{{ product.product_name }}"
         loading="lazy" decoding="async" />
       {% else %}
       <span class="product-catalog-placeholder" aria-hidden="true"><i class="fas fa-gift"></i></span>

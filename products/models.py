@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.files.storage import default_storage
 from base.models import BaseModel
 from django.utils.text import slugify
 from django.utils.html import format_html
@@ -10,6 +11,7 @@ from django.core.validators import (
     MaxValueValidator,
     RegexValidator,
 )
+from .image_utils import create_product_thumbnail, product_thumbnail_name
 
 # Create your models here.
 
@@ -240,6 +242,41 @@ class ProductImage(BaseModel):
     # image_url = models.URLField(
     #     max_length=500, default='https://via.placeholder.com/500')
     image_url = models.ImageField(upload_to='products/%Y/%m/%d/', blank=True, null=True)
+
+    @property
+    def thumbnail_url(self):
+        if not self.image_url:
+            return ''
+        thumbnail_name = product_thumbnail_name(self.image_url.name)
+        if default_storage.exists(thumbnail_name):
+            return default_storage.url(thumbnail_name)
+        return self.image_url.url
+
+    def save(self, *args, **kwargs):
+        previous_image_name = None
+        if self.pk:
+            previous_image_name = type(self).objects.filter(
+                pk=self.pk,
+            ).values_list('image_url', flat=True).first()
+
+        super().save(*args, **kwargs)
+
+        current_image_name = self.image_url.name if self.image_url else None
+        if current_image_name and default_storage.exists(current_image_name):
+            thumbnail_name = product_thumbnail_name(current_image_name)
+            if (
+                previous_image_name != current_image_name
+                or not default_storage.exists(thumbnail_name)
+            ):
+                thumbnail = create_product_thumbnail(self.image_url)
+                if default_storage.exists(thumbnail_name):
+                    default_storage.delete(thumbnail_name)
+                default_storage.save(thumbnail_name, thumbnail)
+
+        if previous_image_name and previous_image_name != current_image_name:
+            previous_thumbnail = product_thumbnail_name(previous_image_name)
+            if default_storage.exists(previous_thumbnail):
+                default_storage.delete(previous_thumbnail)
 
     def img_preview(self):
         return format_html('<img src="{}" width="500"/>', self.image_url.url)
