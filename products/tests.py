@@ -341,6 +341,31 @@ class CategoryPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class BundleOffersPageTests(TestCase):
+    def test_empty_bundles_page_shows_coming_soon_banner(self):
+        response = self.client.get(reverse('bundle_offers'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Gift bundles are coming soon')
+        self.assertContains(
+            response,
+            "We're putting together thoughtful bundles for every occasion. Check back soon!",
+        )
+        self.assertContains(response, reverse('create_custom_bundle'))
+
+    def test_bundles_page_shows_active_offers_without_coming_soon_banner(self):
+        offer = BundleOffer.objects.create(
+            title='Birthday Favorites',
+            description='A bundle for birthdays.',
+        )
+
+        response = self.client.get(reverse('bundle_offers'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, offer.title)
+        self.assertNotContains(response, 'Gift bundles are coming soon')
+
+
 class SearchTests(TestCase):
     def setUp(self):
         self.shoes = Category.objects.create(category_name='Shoes', category_image='categories/shoes.jpg')

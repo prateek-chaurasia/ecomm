@@ -1,6 +1,40 @@
 {% extends "base/base.html" %}
 {% block title %}Gift Bundles{% endblock %}
 {% block start %}
+<style>
+  .bundles-coming-soon {
+    padding: 56px 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    background: radial-gradient(circle at top, #fff 0%, #f8fafc 72%);
+    text-align: center;
+  }
+
+  .bundles-coming-soon-icon {
+    display: inline-flex;
+    width: 64px;
+    height: 64px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #eff6ff;
+    color: #2563eb;
+    font-size: 1.6rem;
+  }
+
+  .bundles-coming-soon h2 {
+    margin: 18px 0 8px;
+    color: #0f172a;
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    font-weight: 800;
+  }
+
+  .bundles-coming-soon p {
+    margin: 0;
+    color: #64748b;
+    font-size: 1.05rem;
+  }
+</style>
 <section class="section-content padding-y">
   <div class="container">
     <div class="mb-4">
@@ -23,7 +57,13 @@
         </article>
       </div>
       {% empty %}
-      <div class="col-12"><p class="text-muted">New gifting bundles are being prepared.</p></div>
+      <div class="col-12">
+        <section class="bundles-coming-soon" aria-labelledby="bundles-coming-soon-title">
+          <span class="bundles-coming-soon-icon" aria-hidden="true"><i class="fas fa-gift"></i></span>
+          <h2 id="bundles-coming-soon-title">Gift bundles are coming soon</h2>
+          <p>We're putting together thoughtful bundles for every occasion. Check back soon!</p>
+        </section>
+      </div>
       {% endfor %}
     </div>
   </div>
