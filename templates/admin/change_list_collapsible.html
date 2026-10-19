@@ -71,7 +71,7 @@
         width: 100%;
       }
 
-      #changelist-filter {
+      #changelist #changelist-filter {
         position: absolute;
         top: 0;
         right: 0;
@@ -80,15 +80,20 @@
         margin: 0;
       }
 
-      #changelist-filter[open] {
-        position: absolute;
+      #changelist #changelist-filter[open] {
+        position: fixed;
         top: 0;
         right: 0;
-        z-index: 10;
-        width: min(240px, calc(100vw - 40px));
-        max-height: calc(100vh - 120px);
+        z-index: 1000;
+        width: min(320px, calc(100vw - 24px));
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100vh;
+        max-height: 100dvh;
         overflow-y: auto;
         margin: 0;
+        border-radius: 0;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25);
       }
     }
   </style>

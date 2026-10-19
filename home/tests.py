@@ -284,6 +284,27 @@ class ReturnRefundPolicyTests(TestCase):
 
 
 class HomeBannerTests(TestCase):
+    def test_non_critical_stylesheets_do_not_block_initial_render(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'rel="preload" as="style" href="/static/fonts/fontawesome/css/all.min.css"',
+        )
+        self.assertContains(
+            response,
+            'rel="preload" as="style" href="/static/css/footer.min.css"',
+        )
+        self.assertContains(
+            response,
+            'href="/static/css/bootstrap.min.css" rel="stylesheet"',
+        )
+        self.assertContains(
+            response,
+            'href="/static/css/ui.min.css" rel="stylesheet"',
+        )
+
     def test_home_page_shop_by_category_button_opens_categories(self):
         response = self.client.get(reverse('index'))
 

@@ -1160,6 +1160,11 @@ class OrderAdminFilterTests(TestCase):
         self.assertContains(response, '#changelist {')
         self.assertContains(response, 'display: block;')
         self.assertContains(response, '.changelist-form-container')
+        self.assertContains(response, '#changelist #changelist-filter {')
+        self.assertContains(response, 'position: absolute;')
+        self.assertContains(response, '#changelist #changelist-filter[open]')
+        self.assertContains(response, 'position: fixed;')
+        self.assertContains(response, 'height: 100dvh;')
         self.assertNotContains(response, '\n        width: 0;')
 
         response = self.client.get(url, {'order_status': Order.Status.ACCEPTED})
