@@ -24,13 +24,16 @@ class CategoryAdminForm(forms.ModelForm):
 
 class CategoryAdmin(FilterCollapsibleModelAdmin):
     form = CategoryAdminForm
-    list_display = ['category_name', 'image_preview']
+    list_display = ['category_name', 'image_thumbnail']
 
-    def image_preview(self, obj):
+    @admin.display(description='Thumbnail')
+    def image_thumbnail(self, obj):
         if obj.category_image:
-            return format_html('<img src="{}" width="50" height="50" style="object-fit: cover;" />', obj.category_image)
+            return format_html(
+                '<img src="{}" width="60" height="60" style="object-fit: contain;" />',
+                obj.category_image.url,
+            )
         return "No Image"
-    image_preview.short_description = 'Preview'
 
 
 class ProductImageAdminForm(forms.ModelForm):

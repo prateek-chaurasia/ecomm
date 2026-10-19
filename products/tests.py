@@ -14,7 +14,7 @@ from PIL import Image
 from accounts.models import Cart, CartItem
 from home.models import ReturnRefundPolicy
 from products.admin import (
-    ProductAdmin, ProductAdminForm, ProductImageAdminForm,
+    CategoryAdmin, ProductAdmin, ProductAdminForm, ProductImageAdminForm,
     ReturnDetailsInlineForm, restock_selected,
 )
 from products.models import (
@@ -22,6 +22,19 @@ from products.models import (
     ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
+
+
+class CategoryAdminThumbnailTests(TestCase):
+    def test_category_admin_thumbnail_uses_image_url(self):
+        category = Category(
+            category_name='Decorative Items',
+            category_image='categories/example.jpg',
+        )
+
+        thumbnail = str(CategoryAdmin(Category, admin.site).image_thumbnail(category))
+
+        self.assertIn('src="/media/categories/example.jpg"', thumbnail)
+        self.assertIn('width="60" height="60"', thumbnail)
 
 
 class ProductSKUTests(TestCase):
