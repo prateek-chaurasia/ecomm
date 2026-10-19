@@ -679,6 +679,26 @@ class ProductCartStateTests(TestCase):
         self.assertContains(response, f'<a href="{reverse("cart")}" id="go-to-cart-link"')
         self.assertContains(response, 'id="go-to-cart-link" class="btn btn-outline-primary" hidden')
 
+    def test_product_image_opens_in_accessible_full_size_viewer(self):
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='products/toy-robot.jpg',
+        )
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'class="product-main-image"')
+        self.assertContains(response, 'role="button" tabindex="0"')
+        self.assertContains(response, 'id="productImageViewer"')
+        self.assertContains(response, 'id="productImageViewerImage"')
+        self.assertContains(response, '.product-image-viewer[open] {')
+        self.assertContains(response, '.product-image-viewer:not([open]) {')
+        self.assertContains(response, 'justify-content: center;')
+        self.assertContains(response, 'align-items: center;')
+        self.assertContains(response, 'imageViewer.showModal()')
+        self.assertContains(response, 'imageViewer.close()')
+        self.assertNotContains(response, 'zoomed-in')
+
     def test_default_size_does_not_change_product_or_cart_price(self):
         default_size = SizeVariant.objects.create(
             size_name='Default Size',

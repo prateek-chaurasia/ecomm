@@ -288,7 +288,24 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-STATICFILES_DIRS = [os.path.join(BASE_DIR, "public/media")]
+STATICFILES_DIRS = [
+    ('css', os.path.join(BASE_DIR, 'public/media/css')),
+    ('fonts', os.path.join(BASE_DIR, 'public/media/fonts')),
+    ('images', os.path.join(BASE_DIR, 'public/media/images')),
+    ('js', os.path.join(BASE_DIR, 'public/media/js')),
+]
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': (
+            'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+            if IS_PRODUCTION
+            else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+        ),
+    },
+}
 
 # Media files
 MEDIA_ROOT = os.path.join(BASE_DIR, 'public/media')

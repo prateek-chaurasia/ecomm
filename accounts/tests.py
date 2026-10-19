@@ -62,6 +62,8 @@ class ShippingAddressFormTests(TestCase):
         self.assertContains(response, 'name="state"')
         self.assertContains(response, 'select2-state')
         self.assertContains(response, 'select2-city')
+        self.assertContains(response, '/static/js/vendor/jquery-3.5.1.min.js')
+        self.assertContains(response, '/static/js/vendor/select2-4.0.13.min.js')
         self.assertContains(response, 'Use as my preferred shipping address')
         self.assertContains(response, 'Andhra Pradesh')
         response_html = response.content.decode()
@@ -919,6 +921,11 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertContains(initial_response, 'data-validate-on-blur')
         self.assertContains(initial_response, 'select2-city')
         self.assertContains(initial_response, 'select2-state')
+        initial_response_html = initial_response.content.decode()
+        self.assertLess(
+            initial_response_html.index('name="state"'),
+            initial_response_html.index('name="city"'),
+        )
 
         with patch('accounts.views.send_order_confirmation_email'), patch(
             'accounts.views.send_admin_new_order_email'

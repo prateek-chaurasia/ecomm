@@ -126,6 +126,12 @@ To run this project locally, please follow these steps:
 9.  **Access the application:**
     - Open your web browser and navigate to `http://127.0.0.1:8000/`.
 
+### Static asset caching
+
+Static CSS, JavaScript, and image URLs use content-hashed filenames. After deploying changes to static assets, run `python manage.py collectstatic --noinput` and configure the production static-file server or CDN to send `Cache-Control: public, max-age=31536000, immutable` for `/static/`. Do not apply this long-lived policy to HTML responses or `/media/` uploads.
+
+Frontend libraries and web fonts used by the site are stored locally under `public/media` and collected with the rest of the static files. Upstream license notices are retained with the vendored files; accompanying license texts are in `public/media/js/vendor/licenses/`. Razorpay's checkout script remains hosted by Razorpay as required for its payment integration. Serving local assets avoids third-party connection setup and lets the browser reuse the site's versioned static-asset cache; it does not reduce the libraries' transfer size.
+
 ## Troubleshooting
 
 If you encounter issues during setup, here are some common problems and their solutions:

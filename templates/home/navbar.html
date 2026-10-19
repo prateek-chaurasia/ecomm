@@ -38,7 +38,7 @@
 <header class="section-header">
   <nav class="navbar navbar-dark navbar-expand-md bg-dark">
     <div class="container">
-      <button class="navbar-toggler ml-auto" type="button" data-toggle="collapse" data-target="#navbarCollapse"
+      <button class="navbar-toggler ml-auto" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse"
         aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -74,7 +74,7 @@
             </a>
           </div>
         </div>
-        <div class="col-lg-5 col-sm-12">
+        <div class="col-lg-5 col-sm-12 col-12">
           <form method="GET" action="{% url 'product_search' %}" class="search" id="globalSearchForm">
             <div class="input-group w-100" style="position: relative;">
               <input type="text" class="form-control" name="q" id="globalSearchInput" placeholder="Search products" value="{{ query|default:"" }}" autocomplete="off" />
@@ -88,11 +88,11 @@
           </form>
         </div>
 
-        <div class="col-lg-4 col-sm-6 col-8">
+        <div class="col-lg-4 col-sm-6 col-8 header-widget-column">
           <div class="widgets-wrap float-md-right">
 
             <!-- Cart Icon with badge -->
-            <div class="widget-header mr-3">
+            <div class="widget-header mr-3 header-cart-widget">
               <a href="{% url 'cart' %}" class="icon icon-sm rounded-circle border">
                 <i class="fa fa-shopping-cart"></i>
               </a>
@@ -106,7 +106,7 @@
             </div>
 
             <!-- Profile Icon -->
-            <div class="widget-header icontext">
+            <div class="widget-header icontext header-account-widget">
               {% if user.is_authenticated %}
               {% if user.profile.profile_image_file or user.profile.profile_image %}
               <a href="{% url 'profile' username=user.username %}" class="icon icon-sm rounded-circle border">
@@ -245,6 +245,82 @@
 
   .brand-wrap {
     min-width: 0;
+  }
+
+  @media (max-width: 575.98px) {
+    .header-main > .container > .row {
+      row-gap: 0.75rem;
+    }
+
+    .header-main .brand-link .logo-text {
+      gap: 0.3rem;
+      font-size: 1.05rem;
+    }
+
+    .header-main .brand-icon {
+      width: 1.6rem;
+      height: 1.6rem;
+    }
+
+    .header-main .widgets-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.65rem;
+      width: 100%;
+      margin-top: 0 !important;
+    }
+
+    .header-main .header-widget-column {
+      margin-left: auto;
+    }
+
+    .header-main .header-cart-widget,
+    .header-main .header-account-widget {
+      display: flex;
+      align-items: center;
+      margin: 0 !important;
+    }
+
+    .header-main .header-account-widget {
+      order: 1;
+    }
+
+    .header-main .header-cart-widget {
+      order: 2;
+    }
+
+    .header-main .header-cart-widget .icon,
+    .header-main .header-account-widget > .icon {
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      font-size: 18px;
+    }
+
+    .header-main .header-account-widget > .icon img {
+      width: 40px;
+      height: 40px;
+    }
+
+    .header-main .header-account-widget .text {
+      width: auto;
+      min-width: 0;
+      font-size: 0.78rem;
+    }
+
+    .header-main .header-account-widget .text > span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .header-main .header-account-widget .text > div {
+      white-space: nowrap;
+    }
+
+    .header-main .header-account-widget form {
+      min-width: 0;
+    }
   }
 
   .brand-link .logo-domain {

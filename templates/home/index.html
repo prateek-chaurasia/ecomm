@@ -292,17 +292,21 @@
   </section>
   {% include 'base/alert.html' %}
   {% if banners %}
-  <div id="homeBannerCarousel" class="carousel slide mb-4" data-ride="carousel">
-    <ol class="carousel-indicators">
+  <div id="homeBannerCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+    <div class="carousel-indicators">
       {% for banner in banners %}
-      <li data-target="#homeBannerCarousel" data-slide-to="{{ forloop.counter0 }}" class="{% if forloop.first %}active{% endif %}"></li>
+      <button type="button" data-bs-target="#homeBannerCarousel" data-bs-slide-to="{{ forloop.counter0 }}"
+        class="{% if forloop.first %}active{% endif %}" {% if forloop.first %}aria-current="true"{% endif %}
+        aria-label="Slide {{ forloop.counter }}"></button>
       {% endfor %}
-    </ol>
+    </div>
     <div class="carousel-inner rounded shadow-sm">
       {% for banner in banners %}
       <div class="carousel-item {% if forloop.first %}active{% endif %}">
         {% if banner.image %}
-        <img src="{{ banner.image.url }}" class="d-block w-100 home-banner-image" alt="{{ banner.title }}">
+        <img {% if forloop.first %}src="{{ banner.image.url }}" loading="eager"{% else %}data-src="{{ banner.image.url }}"{% endif %}
+          class="d-block w-100 home-banner-image" alt="{{ banner.title }}"
+          {% if forloop.first %}fetchpriority="high"{% endif %} decoding="async">
         {% endif %}
         <div class="carousel-caption d-none d-md-block text-left" style="background: rgba(0,0,0,0.35); border-radius: 12px; padding: 20px; max-width: 420px; right: 8%; left: auto; bottom: 40px;">
           <h2>{{ banner.title }}</h2>
@@ -316,14 +320,14 @@
       </div>
       {% endfor %}
     </div>
-    <a class="carousel-control-prev" href="#homeBannerCarousel" role="button" data-slide="prev">
+    <button class="carousel-control-prev" type="button" data-bs-target="#homeBannerCarousel" data-bs-slide="prev"
+      aria-label="Previous slide">
       <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-      <span class="sr-only">Previous</span>
-    </a>
-    <a class="carousel-control-next" href="#homeBannerCarousel" role="button" data-slide="next">
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#homeBannerCarousel" data-bs-slide="next"
+      aria-label="Next slide">
       <span class="carousel-control-next-icon" aria-hidden="true"></span>
-      <span class="sr-only">Next</span>
-    </a>
+    </button>
   </div>
   {% endif %}
 

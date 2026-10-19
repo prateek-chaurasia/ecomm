@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from django.core import mail
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -313,6 +314,35 @@ class HomeBannerTests(TestCase):
         self.assertEqual(list(response.context['banners']), [banner])
         self.assertContains(response, 'Diwali Sale')
 
+    def test_homepage_prioritizes_only_the_first_banner_image(self):
+        first_banner = HomeBanner.objects.create(
+            title='Current banner',
+            image='banners/current.jpg',
+            starts_at=timezone.now(),
+            ends_at=timezone.now() + timedelta(days=1),
+        )
+        later_banner = HomeBanner.objects.create(
+            title='Next banner',
+            image='banners/next.jpg',
+            starts_at=first_banner.starts_at - timedelta(minutes=1),
+            ends_at=timezone.now() + timedelta(days=1),
+        )
+
+        response = self.client.get(reverse('index'))
+
+        response_html = ' '.join(response.content.decode().split())
+        self.assertContains(response, 'data-bs-ride="carousel"')
+        self.assertIn(
+            'src="/media/banners/current.jpg" loading="eager" class="d-block w-100 home-banner-image" '
+            'alt="Current banner" fetchpriority="high" decoding="async"',
+            response_html,
+        )
+        self.assertIn(
+            'data-src="/media/banners/next.jpg" class="d-block w-100 home-banner-image" '
+            'alt="Next banner" decoding="async"',
+            response_html,
+        )
+
     def test_active_marquee_announcements_render_in_order(self):
         MarqueeAnnouncement.objects.all().update(is_active=False)
         second = MarqueeAnnouncement.objects.create(
@@ -346,6 +376,52 @@ class SitemapTests(TestCase):
             '<loc>https://bundleofgifts.com/product/bundles/</loc>',
         )
         self.assertNotContains(response, 'https://example.com/')
+
+
+class RenderBlockingResourceTests(TestCase):
+    def test_base_template_defers_scripts_and_noncritical_stylesheets(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'code.jquery.com/jquery-3.5.1.min.js')
+        self.assertNotContains(response, 'select2@4.0.13/dist/js/select2.min.js')
+        self.assertNotContains(response, 'stackpath.bootstrapcdn.com/bootstrap/4.5.2')
+        self.assertNotContains(response, '@popperjs/core')
+        self.assertContains(
+            response,
+            '/static/js/vendor/bootstrap-5.3.0-alpha1.bundle.min.js',
+        )
+        self.assertContains(
+            response,
+            '/static/fonts/local-fonts.css',
+        )
+        self.assertContains(response, '/static/css/vendor/bootstrap-5.3.0-alpha1.min.css')
+        self.assertNotContains(
+            response,
+            '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/',
+            html=False,
+        )
+
+    def test_about_and_contact_animation_assets_are_local(self):
+        for url_name in ('about', 'contact'):
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, '/static/css/vendor/aos-2.3.1.css')
+                self.assertContains(response, '/static/js/vendor/aos-2.3.1.js')
+                self.assertNotContains(response, 'unpkg.com/aos')
+
+    def test_error_templates_use_local_assets(self):
+        not_found_page = render_to_string('404.html')
+        server_error_page = render_to_string('500.html')
+
+        self.assertIn('/static/fonts/local-fonts.css', not_found_page)
+        self.assertNotIn('cdnjs.cloudflare.com', not_found_page)
+        self.assertIn('/static/js/vendor/TweenLite-2.1.3.min.js', server_error_page)
+        self.assertIn('/static/js/vendor/CSSPlugin-2.1.3.min.js', server_error_page)
+        self.assertNotIn('cdnjs.cloudflare.com', server_error_page)
+        self.assertNotIn('fonts.googleapis.com', server_error_page)
 
 
 class InfiniteProductLoadingTests(TestCase):

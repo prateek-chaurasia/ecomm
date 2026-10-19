@@ -61,7 +61,7 @@
                 <td>
                   <figure class="itemside">
                     <div class="aside">
-                      <img src="{{ cart_item.product.product_images.first.image_url.url }}" class="img-sm" />
+                      <img src="{{ cart_item.product.product_images.first.image_url.url }}" class="img-sm" loading="lazy" decoding="async" />
                     </div>
                     <figcaption class="info">
                       <a href="{% url 'get_product' cart_item.product.slug %}" class="title text-dark">

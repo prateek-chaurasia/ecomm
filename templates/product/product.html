@@ -3,9 +3,56 @@
 {% block start %} {% load crispy_forms_tags product_description %}
 
 <style>
-  #mainImage {
-    transition: transform 0.25s ease;
+  .product-main-image {
     cursor: zoom-in;
+  }
+
+  .product-image-viewer {
+    position: fixed;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: 3rem 1rem 1rem;
+    overflow: auto;
+    border: 0;
+    background: transparent;
+  }
+
+  .product-image-viewer[open] {
+    display: flex;
+  }
+
+  .product-image-viewer:not([open]) {
+    display: none;
+  }
+
+  .product-image-viewer::backdrop {
+    background: rgba(0, 0, 0, 0.9);
+  }
+
+  .product-image-viewer img {
+    display: block;
+    max-width: min(100%, 1200px);
+    max-height: calc(100dvh - 4rem);
+    object-fit: contain;
+  }
+
+  .product-image-viewer-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    border: 0;
+    border-radius: 50%;
+    padding: 0.25rem 0.65rem;
+    background: #fff;
+    color: #111827;
+    font-size: 1.5rem;
+    line-height: 1.4;
   }
 
   .carousel-item {
@@ -26,11 +73,6 @@
     text-align: center;
     white-space: nowrap;
     pointer-events: none;
-  }
-
-  .zoomed-in {
-    transform: scale(2);
-    cursor: zoom-out;
   }
 
   .product-detail-card {
@@ -540,7 +582,10 @@
               <div class="carousel-inner">
                 {% for image in product.product_images.all %}
                 <div class="carousel-item {% if forloop.first %}active{% endif %}">
-                  <img id="mainImage" src="{{ image.image_url.url }}" alt="{{ product.product_name }}" />
+                  <img class="product-main-image" src="{{ image.image_url.url }}" alt="{{ product.product_name }}"
+                    role="button" tabindex="0" aria-label="Open larger image of {{ product.product_name }}"
+                    loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async"
+                    {% if forloop.first %}fetchpriority="high"{% endif %} />
                   {% if not product.in_stock %}
                   <span class="stock-status-overlay" role="status">Out of stock</span>
                   {% endif %}
@@ -552,13 +597,18 @@
               <div class="form-row thumbs-wrap mt-5 d-flex justify-content-center">
                 {% for image in product.product_images.all %}
                 <p class="item-thumb mx-2">
-                  <img src="{{image.image_url.url}}" class="img-thumbnail" onclick="updateMainImage(this.src)" />
+                  <img src="{{image.image_url.url}}" class="img-thumbnail" loading="lazy" decoding="async" onclick="updateMainImage(this.src)" />
                 </p>
                 {% endfor %}
               </div>
               <!-- Thumnbs-Wrap End.// -->
             </div>
           </article>
+          <dialog class="product-image-viewer" id="productImageViewer"
+            aria-label="Product image viewer">
+            <button class="product-image-viewer-close" type="button" aria-label="Close image viewer">&times;</button>
+            <img id="productImageViewerImage" alt="">
+          </dialog>
           <!-- Gallery-Wrap End.// -->
         </aside>
         <main class="col-md-6 border-left">
@@ -1767,7 +1817,8 @@
   }
 
   function updateMainImage(src) {
-    document.getElementById("mainImage").src = src;
+    const mainImage = document.querySelector(".product-main-image");
+    if (mainImage) mainImage.src = src;
   }
 
   function setDeleteAction(actionUrl) {
@@ -1854,14 +1905,30 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    const mainImage = document.getElementById("mainImage");
+    const mainImage = document.querySelector(".product-main-image");
+    const imageViewer = document.getElementById("productImageViewer");
+    const viewerImage = document.getElementById("productImageViewerImage");
+    const closeViewerButton = imageViewer?.querySelector(".product-image-viewer-close");
+    if (!mainImage || !imageViewer || !viewerImage || !closeViewerButton) return;
 
-    mainImage.addEventListener("click", function () {
-      if (mainImage.classList.contains("zoomed-in")) {
-        mainImage.classList.remove("zoomed-in");
-      } else {
-        mainImage.classList.add("zoomed-in");
+    function openImageViewer() {
+      viewerImage.src = mainImage.currentSrc || mainImage.src;
+      viewerImage.alt = mainImage.alt;
+      imageViewer.showModal();
+    }
+
+    mainImage.addEventListener("click", openImageViewer);
+    mainImage.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openImageViewer();
       }
+    });
+    closeViewerButton.addEventListener("click", function () {
+      imageViewer.close();
+    });
+    imageViewer.addEventListener("click", function (event) {
+      if (event.target === imageViewer) imageViewer.close();
     });
   });
 

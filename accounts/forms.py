@@ -194,6 +194,13 @@ class ShippingAddressForm(forms.ModelForm):
 class GuestShippingAddressForm(ShippingAddressForm):
     email = forms.EmailField(required=True, label='Email address')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        field_order = list(self.fields)
+        field_order.remove('state')
+        field_order.insert(field_order.index('city'), 'state')
+        self.order_fields(field_order)
+
 
 class CustomPasswordChangeForm(PasswordChangeForm):
     old_password = forms.CharField(

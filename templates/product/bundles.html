@@ -13,7 +13,7 @@
       {% for offer in offers %}
       <div class="col-md-6 col-lg-4 mb-4">
         <article class="card h-100 shadow-sm">
-          {% if offer.banner %}<img src="{{ offer.banner.url }}" class="card-img-top" style="height:210px;object-fit:cover" alt="{{ offer.title }}">{% endif %}
+          {% if offer.banner %}<img src="{{ offer.banner.url }}" class="card-img-top" loading="lazy" decoding="async" style="height:210px;object-fit:cover" alt="{{ offer.title }}">{% endif %}
           <div class="card-body d-flex flex-column">
             <h2 class="h4">{{ offer.title }}</h2>
             <p class="text-muted flex-grow-1">{{ offer.description }}</p>

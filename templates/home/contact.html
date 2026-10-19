@@ -999,16 +999,13 @@
 </style>
 
 <!-- AOS Animation Library -->
-<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-<script>
-  AOS.init({
+<link rel="preload" as="style" href="{% static 'css/vendor/aos-2.3.1.css' %}" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link href="{% static 'css/vendor/aos-2.3.1.css' %}" rel="stylesheet"></noscript>
+<script async src="{% static 'js/vendor/aos-2.3.1.js' %}" onload="AOS.init({
     duration: 800,
     easing: 'ease-out-cubic',
     once: true,
     offset: 100
-  });
-
-</script>
+  });"></script>
 
 {% endblock %}
