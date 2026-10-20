@@ -396,27 +396,24 @@
   }
 
   .return-policy-section {
-    flex: 1;
-    min-width: 0;
+    width: fit-content;
+    max-width: 100%;
   }
 
   .return-policy-heading {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+    display: block;
     margin: 1.5rem 0;
-    padding: 0.25rem 0;
-    border-top: 1px solid #dbe3e8;
-    border-bottom: 1px solid #dbe3e8;
   }
 
   .return-policy-toggle {
     align-items: center;
     cursor: pointer;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     list-style: none;
     gap: 0.75rem;
+    width: fit-content;
+    max-width: 100%;
   }
 
   .return-policy-toggle::-webkit-details-marker {
@@ -438,6 +435,11 @@
 
   .return-policy-content {
     padding: 0 0 1rem;
+    width: min(100%, 760px);
+  }
+
+  .return-policy-section[open] .return-policy-content {
+    margin-top: 1rem;
   }
 
   .return-policy-cards {
@@ -463,14 +465,14 @@
   }
 
   .product-return-badge {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     flex: 0 0 auto;
-    margin-right: 1rem;
     padding: 0.4rem 0.8rem;
     border-radius: 999px;
     background: #e8f4ec;
     color: #256b43;
-    font-size: 0.82rem;
+    font-size: 1rem;
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
@@ -815,11 +817,26 @@
     </div>
 
     <div class="return-policy-heading">
+      {% if product.return_details.return_policy == 'non_returnable' %}
+      <span class="product-return-badge non-returnable">Non-Returnable</span>
+      {% else %}
       <details class="return-policy-section" aria-label="Return and refund policy">
+        {% if product.return_details.return_policy == 'returnable' %}
+        <summary class="product-return-badge return-policy-toggle">
+          Returnable
+          <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
+        </summary>
+        {% elif product.return_details.return_policy == 'replaceable' %}
+        <summary class="product-return-badge replaceable return-policy-toggle">
+          Replaceable
+          <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
+        </summary>
+        {% else %}
         <summary class="title padding-y-sm return-policy-toggle">
           <span><i class="fas fa-undo mr-2" aria-hidden="true"></i>Return and Refund Policy</span>
           <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
         </summary>
+        {% endif %}
         <div class="return-policy-content">
           <div class="return-policy-cards">
             <section class="return-policy-card return-details-section">
@@ -863,12 +880,6 @@
           </div>
         </div>
       </details>
-      {% if product.return_details.return_policy == 'returnable' %}
-      <span class="product-return-badge">Returnable</span>
-      {% elif product.return_details.return_policy == 'replaceable' %}
-      <span class="product-return-badge replaceable">Replaceable</span>
-      {% elif product.return_details.return_policy == 'non_returnable' %}
-      <span class="product-return-badge non-returnable">Non-returnable</span>
       {% endif %}
     </div>
 

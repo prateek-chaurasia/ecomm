@@ -297,11 +297,70 @@ class ReturnRefundPolicyTests(TestCase):
         )
 
 
+class DehradunShoppingGuideTests(TestCase):
+    def test_guide_shows_seo_content_and_links_all_database_categories(self):
+        toys = Category.objects.create(category_name='Toys')
+        hidden_category = Category.objects.create(category_name='Hidden products')
+        empty_category = Category.objects.create(category_name='Empty category')
+        Product.objects.create(
+            product_name='Remote Control Car',
+            category=toys,
+            price=1500,
+            product_desription='A remote control toy car.',
+        )
+        Product.objects.create(
+            product_name='Unlisted item',
+            category=hidden_category,
+            price=500,
+            product_desription='Not shown in the catalog.',
+            show_in_catalog=False,
+        )
+
+        response = self.client.get(reverse('dehradun_shopping_guide'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<title>Online Shopping in Dehradun: Gifts, Toys & More | BundleofGifts.com</title>',
+        )
+        self.assertContains(response, 'Open-Box Inspection in the Local Service Range')
+        self.assertContains(response, 'decline it immediately')
+        self.assertContains(response, 'Cash on Delivery, UPI')
+        self.assertContains(response, 'Toys')
+        self.assertEqual(
+            list(response.context['guide_categories']),
+            [empty_category, hidden_category, toys],
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("category_products", kwargs={"slug": toys.slug})}"',
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("category_products", kwargs={"slug": empty_category.slug})}"',
+        )
+
+    def test_guide_is_linked_from_footer_and_included_in_sitemap(self):
+        guide_url = reverse('dehradun_shopping_guide')
+
+        page_response = self.client.get(guide_url)
+        sitemap_response = self.client.get(reverse('sitemap'))
+
+        self.assertContains(page_response, f'href="{guide_url}"')
+        home_response = self.client.get(reverse('index'))
+        self.assertContains(home_response, f'href="{guide_url}"')
+        self.assertContains(
+            sitemap_response,
+            guide_url,
+        )
+
+
 class HomeBannerTests(TestCase):
     def test_public_pages_do_not_skip_heading_levels(self):
         for route_name in (
             'index',
             'about',
+            'dehradun_shopping_guide',
             'contact',
             'privacy-policy',
             'terms-and-conditions',
@@ -382,6 +441,21 @@ class HomeBannerTests(TestCase):
         self.assertContains(
             response,
             'href="/static/css/ui.min.css" rel="stylesheet"',
+        )
+
+    def test_home_page_includes_search_relevant_seo_metadata(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<meta name="keywords" content="toys, kitchenware and households, '
+            'kitchenware, 2.4 ghz cars, climber cross country 2.4 ghz, '
+            'online gifts and toys delivery dehradun">',
+        )
+        self.assertContains(
+            response,
+            '<meta name="description" content="Shop toys, kitchenware, household essentials and gifts online at BundleofGifts.com, with delivery options in Dehradun.">',
         )
 
     def test_authenticated_nav_profile_link_has_a_unique_accessible_name(self):
@@ -480,6 +554,27 @@ class HomeBannerTests(TestCase):
 
 
 class SitemapTests(TestCase):
+    @override_settings(PUBLIC_BASE_URL='https://bundleofgifts.com/')
+    def test_robots_txt_allows_public_pages_and_uses_configured_sitemap_url(self):
+        response = self.client.get(
+            reverse('robots_txt'),
+            HTTP_HOST='testserver',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/plain')
+        self.assertContains(response, 'User-agent: *')
+        self.assertContains(response, 'Allow: /')
+        self.assertContains(response, 'Disallow: /admin/')
+        self.assertContains(response, 'Disallow: /accounts/')
+        self.assertContains(response, 'Disallow: /product/wishlist/')
+        self.assertContains(response, 'Disallow: /product/add-to-cart/')
+        self.assertContains(
+            response,
+            'Sitemap: https://bundleofgifts.com/sitemap.xml',
+        )
+        self.assertNotContains(response, 'testserver')
+
     @override_settings(PUBLIC_BASE_URL='https://bundleofgifts.com')
     def test_sitemap_uses_public_domain_instead_of_sites_framework_domain(self):
         response = self.client.get(reverse('sitemap'))

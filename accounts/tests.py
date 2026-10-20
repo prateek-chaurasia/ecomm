@@ -2583,6 +2583,11 @@ class ReturnWorkflowTests(TestCase):
             ],
         )
         self.assertContains(response, 'id="reason-details-field"')
+        self.assertContains(response, 'id="return-reason-required"')
+        self.assertContains(response, 'id="replacement-reason-required"')
+        self.assertContains(response, 'class="required-indicator"')
+        self.assertContains(response, '(optional for returns)')
+        self.assertContains(response, '(required for replacements)')
         self.assertNotContains(response, 'id="cod-refund-details"')
 
     @override_settings(ADMIN_EMAIL='returns@example.com')
@@ -2595,6 +2600,11 @@ class ReturnWorkflowTests(TestCase):
         self.assertContains(response, 'id="cod-refund-details"')
         self.assertContains(response, 'UPI ID')
         self.assertContains(response, 'Bank account details')
+        self.assertContains(response, 'id="refund-method-required"')
+        self.assertContains(response, 'id="refund-upi-required"')
+        self.assertContains(response, 'id="refund-account-holder-required"')
+        self.assertContains(response, 'id="refund-account-number-required"')
+        self.assertContains(response, 'id="refund-ifsc-required"')
 
         with TemporaryDirectory() as media_root, override_settings(
             MEDIA_ROOT=media_root,
@@ -2883,7 +2893,18 @@ class ReturnWorkflowTests(TestCase):
         self.assertEqual(return_request.reason, 'No longer needed')
         self.assertEqual(return_request.request_images.count(), 1)
 
-    def test_return_request_requires_product_photos(self):
+    def test_return_request_can_be_submitted_without_product_photos(self):
+        page_response = self.client.get(
+            reverse('return_request', args=[self.order.order_id]))
+
+        self.assertContains(page_response, '(optional for returns)')
+        self.assertContains(page_response, '(required for replacements)')
+        self.assertNotContains(
+            page_response,
+            'id="request_images" name="request_images" type="file" accept="image/*" multiple required',
+            html=False,
+        )
+
         response = self.client.post(
             reverse('return_request', args=[self.order.order_id]),
             {
@@ -2893,12 +2914,11 @@ class ReturnWorkflowTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            'Upload 1–5 clear photos of the product and its condition.',
-        )
-        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
+        self.assertEqual(response.status_code, 302)
+        return_request = ReturnRequest.objects.get(order=self.order)
+        self.assertEqual(return_request.status, ReturnRequest.Status.REQUESTED)
+        self.assertEqual(return_request.reason, 'No longer needed')
+        self.assertEqual(return_request.request_images.count(), 0)
 
     @override_settings(ADMIN_EMAIL='returns@example.com')
     def test_customer_can_request_replacement_with_configurable_reason_and_photos(self):
@@ -2939,6 +2959,44 @@ class ReturnWorkflowTests(TestCase):
         self.assertIn('Wrong item received', mail.outbox[-1].body)
         self.assertIn('Request photos: 1', mail.outbox[-1].body)
 
+    def test_replacement_request_requires_product_photo(self):
+        from products.models import ReturnDetails
+
+        ReturnDetails.objects.create(
+            product=self.product,
+            is_returnable=True,
+            return_policy='replaceable',
+            return_window_days=4,
+        )
+        response = self.client.get(
+            reverse('return_request', args=[self.order.order_id]))
+
+        self.assertContains(response, '(required for replacements)')
+        self.assertRegex(
+            response.content.decode(),
+            r'id="request_images" name="request_images" type="file" '
+            r'accept="image/\*" multiple\s+required',
+        )
+
+        replacement_reason = ReplacementReason.objects.get(
+            name='Wrong item received')
+        response = self.client.post(
+            reverse('return_request', args=[self.order.order_id]),
+            {
+                'action': 'request',
+                'request_type': ReturnRequest.RequestType.REPLACEMENT,
+                'replacement_reason': replacement_reason.pk,
+                'reason': 'The delivered item does not match the order.',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Upload at least 1 clear product photo for a replacement request.',
+        )
+        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
+
     def test_replacement_can_be_requested_for_products_marked_replaceable(self):
         from products.models import ReturnDetails
 
@@ -2951,9 +3009,75 @@ class ReturnWorkflowTests(TestCase):
         response = self.client.get(
             reverse('return_request', args=[self.order.order_id]))
 
+        self.assertEqual(
+            list(response.context['form'].fields['request_type'].choices),
+            [(ReturnRequest.RequestType.REPLACEMENT, 'Replacement')],
+        )
+        self.assertEqual(
+            response.context['request_form_heading'],
+            'Start a replacement',
+        )
+        self.assertEqual(
+            response.context['default_request_type'],
+            ReturnRequest.RequestType.REPLACEMENT,
+        )
+        self.assertContains(response, '<h2 id="request-form-heading">Start a replacement</h2>')
+        self.assertContains(
+            response,
+            f'name="request_type" value="{ReturnRequest.RequestType.REPLACEMENT}" '
+            'id="id_request_type_0" required checked',
+            html=False,
+        )
+        response_html = response.content.decode()
+        self.assertRegex(
+            response_html,
+            r'<div[^>]*id="return-reason-field"[^>]*\bhidden\b',
+        )
+        self.assertRegex(
+            response_html,
+            r'<div[^>]*id="return-shipping-notice"[^>]*\bhidden\b',
+        )
         self.assertContains(response, 'Replacement reason')
         self.assertContains(response, 'Wrong item received')
+        self.assertNotContains(response, 'Send an eligible item back for a refund')
         self.assertNotContains(response, 'is not eligible for a replacement')
+
+    def test_returnable_product_shows_return_and_replacement_options(self):
+        response = self.client.get(
+            reverse('return_request', args=[self.order.order_id]))
+
+        self.assertEqual(
+            list(response.context['form'].fields['request_type'].choices),
+            list(ReturnRequest.RequestType.choices),
+        )
+        self.assertEqual(
+            response.context['request_form_heading'],
+            'Start a return or replacement',
+        )
+        self.assertContains(response, 'Send an eligible item back for a refund')
+        self.assertContains(response, 'Request the same item again')
+
+    def test_replaceable_only_product_rejects_return_submission(self):
+        from products.models import ReturnDetails
+
+        ReturnDetails.objects.create(
+            product=self.product,
+            is_returnable=True,
+            return_policy='replaceable',
+            return_window_days=4,
+        )
+        response = self.client.post(
+            reverse('return_request', args=[self.order.order_id]),
+            {
+                'action': 'request',
+                'request_type': ReturnRequest.RequestType.RETURN,
+                'return_reason': 'no_longer_needed',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Returnable gift is not eligible for a return.')
+        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
 
     def test_replacement_admin_lifecycle_updates_customer(self):
         replacement_reason = ReplacementReason.objects.get(

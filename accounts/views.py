@@ -1315,6 +1315,27 @@ def return_request(request, order_id, access_token=None):
         ReturnRequest.RequestType.REPLACEMENT: return_eligibility_error(
             order, ReturnRequest.RequestType.REPLACEMENT),
     }
+    available_request_types = tuple(
+        choice for choice in ReturnRequest.RequestType.choices
+        if not eligibility_errors[choice[0]]
+    )
+    default_request_type = (
+        available_request_types[0][0]
+        if len(available_request_types) == 1
+        else ''
+    )
+    if default_request_type:
+        form.initial['request_type'] = default_request_type
+
+    if len(available_request_types) == 1:
+        request_form_heading = (
+            f"Start a {available_request_types[0][1].lower()}"
+        )
+    elif available_request_types:
+        request_form_heading = 'Start a return or replacement'
+    else:
+        request_form_heading = 'Return or replacement unavailable'
+    form.fields['request_type'].choices = available_request_types
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1326,6 +1347,7 @@ def return_request(request, order_id, access_token=None):
                 )
             else:
                 form = ReturnRequestForm(request.POST, order=order)
+                form.fields['request_type'].choices = available_request_types
                 request_type = request.POST.get(
                     'request_type', ReturnRequest.RequestType.RETURN)
                 eligibility_error = eligibility_errors.get(
@@ -1334,13 +1356,18 @@ def return_request(request, order_id, access_token=None):
                     messages.error(request, eligibility_error)
                 elif not form.is_valid():
                     messages.error(request, 'Please correct the request details below.')
-                elif not 1 <= len(request.FILES.getlist('request_images')) <= 5:
+                elif (
+                    request_type == ReturnRequest.RequestType.REPLACEMENT
+                    and not request.FILES.getlist('request_images')
+                ):
                     image_error = (
-                        'Upload 1–5 clear photos of the product and its condition.'
+                        'Upload at least 1 clear product photo for a replacement request.'
                     )
-                    messages.error(
-                        request, image_error,
-                    )
+                    messages.error(request, image_error)
+                    form.add_error(None, image_error)
+                elif len(request.FILES.getlist('request_images')) > 5:
+                    image_error = 'Upload no more than 5 product photos.'
+                    messages.error(request, image_error)
                     form.add_error(None, image_error)
                 elif any(
                     image.size > 5 * 1024 * 1024
@@ -1361,15 +1388,11 @@ def return_request(request, order_id, access_token=None):
                             request,
                             'Upload valid image files in JPG, PNG, or another supported image format.',
                         )
-                        validated_images = []
                         form.add_error(
                             None,
                             'Upload valid image files in JPG, PNG, or another supported image format.',
                         )
-                    if (
-                        validated_images
-                        and form.is_valid()
-                    ):
+                    else:
                         with transaction.atomic():
                             current_request = form.save(commit=False)
                             current_request.order = order
@@ -1510,6 +1533,8 @@ def return_request(request, order_id, access_token=None):
             if current_request else []
         ),
         'form': form,
+        'default_request_type': default_request_type,
+        'request_form_heading': request_form_heading,
         'return_eligibility_error': eligibility_errors[
             ReturnRequest.RequestType.RETURN],
         'replacement_eligibility_error': eligibility_errors[

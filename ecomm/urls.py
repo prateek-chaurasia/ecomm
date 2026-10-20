@@ -27,7 +27,7 @@ sitemaps = {
 
 
 def robots_txt(request):
-    sitemap_url = request.build_absolute_uri('/sitemap.xml')
+    sitemap_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/sitemap.xml"
     content = f'User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /accounts/\nDisallow: /product/wishlist/\nDisallow: /product/add-to-cart/\nSitemap: {sitemap_url}\n'
     return HttpResponse(content, content_type='text/plain')
 

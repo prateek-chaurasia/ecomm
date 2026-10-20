@@ -58,6 +58,7 @@ class StaticSitemap(PublicSitemap):
             'categories',
             'bundle_offers',
             'about',
+            'dehradun_shopping_guide',
             'contact',
             'privacy-policy',
             'terms-and-conditions',

@@ -648,7 +648,22 @@ class ProductReturnDetailsTests(TestCase):
         self.assertContains(response, '14 days')
         self.assertContains(response, 'Refunds for this product are store credit only.')
         self.assertContains(response, 'class="return-policy-cards"')
-        self.assertContains(response, 'class="product-return-badge">Returnable</span>')
+        self.assertContains(
+            response,
+            '<summary class="product-return-badge return-policy-toggle">',
+        )
+        self.assertNotContains(
+            response,
+            '>Return and Refund Policy<',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            '.return-policy-section[open] .return-policy-content {\n'
+            '    margin-top: 1rem;',
+            html=False,
+        )
+        self.assertContains(response, 'Returnable')
         self.assertContains(response, 'Guidelines:</strong> Item must be unused')
         self.assertNotContains(response, 'Generic return summary.')
         self.assertNotContains(response, 'Generic refund summary.')
@@ -680,17 +695,35 @@ class ProductReturnDetailsTests(TestCase):
                 response = self.client.get(reverse('get_product', args=[product.slug]))
 
                 self.assertEqual(response.status_code, 200)
-                self.assertContains(response, f'>{status}</span>')
                 if policy == 'non_returnable':
+                    self.assertContains(
+                        response,
+                        '<span class="product-return-badge non-returnable">'
+                        'Non-Returnable</span>',
+                    )
+                    self.assertNotContains(
+                        response,
+                        '<details class="return-policy-section"',
+                        html=False,
+                    )
                     self.assertNotContains(response, guidance)
                 else:
+                    badge_class = (
+                        'product-return-badge return-policy-toggle'
+                        if policy == 'returnable'
+                        else 'product-return-badge replaceable return-policy-toggle'
+                    )
+                    self.assertContains(
+                        response,
+                        f'<summary class="{badge_class}">',
+                    )
+                    self.assertNotContains(
+                        response,
+                        '>Return and Refund Policy<',
+                        html=False,
+                    )
+                    self.assertContains(response, status)
                     self.assertContains(response, guidance)
-                page = response.content.decode()
-                details_end = page.index(
-                    '</details>', page.index('<details class="return-policy-section"'))
-                badge_position = page.index(
-                    '<span class="product-return-badge', details_end)
-                self.assertLess(details_end, badge_position)
 
     def test_generic_policy_is_used_when_product_has_no_return_details(self):
         generic_policy = ReturnRefundPolicy.get_solo()

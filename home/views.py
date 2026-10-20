@@ -185,6 +185,15 @@ def about(request):
     return render(request, 'home/about.html')
 
 
+def dehradun_shopping_guide(request):
+    categories = Category.objects.order_by('category_name')
+    return render(
+        request,
+        'home/dehradun_shopping_guide.html',
+        {'guide_categories': categories},
+    )
+
+
 def terms_and_conditions(request):
     return render(request, 'home/terms_and_conditions.html')
 

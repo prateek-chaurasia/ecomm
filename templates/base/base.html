@@ -9,6 +9,7 @@
 
   <title>{% block title %}BundleofGifts.com | Thoughtful Gifts for Every Occasion{% endblock %}</title>
   <meta name="description" content="{% block meta_description %}BundleofGifts.com makes thoughtful gifting simple with curated gifts, gift bundles, and convenient delivery.{% endblock %}">
+  {% block meta_keywords %}{% endblock %}
   <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">
   <link rel="icon" type="image/svg+xml" href="{% static 'images/bundleofgifts-icon.svg' %}" sizes="any">
   <link rel="icon" type="image/png" href="{% static 'images/bundleofgifts-icon.png' %}">

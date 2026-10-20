@@ -1,0 +1,123 @@
+{% extends "base/base.html" %}
+{% block title %}Online Shopping in Dehradun: Gifts, Toys & More | BundleofGifts.com{% endblock %}
+{% block meta_description %}Shop online in Dehradun for gifts, toys, and products from our current catalog. Explore local delivery options, payment methods, and shopping information from BundleofGifts.com.{% endblock %}
+{% block social_meta %}
+<meta property="og:type" content="article">
+<meta property="og:title" content="Online Shopping in Dehradun: Gifts, Toys & More | BundleofGifts.com">
+<meta property="og:description" content="Explore gifts, toys, and products in our current catalog, with local delivery options in Dehradun.">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Online Shopping in Dehradun | BundleofGifts.com">
+<meta name="twitter:description" content="Explore our current product catalog, local delivery options, and convenient payment methods in Dehradun.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Online Shopping in Dehradun: Gifts, Toys & More",
+  "description": "Shopping guide for BundleofGifts.com customers in Dehradun.",
+  "url": "{{ request.build_absolute_uri }}"
+}
+</script>
+{% endblock %}
+{% block start %}
+<main class="container my-5">
+  <article class="row justify-content-center">
+    <div class="col-lg-10">
+      <header class="mb-5">
+        <h1 class="mb-3">Online Shopping in Dehradun for Gifts, Toys & More</h1>
+        <p class="lead">
+          BundleofGifts.com is a locally focused online store serving Dehradun. Browse the products
+          currently listed in our catalog, place an order online, and check delivery choices for
+          your address during checkout.
+        </p>
+      </header>
+
+      <section class="mb-5" aria-labelledby="guide-categories">
+        <h2 id="guide-categories">Explore Products Available Now</h2>
+        <p>
+          Our catalog changes as products are added or become unavailable. Use the category links
+          below to see current listings, descriptions, prices, and availability.
+        </p>
+        {% if guide_categories %}
+        <ul>
+          {% for category in guide_categories %}
+          <li><a href="{% url 'category_products' category.slug %}">{{ category.category_name }}</a></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p>Visit our <a href="{% url 'index' %}">current product catalog</a> to see what is available.</p>
+        {% endif %}
+        <p>
+          Whether you are choosing a present or shopping for your home, check the live product
+          pages for the latest selection and item-specific details.
+        </p>
+      </section>
+
+      <section class="mb-5" aria-labelledby="guide-delivery">
+        <h2 id="guide-delivery">Local Delivery Options in Dehradun</h2>
+        <p>
+          Delivery choices and estimated timelines depend on your address, order, product
+          availability, and other conditions. For eligible locations and orders, express delivery
+          may be available in {{ delivery_guideline.express_delivery_min_hours }}–{{ delivery_guideline.express_delivery_max_hours }} hours.
+          Next-day delivery may also be offered where available. Confirm the options shown for your
+          address at checkout before placing your order.
+        </p>
+        <p>{{ delivery_guideline.details|linebreaksbr }}</p>
+      </section>
+
+      <section class="mb-5" aria-labelledby="guide-open-box">
+        <h2 id="guide-open-box">Open-Box Inspection in the Local Service Range</h2>
+        <p>
+          Open-box inspection is available only for deliveries within the defined range of our base
+          location, not across all delivery areas. Where this service is offered, you can inspect
+          the product at delivery and decline it immediately if it does not meet your expectations.
+          Check whether your address is eligible when arranging delivery.
+
+          Once you add a product to your cart and proceed to checkout, the delivery options will be displayed for your address. 
+          If open-box inspection is available, it will be listed as a delivery option.
+        </p>
+      </section>
+
+      <section class="mb-5" aria-labelledby="guide-payments">
+        <h2 id="guide-payments">Convenient Payment Methods</h2>
+        <p>
+          We understand that every customer has their preferred way of paying. 
+          That's why we offer Cash on Delivery (COD) along with the flexibility to pay through UPI at the time of delivery.
+          Shop with Confidence Customers can place orders without making an upfront payment. 
+          This builds trust, especially when shopping from a local online store for the first time.
+        </p>
+      </section>
+
+      <section class="mb-5" aria-labelledby="guide-gifting">
+        <h2 id="guide-gifting">Find a Gift for the Occasion</h2>
+        <p>
+          Browse our current catalog for gift ideas for birthdays, anniversaries, weddings,
+          housewarmings, festivals, and other special occasions. Product pages show the details
+          you need to compare options and choose a gift that suits the person and occasion.
+        </p>
+        <p><a href="{% url 'index' %}">Browse gifts and products</a> or explore our <a href="{% url 'categories' %}">product categories</a>.</p>
+      </section>
+
+      <section class="mb-5" aria-labelledby="guide-value">
+        <h2 id="guide-value">Everyday Value and Product Information</h2>
+        <p>
+          We work to offer prices that are lower than many traditional retail stores and online
+          alternatives. Prices and offers vary by product; the current price and any applicable
+          discount are shown on each product page.
+        </p>
+      </section>
+
+      <section aria-labelledby="guide-local">
+        <h2 id="guide-local">A Local Online Shopping Destination</h2>
+        <p>
+          From finding a gift to browsing products for everyday needs, BundleofGifts.com brings
+          online shopping and locally focused service together for customers in Dehradun. Browse
+          the current catalog, review the item and delivery details, and contact us if you need
+          help before ordering.
+        </p>
+        <p><a href="{% url 'contact' %}">Contact our team</a> for assistance.</p>
+      </section>
+    </div>
+  </article>
+</main>
+{% endblock %}

@@ -313,6 +313,12 @@
     color: var(--return-muted);
   }
 
+  .required-indicator {
+    margin-left: 0.2rem;
+    color: #b42318;
+    font-weight: 800;
+  }
+
   .return-form-section {
     padding: 1rem 0;
     border-top: 1px solid #edf1f5;
@@ -729,15 +735,15 @@
           {% csrf_token %}
           <input type="hidden" name="action" value="shipment">
           <div class="form-group">
-            <label for="courier_partner_name">Courier partner</label>
+            <label for="courier_partner_name">Courier partner <span class="required-indicator" aria-hidden="true">*</span></label>
             <input class="form-control" id="courier_partner_name" name="courier_partner_name" maxlength="120" required>
           </div>
           <div class="form-group">
-            <label for="tracking_number">Tracking number</label>
+            <label for="tracking_number">Tracking number <span class="required-indicator" aria-hidden="true">*</span></label>
             <input class="form-control" id="tracking_number" name="tracking_number" maxlength="120" required>
           </div>
           <div class="form-group">
-            <label for="shipment_images">Shipment photos</label>
+            <label for="shipment_images">Shipment photos <span class="required-indicator" aria-hidden="true">*</span></label>
             <div class="return-upload-box">
               <input class="form-control-file" id="shipment_images" name="shipment_images" type="file" accept="image/*" multiple required>
               <small class="form-text text-muted">Choose 1–5 photos, up to 5 MB each.</small>
@@ -802,13 +808,23 @@
     {% else %}
     <div class="return-form-layout">
       <section class="return-card return-form-card" aria-labelledby="request-form-heading">
-        <h2 id="request-form-heading">Start a return or replacement</h2>
-        <p class="return-form-intro">Choose the option that best fits your order and share the requested details with us.</p>
-        <form method="post" enctype="multipart/form-data" id="return-request-form">
+        <h2 id="request-form-heading">{{ request_form_heading }}</h2>
+        {% if 'return' in request_form_heading %}
+          <p class="return-form-intro">Choose the option that best fits your order and share the requested details with us.</p>
+        {% endif %}
+        <form method="post" enctype="multipart/form-data" id="return-request-form"
+          data-default-request-type="{{ default_request_type }}">
           {% csrf_token %}
           <input type="hidden" name="action" value="request">
           <fieldset class="return-form-section">
-            <legend>What would you like to do?</legend>
+            <legend>
+              {% if 'return' in request_form_heading %}
+                What would you like to do?
+              {% endif %}
+              {% if available_request_types %}
+              <span class="required-indicator" aria-hidden="true">*</span>
+              {% endif %}
+            </legend>
             <div class="return-choice-list">
               {% for choice in form.request_type %}
               <label class="return-choice" for="{{ choice.id_for_label }}">
@@ -827,50 +843,89 @@
           <div class="alert alert-warning" data-eligibility="replacement"><i class="fas fa-info-circle mr-1" aria-hidden="true"></i>{{ replacement_eligibility_error }}</div>
           {% endif %}
 
-          <div class="return-form-section form-group" id="replacement-reason-field">
-            <label for="{{ form.replacement_reason.id_for_label }}">Replacement reason</label>
+          <div class="return-form-section form-group" id="replacement-reason-field"
+            {% if default_request_type != 'replacement' %}hidden{% endif %}>
+            <label for="{{ form.replacement_reason.id_for_label }}">
+              Replacement reason
+              <span class="required-indicator" id="replacement-reason-required"
+                {% if default_request_type != 'replacement' %}hidden{% endif %}
+                aria-hidden="true">*</span>
+            </label>
             {{ form.replacement_reason }}
             {% for error in form.replacement_reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
           </div>
-          <div class="return-form-section form-group" id="return-reason-field">
-            <label for="{{ form.return_reason.id_for_label }}">Reason for return</label>
+          <div class="return-form-section form-group" id="return-reason-field"
+            {% if default_request_type == 'replacement' %}hidden{% endif %}>
+            <label for="{{ form.return_reason.id_for_label }}">
+              Reason for return
+              <span class="required-indicator" id="return-reason-required"
+                {% if default_request_type == 'replacement' %}hidden{% endif %}
+                aria-hidden="true">*</span>
+            </label>
             {{ form.return_reason }}
             {% for error in form.return_reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
           </div>
-          <div class="form-group" id="reason-details-field">
-            <label for="{{ form.reason.id_for_label }}" id="reason-details-label">Additional details</label>
+          <div class="form-group" id="reason-details-field"
+            {% if default_request_type == 'replacement' %}hidden{% endif %}>
+            <label for="{{ form.reason.id_for_label }}">
+              <span id="reason-details-label">Additional details</span>
+              <span class="required-indicator" id="reason-details-required" hidden
+                aria-hidden="true">*</span>
+            </label>
             {{ form.reason }}
             {% for error in form.reason.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
           </div>
 
           {% if is_cod_order %}
-          <section class="return-form-section" id="cod-refund-details">
+          <section class="return-form-section" id="cod-refund-details"
+            {% if default_request_type == 'replacement' %}hidden{% endif %}>
             <h3 class="return-form-section-title">Refund payment details</h3>
             <p class="text-muted small">For a Cash on Delivery order, choose where to receive your refund. These details are only available to authorized staff processing the return.</p>
             <div class="form-group">
-              <label for="{{ form.refund_method.id_for_label }}">Refund method</label>
+              <label for="{{ form.refund_method.id_for_label }}">
+                Refund method
+                <span class="required-indicator" id="refund-method-required"
+                  {% if default_request_type == 'replacement' %}hidden{% endif %}
+                  aria-hidden="true">*</span>
+              </label>
               {{ form.refund_method }}
               {% for error in form.refund_method.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
             </div>
             <div class="form-group" id="refund-upi-field" hidden>
-              <label for="{{ form.refund_upi_id.id_for_label }}">UPI ID</label>
+              <label for="{{ form.refund_upi_id.id_for_label }}">
+                UPI ID
+                <span class="required-indicator" id="refund-upi-required" hidden
+                  aria-hidden="true">*</span>
+              </label>
               {{ form.refund_upi_id }}
               {% for error in form.refund_upi_id.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
             </div>
             <fieldset id="refund-bank-fields" hidden>
               <legend class="return-form-section-title">Bank account details</legend>
               <div class="form-group">
-                <label for="{{ form.refund_account_holder_name.id_for_label }}">Account holder name</label>
+                <label for="{{ form.refund_account_holder_name.id_for_label }}">
+                  Account holder name
+                  <span class="required-indicator" id="refund-account-holder-required" hidden
+                    aria-hidden="true">*</span>
+                </label>
                 {{ form.refund_account_holder_name }}
                 {% for error in form.refund_account_holder_name.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
               </div>
               <div class="form-group">
-                <label for="{{ form.refund_account_number.id_for_label }}">Account number</label>
+                <label for="{{ form.refund_account_number.id_for_label }}">
+                  Account number
+                  <span class="required-indicator" id="refund-account-number-required" hidden
+                    aria-hidden="true">*</span>
+                </label>
                 {{ form.refund_account_number }}
                 {% for error in form.refund_account_number.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
               </div>
               <div class="form-group mb-0">
-                <label for="{{ form.refund_ifsc_code.id_for_label }}">IFSC code</label>
+                <label for="{{ form.refund_ifsc_code.id_for_label }}">
+                  IFSC code
+                  <span class="required-indicator" id="refund-ifsc-required" hidden
+                    aria-hidden="true">*</span>
+                </label>
                 {{ form.refund_ifsc_code }}
                 {% for error in form.refund_ifsc_code.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
               </div>
@@ -879,13 +934,22 @@
           {% endif %}
 
           <section class="return-form-section" id="request-images-field">
-            <label class="return-form-section-title" for="request_images">Product photos</label>
+            <label class="return-form-section-title" for="request_images">
+              Product photos
+              <span id="request-images-return-label">(optional for returns)</span>
+              <span id="request-images-replacement-label" hidden>(required for replacements)</span>
+              <span class="required-indicator" id="request-images-required"
+                {% if default_request_type != 'replacement' %}hidden{% endif %}
+                aria-hidden="true">*</span>
+            </label>
             <div class="return-upload-box">
-              <input class="form-control-file" id="request_images" name="request_images" type="file" accept="image/*" multiple required>
-              <small class="form-text text-muted">Upload 1–5 clear photos of the product and its condition, each no larger than 5 MB.</small>
+              <input class="form-control-file" id="request_images" name="request_images" type="file" accept="image/*" multiple
+                {% if default_request_type == 'replacement' %}required{% endif %}>
+              <small class="form-text text-muted">Replacement requests require 1–5 clear product photos. Photos are optional for return requests. Each photo must be no larger than 5 MB.</small>
             </div>
           </section>
-          <div class="return-notice mb-3" id="return-shipping-notice">
+          <div class="return-notice mb-3" id="return-shipping-notice"
+            {% if default_request_type == 'replacement' %}hidden{% endif %}>
             <i class="fas fa-undo mr-2" aria-hidden="true"></i>If approved, you’ll ship the item to our office at your own cost. Refunds are processed after the item is received and inspected.
           </div>
           <div class="return-notice mb-3" id="replacement-notice">
@@ -901,7 +965,7 @@
           <h2><i class="fas fa-clipboard-check mr-2" aria-hidden="true"></i>Before you submit</h2>
           <ul>
             <li>Choose the correct return or replacement option.</li>
-            <li>Include clear photos so the team can review your request.</li>
+            <li>Product photos are required for replacements and optional for returns.</li>
             <li>Our support team will review your request and update its status here.</li>
           </ul>
         </section>
@@ -921,38 +985,65 @@
     const returnReasonField = document.getElementById('return-reason-field');
     const returnReason = document.getElementById('return-reason');
     const replacementReason = document.getElementById('replacement-reason-field');
+    const replacementReasonInput = document.getElementById('{{ form.replacement_reason.id_for_label }}');
+    const replacementReasonRequired = document.getElementById('replacement-reason-required');
+    const returnReasonRequired = document.getElementById('return-reason-required');
     const imagesInput = document.getElementById('request_images');
+    const imagesRequired = document.getElementById('request-images-required');
+    const imagesReturnLabel = document.getElementById('request-images-return-label');
+    const imagesReplacementLabel = document.getElementById('request-images-replacement-label');
     const returnNotice = document.getElementById('return-shipping-notice');
     const replacementNotice = document.getElementById('replacement-notice');
-    const detailsLabel = form.querySelector('label[for="{{ form.reason.id_for_label }}"]');
+    const detailsLabel = document.getElementById('reason-details-label');
     const reasonDetailsField = document.getElementById('reason-details-field');
     const reasonDetailsInput = document.getElementById('{{ form.reason.id_for_label }}');
+    const reasonDetailsRequired = document.getElementById('reason-details-required');
     const returnEligibility = form.querySelector('[data-eligibility="return"]');
     const replacementEligibility = form.querySelector('[data-eligibility="replacement"]');
     const codRefundDetails = document.getElementById('cod-refund-details');
     const refundMethod = document.getElementById('{{ form.refund_method.id_for_label }}');
+    const refundMethodRequired = document.getElementById('refund-method-required');
     const refundUpiField = document.getElementById('refund-upi-field');
     const refundUpiInput = document.getElementById('{{ form.refund_upi_id.id_for_label }}');
+    const refundUpiRequired = document.getElementById('refund-upi-required');
     const refundBankFields = document.getElementById('refund-bank-fields');
     const refundBankInputs = [
       document.getElementById('{{ form.refund_account_holder_name.id_for_label }}'),
       document.getElementById('{{ form.refund_account_number.id_for_label }}'),
       document.getElementById('{{ form.refund_ifsc_code.id_for_label }}'),
     ];
+    const refundBankRequired = [
+      document.getElementById('refund-account-holder-required'),
+      document.getElementById('refund-account-number-required'),
+      document.getElementById('refund-ifsc-required'),
+    ];
 
     function updateRequestType() {
-      const selected = form.querySelector('input[name="request_type"]:checked');
+      let selected = form.querySelector('input[name="request_type"]:checked');
+      if (!selected && form.dataset.defaultRequestType) {
+        selected = form.querySelector(
+          `input[name="request_type"][value="${form.dataset.defaultRequestType}"]`,
+        );
+        if (selected) selected.checked = true;
+      }
       const isReplacement = selected && selected.value === 'replacement';
       const needsRefundDetails = codRefundDetails && !isReplacement;
       const needsCustomReturnReason = returnReason && returnReason.value === 'not_defined';
       returnReasonField.hidden = Boolean(isReplacement);
       if (returnReason) returnReason.required = !isReplacement;
       replacementReason.hidden = !isReplacement;
-      imagesInput.required = true;
+      replacementReasonInput.required = Boolean(isReplacement);
+      returnReasonRequired.hidden = Boolean(isReplacement);
+      replacementReasonRequired.hidden = !isReplacement;
+      imagesInput.required = Boolean(isReplacement);
+      imagesRequired.hidden = !isReplacement;
+      imagesReturnLabel.hidden = Boolean(isReplacement);
+      imagesReplacementLabel.hidden = !isReplacement;
       returnNotice.hidden = Boolean(isReplacement);
       replacementNotice.hidden = !isReplacement;
       reasonDetailsField.hidden = !isReplacement && !needsCustomReturnReason;
       reasonDetailsInput.required = !isReplacement && Boolean(needsCustomReturnReason);
+      reasonDetailsRequired.hidden = !isReplacement && Boolean(needsCustomReturnReason);
       if (detailsLabel) {
         detailsLabel.textContent = isReplacement
           ? 'Additional details'
@@ -962,6 +1053,7 @@
       if (replacementEligibility) replacementEligibility.hidden = !isReplacement;
       if (codRefundDetails) codRefundDetails.hidden = !needsRefundDetails;
       if (refundMethod) refundMethod.required = Boolean(needsRefundDetails);
+      if (refundMethodRequired) refundMethodRequired.hidden = !needsRefundDetails;
       updateRefundMethod(needsRefundDetails);
     }
 
@@ -971,9 +1063,13 @@
       const isBank = isVisible && refundMethod.value === 'bank_account';
       refundUpiField.hidden = !isUpi;
       refundUpiInput.required = isUpi;
+      refundUpiRequired.hidden = !isUpi;
       refundBankFields.hidden = !isBank;
       refundBankInputs.forEach(input => {
         input.required = isBank;
+      });
+      refundBankRequired.forEach(indicator => {
+        indicator.hidden = !isBank;
       });
     }
 
