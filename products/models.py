@@ -227,7 +227,7 @@ class ReturnDetails(BaseModel):
     is_returnable = models.BooleanField(default=True)
     return_policy = models.CharField(
         max_length=20, choices=RETURN_POLICY_CHOICES, default='returnable')
-    return_window_days = models.PositiveIntegerField(default=7)
+    return_window_days = models.PositiveIntegerField(default=3)
     policy = models.TextField(blank=True)
     refund_policy = models.TextField(blank=True)
     conditions = models.TextField(blank=True)
