@@ -587,7 +587,7 @@
                   <img class="product-main-image" src="{{ image.image_url.url }}" alt="{{ product.product_name }}"
                     role="button" tabindex="0" aria-label="Open larger image of {{ product.product_name }}"
                     loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async"
-                    {% if forloop.first %}fetchpriority="high"{% endif %} sizes="(max-width: 600px) 141px, 282px" />
+                    {% if forloop.first %}fetchpriority="high"{% endif %} />
                   {% if not product.in_stock %}
                   <span class="stock-status-overlay" role="status">Out of stock</span>
                   {% endif %}
