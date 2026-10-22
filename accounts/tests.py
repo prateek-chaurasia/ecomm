@@ -15,8 +15,9 @@ from django.utils import timezone
 from unittest.mock import patch
 
 from accounts.models import (
-    BundleOrderItem, BundleOrderProduct, Cart, CartItem, Order, OrderItem,
-    ServiceablePincode, ReturnRequest, ReplacementReason,
+    BundleCartItem, BundleCartProduct, BundleOrderItem, BundleOrderProduct,
+    Cart, CartItem, Order, OrderItem, ServiceablePincode, ReturnRequest,
+    ReplacementReason,
 )
 from accounts.forms import (
     GuestShippingAddressForm, RegistrationForm, ShippingAddressForm,
@@ -793,6 +794,24 @@ class RegisteredCheckoutFlowTests(TestCase):
 
         response = self.client.get(reverse('payment'))
         self.assertRedirects(response, reverse('checkout'))
+
+    def test_registered_cash_on_delivery_order_reserves_product_stock(self):
+        response = self.client.post(
+            reverse('place_cod_order'),
+            {'selected_address_id': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        product = Product.objects.get(product_name='Checkout product')
+        self.assertEqual(product.stock_quantity, 3)
+        order = Order.objects.get(user=self.user)
+        self.assertEqual(order.order_items.get().quantity, 2)
+        order.status = Order.Status.DELIVERED
+        order.save(update_fields=['status', 'updated_at'])
+        product.refresh_from_db()
+        self.assertEqual(product.stock_quantity, 3)
+        self.cart.refresh_from_db()
+        self.assertTrue(self.cart.is_paid)
 
     @override_settings(ONLINE_PAYMENT_ENABLED=False)
     def test_payment_page_shows_existing_payment_options_and_order_summary(self):
@@ -2001,6 +2020,43 @@ class UserShippingAddressTests(TestCase):
                 payment_mode='Cash on Delivery',
             )
         self.assertFalse(Order.objects.filter(order_id='ORDER-STOCK-2').exists())
+
+    def test_order_creation_aggregates_stock_for_regular_and_bundle_items(self):
+        bundle_item = BundleCartItem.objects.create(
+            cart=self.cart,
+            quantity=2,
+            original_unit_price=800,
+            unit_price=700,
+        )
+        BundleCartProduct.objects.create(
+            bundle_item=bundle_item,
+            product=self.product,
+        )
+
+        create_order(
+            self.cart,
+            order_id='ORDER-STOCK-COMBINED',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+        )
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 7)
+
+        self.product.stock_quantity = 2
+        self.product.save(update_fields=['stock_quantity'])
+        with self.assertRaisesMessage(ValueError, 'no longer available'):
+            create_order(
+                self.cart,
+                order_id='ORDER-STOCK-COMBINED-INSUFFICIENT',
+                payment_status='Pending',
+                payment_mode='Cash on Delivery',
+            )
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 2)
+        self.assertFalse(
+            Order.objects.filter(
+                order_id='ORDER-STOCK-COMBINED-INSUFFICIENT').exists())
 
     def test_order_creation_rejects_address_outside_service_city(self):
         outside_address = ShippingAddress.objects.create(

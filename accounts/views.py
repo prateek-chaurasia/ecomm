@@ -1557,23 +1557,24 @@ def create_order(
             'product', 'size_variant', 'color_variant').filter(cart=cart))
         bundle_items = list(BundleCartItem.objects.select_related(
             'bundle_offer').prefetch_related('selected_products__product').filter(cart=cart))
-        products = {
-            product.uid: product
-            for product in Product.objects.select_for_update().filter(
-                uid__in={item.product_id for item in cart_items if item.product_id}
-            )
-        }
+        quantities = Counter()
         for cart_item in cart_items:
-            product = products.get(cart_item.product_id)
-            if not product or product.stock_quantity < cart_item.quantity:
-                raise ValueError('One or more products are no longer available in the requested quantity.')
-        bundle_products = {}
+            if cart_item.product_id:
+                quantities[cart_item.product_id] += cart_item.quantity
         for bundle_item in bundle_items:
             for selected in bundle_item.selected_products.all():
-                product = Product.objects.select_for_update().get(uid=selected.product_id)
-                bundle_products[selected.product_id] = product
-                if product.stock_quantity < bundle_item.quantity:
-                    raise ValueError('One or more products are no longer available in the requested quantity.')
+                quantities[selected.product_id] += bundle_item.quantity
+
+        products = {
+            product.uid: product
+            for product in Product.objects.select_for_update().filter(uid__in=quantities)
+        }
+        if any(not cart_item.product_id for cart_item in cart_items) or any(
+            product_id not in products
+            or products[product_id].stock_quantity < quantity
+            for product_id, quantity in quantities.items()
+        ):
+            raise ValueError('One or more products are no longer available in the requested quantity.')
 
         selected_address = shipping_address or (
             getattr(cart.user.profile, 'shipping_address', None) if cart.user else None
@@ -1623,8 +1624,6 @@ def create_order(
                     product_price=cart_item.get_product_price(),
                     gift_wrap=cart_item.gift_wrap,
                 )
-                product.stock_quantity -= cart_item.quantity
-                product.save(update_fields=['stock_quantity', 'updated_at'])
             for bundle_item in bundle_items:
                 order_bundle = BundleOrderItem.objects.create(
                     order=order,
@@ -1641,10 +1640,11 @@ def create_order(
                     BundleOrderProduct(bundle_item=order_bundle, product=selected.product)
                     for selected in bundle_item.selected_products.all()
                 ])
-                for selected in bundle_item.selected_products.all():
-                    product = bundle_products[selected.product_id]
-                    product.stock_quantity -= bundle_item.quantity
-                    product.save(update_fields=['stock_quantity', 'updated_at'])
+
+            for product_id, quantity in quantities.items():
+                product = products[product_id]
+                product.stock_quantity -= quantity
+                product.save(update_fields=['stock_quantity', 'updated_at'])
 
         return order
 

@@ -21,7 +21,7 @@
             <tr><td width="42%" style="border-bottom:1px solid #e2e8f0; color:#667085;">Order ID</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.order_id }}</td></tr>
             <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Customer</td><td style="border-bottom:1px solid #e2e8f0;">{{ customer_name }}</td></tr>
             <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery pincode</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.delivery_pincode|default:"Not provided" }}</td></tr>
-            {% if order.outside_service_area %}<tr><td colspan="2" style="border-bottom:1px solid #e2e8f0;">Delivery area: Outside Standard Service Area (estimated 4–6 days)</td></tr>{% endif %}
+            {% if order.outside_service_area %}<tr><td colspan="2" style="border-bottom:1px solid #e2e8f0;">Delivery area: Outside Standard Service Area (estimated 3–4 days)</td></tr>{% endif %}
             <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Initial status</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.get_status_display }}</td></tr>
             <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery charges</td><td style="border-bottom:1px solid #e2e8f0;">{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</td></tr>
             <tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Items</td><td style="border-bottom:1px solid #e2e8f0;">{{ item_count }}</td></tr>

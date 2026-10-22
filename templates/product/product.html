@@ -818,17 +818,17 @@
 
     <div class="return-policy-heading">
       {% if product.return_details.return_policy == 'non_returnable' %}
-      <span class="product-return-badge non-returnable">Non-Returnable</span>
+      <span class="product-return-badge non-returnable">Product is Non-Returnable</span>
       {% else %}
       <details class="return-policy-section" aria-label="Return and refund policy">
         {% if product.return_details.return_policy == 'returnable' %}
         <summary class="product-return-badge return-policy-toggle">
-          Returnable
+          Product is Returnable
           <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
         </summary>
         {% elif product.return_details.return_policy == 'replaceable' %}
         <summary class="product-return-badge replaceable return-policy-toggle">
-          Replaceable
+          Product is Replaceable
           <i class="fas fa-chevron-down return-policy-chevron" aria-hidden="true"></i>
         </summary>
         {% else %}
