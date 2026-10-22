@@ -7,58 +7,8 @@
 <section class="section-content padding-y">
   <div class="container">
     {% include 'base/alert.html' %}
-    {% if coupon_enabled %}
-    <div class="card mb-4 guest-checkout-coupon">
-      <div class="card-header"><strong>Apply Coupon</strong></div>
-      <div class="card-body">
-        {% if cart.coupon %}
-        <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap">
-          <span>Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied (₹{{ cart.coupon.discount_amount }} off).</span>
-          <form method="post">
-            {% csrf_token %}
-            <button type="submit" name="remove_checkout_coupon" class="btn btn-sm btn-outline-danger">Remove</button>
-          </form>
-        </div>
-        {% endif %}
-        <form method="post" class="guest-checkout-coupon-form">
-          {% csrf_token %}
-          <div class="form-group">
-            <label for="guest-checkout-coupon-code">Have a coupon code?</label>
-            <div class="input-group">
-              <input id="guest-checkout-coupon-code" type="text" class="form-control" name="coupon" placeholder="Enter coupon code" {% if cart.coupon %}disabled{% endif %}>
-              <span class="input-group-append">
-                <button type="submit" name="apply_coupon" class="btn btn-primary" {% if cart.coupon %}disabled{% endif %}>Apply</button>
-              </span>
-            </div>
-          </div>
-        </form>
-        {% if available_coupons %}
-        <h6 class="mt-3">Available coupons</h6>
-        {% for coupon in available_coupons %}
-        <div class="border rounded p-2 mb-2 d-flex justify-content-between align-items-start">
-          <div>
-            <strong>{{ coupon.coupon_code }}</strong>
-            <p class="small text-muted mb-0">₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.</p>
-          </div>
-          {% if cart.coupon_id == coupon.uid %}
-          <span class="badge badge-success">Applied</span>
-          {% elif cart.coupon %}
-          <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Apply</button>
-          {% else %}
-          <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="coupon" value="{{ coupon.coupon_code }}">
-            <button type="submit" name="apply_coupon" class="btn btn-sm btn-outline-primary">Apply</button>
-          </form>
-          {% endif %}
-        </div>
-        {% endfor %}
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
     <div class="row justify-content-center">
-      <div class="col-md-8 col-lg-6">
+      <div class="{% if coupon_enabled %}col-lg-7{% else %}col-md-8 col-lg-6{% endif %}">
         <div class="card">
           <div class="card-header">Shipping Address</div>
           <div class="card-body">
@@ -99,6 +49,12 @@
                 <span>Delivery charges</span>
                 <strong>{% if delivery_fee %}₹{{ delivery_fee }}{% else %}Free{% endif %}</strong>
               </div>
+              {% if cart_discount %}
+              <div class="d-flex justify-content-between mt-2">
+                <span>Coupon discount{% if cart.coupon %} ({{ cart.coupon.coupon_code }}){% endif %}</span>
+                <strong class="text-success">−₹{{ cart_discount }}</strong>
+              </div>
+              {% endif %}
               <div class="d-flex justify-content-between mt-2">
                 <span>Total to pay</span>
                 <strong>₹{{ cart_total_after_delivery }}</strong>
@@ -114,6 +70,70 @@
           </div>
         </div>
       </div>
+      {% if coupon_enabled %}
+      <div class="col-lg-5 mt-4 mt-lg-0">
+        <div class="card guest-checkout-review-section">
+          <div class="card-header"><strong>Review items and charges</strong></div>
+          <div class="card-body">
+            {% include 'accounts/_cart_review.html' %}
+          </div>
+        </div>
+        <details class="card mt-4 cart-coupon-disclosure guest-checkout-coupon"{% if cart.coupon %} open{% endif %}>
+          <summary class="card-header cart-coupon-summary">
+            <span class="cart-coupon-title">Apply Coupon</span>
+            <span class="cart-coupon-summary-detail">
+              <span>{% if cart.coupon %}Coupon applied{% else %}View available coupons{% endif %}</span>
+              <span class="guest-checkout-coupon-chevron" aria-hidden="true"></span>
+            </span>
+          </summary>
+          <div class="card-body">
+            {% if cart.coupon %}
+            <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap">
+              <span>Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied (₹{{ cart.coupon.discount_amount }} off).</span>
+              <form method="post">
+                {% csrf_token %}
+                <button type="submit" name="remove_checkout_coupon" class="btn btn-sm btn-outline-danger">Remove</button>
+              </form>
+            </div>
+            {% endif %}
+            <form method="post" class="guest-checkout-coupon-form">
+              {% csrf_token %}
+              <div class="form-group">
+                <label for="guest-checkout-coupon-code">Have a coupon code?</label>
+                <div class="input-group">
+                  <input id="guest-checkout-coupon-code" type="text" class="form-control" name="coupon" placeholder="Enter coupon code" {% if cart.coupon %}disabled{% endif %}>
+                  <span class="input-group-append">
+                    <button type="submit" name="apply_coupon" class="btn btn-primary" {% if cart.coupon %}disabled{% endif %}>Apply</button>
+                  </span>
+                </div>
+              </div>
+            </form>
+            <h6 class="mt-3">Available coupons</h6>
+            {% for coupon in available_coupons %}
+            <div class="guest-available-coupon border rounded p-2 mb-2 d-flex justify-content-between align-items-start">
+              <div>
+                <strong>{{ coupon.coupon_code }}</strong>
+                <p class="small text-muted mb-0">₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.</p>
+              </div>
+              {% if cart.coupon_id == coupon.uid %}
+              <span class="badge badge-success">Applied</span>
+              {% elif cart.coupon %}
+              <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Apply</button>
+              {% else %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="coupon" value="{{ coupon.coupon_code }}">
+                <button type="submit" name="apply_coupon" class="btn btn-sm btn-outline-primary">Apply</button>
+              </form>
+              {% endif %}
+            </div>
+            {% empty %}
+            <p class="small text-muted mb-0">There are no available coupons right now.</p>
+            {% endfor %}
+          </div>
+        </details>
+      </div>
+      {% endif %}
     </div>
   </div>
 </section>
@@ -137,6 +157,131 @@
     }
   }
 
+  .guest-checkout-review-section {
+    overflow: hidden;
+    border-color: #dbeafe;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.25rem 0.85rem rgba(30, 64, 175, 0.08);
+  }
+
+  .guest-checkout-review-section > .card-header {
+    border-bottom: 1px solid #bfdbfe;
+    background: linear-gradient(100deg, #eff6ff, #ecfdf5);
+    color: #1e3a5f;
+    font-weight: 700;
+  }
+
+  .guest-checkout-review-section .checkout-review-table thead {
+    background: #e0f2fe;
+    color: #164e63;
+  }
+
+  .guest-checkout-review-section .checkout-review-table tbody tr:nth-child(odd) {
+    background: #f8fafc;
+  }
+
+  .guest-checkout-review-section .checkout-review-table td,
+  .guest-checkout-review-section .checkout-review-table th {
+    padding: 0.75rem 0.5rem;
+    vertical-align: middle;
+  }
+
+  .guest-checkout-review-section .checkout-review-table .review-product-name {
+    color: #1e3a5f;
+    font-weight: 700;
+  }
+
+  .guest-checkout-review-section .cart-charge-breakdown {
+    margin-top: 0.75rem;
+    padding: 0.85rem;
+    border: 1px solid #d1fae5;
+    border-radius: 0.65rem;
+    background: #f0fdf4;
+    color: #334155;
+  }
+
+  .guest-checkout-review-section .cart-charge-breakdown hr {
+    border-top-color: #bbf7d0;
+  }
+
+  .guest-checkout-review-section .cart-charge-breakdown .font-weight-bold {
+    color: #14532d;
+  }
+
+  .guest-checkout-coupon {
+    overflow: hidden;
+  }
+
+  .guest-checkout-coupon .cart-coupon-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .guest-checkout-coupon .cart-coupon-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .guest-checkout-coupon .cart-coupon-summary:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -3px;
+  }
+
+  .guest-checkout-coupon .cart-coupon-title {
+    color: var(--text-dark);
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .guest-checkout-coupon .cart-coupon-summary-detail {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.85rem;
+    margin-left: auto;
+    color: #64748b;
+    font-size: 0.875rem;
+    text-align: right;
+  }
+
+  .guest-checkout-coupon-chevron {
+    width: 0.55rem;
+    height: 0.55rem;
+    flex: 0 0 auto;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.2s ease;
+  }
+
+  .guest-checkout-coupon[open] .guest-checkout-coupon-chevron {
+    transform: rotate(225deg) translateY(-2px);
+  }
+
+  .guest-checkout-coupon .alert {
+    gap: 0.75rem;
+  }
+
+  .guest-checkout-coupon .alert form {
+    margin-left: auto;
+  }
+
+  .guest-available-coupon {
+    gap: 0.75rem;
+  }
+
+  .guest-available-coupon > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .guest-available-coupon form {
+    flex-shrink: 0;
+  }
+
   .guest-delivery-address {
     border-color: #d9e2ec;
     border-radius: 6px;
@@ -157,6 +302,70 @@
     gap: 0.45rem;
     color: #4b5563;
     overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 575.98px) {
+    .guest-checkout-review-section .table-responsive {
+      overflow-x: visible;
+    }
+
+    .guest-checkout-review-section .checkout-review-table thead {
+      display: none;
+    }
+
+    .guest-checkout-review-section .checkout-review-table,
+    .guest-checkout-review-section .checkout-review-table tbody,
+    .guest-checkout-review-section .checkout-review-table tr,
+    .guest-checkout-review-section .checkout-review-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .guest-checkout-review-section .checkout-review-table tbody tr {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #dbeafe;
+    }
+
+    .guest-checkout-review-section .checkout-review-table td {
+      padding: 0.35rem 0;
+      text-align: left !important;
+    }
+
+    .guest-checkout-review-section .checkout-review-table td[data-label]::before {
+      display: block;
+      margin-bottom: 0.15rem;
+      color: #64748b;
+      content: attr(data-label);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .guest-checkout-review-section .cart-charge-breakdown {
+      padding: 0.8rem;
+      font-size: 0.92rem;
+    }
+
+    .guest-checkout-coupon .cart-coupon-summary {
+      align-items: flex-start;
+      padding: 0.85rem 1rem;
+    }
+
+    .guest-checkout-coupon .cart-coupon-summary-detail {
+      max-width: 58%;
+      gap: 0.65rem;
+      line-height: 1.35;
+    }
+
+    .guest-checkout-coupon .alert {
+      align-items: flex-start !important;
+    }
+
+    .guest-checkout-coupon .alert form {
+      width: 100%;
+      margin-left: 0;
+    }
   }
 </style>
 <script>

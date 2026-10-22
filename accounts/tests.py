@@ -1009,6 +1009,52 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertEqual(order.grand_total, 600)
 
+    def test_buy_now_coupon_follows_shipping_address_and_appears_in_charge_breakdown(self):
+        coupon = Coupon.objects.create(
+            coupon_code='GUESTQUOTE',
+            discount_amount=50,
+            minimum_amount=500,
+        )
+        self.cart.coupon = coupon
+        self.cart.save(update_fields=['coupon', 'updated_at'])
+        session = self.client.session
+        session['buy_now_checkout_cart_uid'] = str(self.cart.uid)
+        session.save()
+
+        initial_response = self.client.get(reverse('guest-checkout'))
+        initial_html = initial_response.content.decode()
+        self.assertLess(
+            initial_html.index('Shipping Address'),
+            initial_html.index('Review items and charges'),
+        )
+        self.assertLess(
+            initial_html.index('Review items and charges'),
+            initial_html.index('Apply Coupon'),
+        )
+        self.assertIn(
+            '<details class="card mt-4 cart-coupon-disclosure guest-checkout-coupon"',
+            initial_html,
+        )
+        self.assertContains(initial_response, 'Guest gift')
+        self.assertContains(initial_response, 'Items subtotal')
+        self.assertContains(initial_response, 'Delivery fee')
+        self.assertContains(initial_response, 'Total')
+
+        quote_response = self.client.post(
+            reverse('guest-checkout'),
+            self.checkout_data(),
+        )
+        quote_html = quote_response.content.decode()
+        self.assertLess(
+            quote_html.index('Delivery charges'),
+            quote_html.index('Coupon discount (GUESTQUOTE)'),
+        )
+        self.assertLess(
+            quote_html.index('Coupon discount (GUESTQUOTE)'),
+            quote_html.index('Total to pay'),
+        )
+        self.assertContains(quote_response, '−₹50')
+
     def test_standard_guest_checkout_does_not_offer_or_apply_coupons(self):
         coupon = Coupon.objects.create(
             coupon_code='GUESTSTD',
