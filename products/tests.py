@@ -19,8 +19,8 @@ from products.admin import (
     ReturnDetailsInlineForm, restock_selected,
 )
 from products.models import (
-    Category, Product, ProductImage, AgeGroup, Tag, SizeVariant, ColorVariant,
-    ReturnDetails, ProductReview,
+    Category, Coupon, Product, ProductImage, AgeGroup, Tag, SizeVariant,
+    ColorVariant, ReturnDetails, ProductReview,
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
 from products.image_utils import product_thumbnail_name
@@ -820,7 +820,13 @@ class ProductCartStateTests(TestCase):
         self.assertContains(response, 'id="add-to-cart-btn" class="btn btn-primary" hidden')
         self.assertContains(response, 'id="add-to-cart-form" class="d-inline-block d-none"')
 
-    def test_buy_now_redirects_authenticated_customer_directly_to_checkout(self):
+    def test_buy_now_redirects_authenticated_customer_to_checkout_with_coupon_application(self):
+        coupon = Coupon.objects.create(
+            coupon_code='BUYNOW',
+            discount_amount=50,
+            minimum_amount=500,
+        )
+
         response = self.client.post(
             reverse('add_to_cart', args=[self.product.uid]),
             {'quantity': 1, 'buy_now': '1'},
@@ -831,6 +837,48 @@ class ProductCartStateTests(TestCase):
             CartItem.objects.filter(
                 cart__user=self.user, product=self.product, quantity=1,
             ).exists())
+        checkout_response = self.client.get(reverse('checkout'))
+        self.assertContains(checkout_response, 'Apply Coupon')
+        self.assertContains(checkout_response, coupon.coupon_code)
+        checkout_html = checkout_response.content.decode()
+        self.assertIn(
+            '<details class="card mb-4 cart-coupon-disclosure checkout-coupon-section">',
+            checkout_html,
+        )
+        self.assertLess(
+            checkout_html.index('Review items and charges'),
+            checkout_html.index('Apply Coupon'),
+        )
+        self.assertIn('cart-coupon-summary-detail', checkout_html)
+        self.assertIn('justify-content: flex-end;', checkout_html)
+        self.assertIn('max-width: 58%;', checkout_html)
+        self.assertIn('checkout-coupon-chevron', checkout_html)
+        self.assertNotIn('fa-chevron-down', checkout_html)
+
+        self.client.post(
+            reverse('checkout'),
+            {'coupon': coupon.coupon_code, 'apply_coupon': '1'},
+        )
+        cart = Cart.objects.get(user=self.user, is_paid=False)
+        self.assertEqual(cart.coupon, coupon)
+        applied_response = self.client.get(reverse('checkout'))
+        self.assertContains(applied_response, 'Coupon applied')
+        self.assertContains(
+            applied_response,
+            '<details class="card mb-4 cart-coupon-disclosure checkout-coupon-section" open>',
+            html=False,
+        )
+
+    def test_cart_visit_clears_buy_now_coupon_checkout_state(self):
+        self.client.post(
+            reverse('add_to_cart', args=[self.product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.client.get(reverse('cart'))
+        response = self.client.get(reverse('checkout'))
+
+        self.assertNotContains(response, 'Apply Coupon')
 
     def test_product_quantity_is_capped_at_available_inventory(self):
         response = self.client.get(reverse('get_product', args=[self.product.slug]))
@@ -865,6 +913,12 @@ class ProductCartStateTests(TestCase):
         response = self.client.get(reverse('get_product', args=[self.product.slug]))
 
         self.assertContains(response, 'class="product-main-image"')
+        self.assertContains(
+            response,
+            '.product-detail-card .gallery-wrap .img-big-wrap .product-main-image {',
+        )
+        self.assertContains(response, 'height: min(70vh, 600px);')
+        self.assertContains(response, 'object-fit: contain;')
         self.assertContains(response, 'role="button" tabindex="0"')
         self.assertContains(response, 'id="productImageViewer"')
         self.assertContains(response, 'id="productImageViewerImage"')
@@ -1344,7 +1398,7 @@ class ProductQuantityTests(TestCase):
                     gift_wrap=True,
                 )
 
-    def test_buy_now_redirects_to_guest_checkout_without_adding_existing_item_again(self):
+    def test_buy_now_redirects_guest_to_shipping_with_coupon_application(self):
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(
             product_name='Wooden Puzzle',
@@ -1352,6 +1406,11 @@ class ProductQuantityTests(TestCase):
             price=600,
             product_desription='A wooden puzzle',
             stock_quantity=5,
+        )
+        coupon = Coupon.objects.create(
+            coupon_code='GUESTNOW',
+            discount_amount=50,
+            minimum_amount=500,
         )
         self.client.post(
             reverse('add_to_cart', args=[product.uid]),
@@ -1370,6 +1429,15 @@ class ProductQuantityTests(TestCase):
         )
         self.assertEqual(cart_items.count(), 1)
         self.assertEqual(cart_items.get().quantity, 1)
+        self.assertContains(self.client.get(reverse('guest-checkout')), coupon.coupon_code)
+        self.client.post(
+            reverse('guest-checkout'),
+            {'coupon': coupon.coupon_code, 'apply_coupon': '1'},
+        )
+        self.assertEqual(
+            Cart.objects.get(session_key=self.client.session.session_key).coupon,
+            coupon,
+        )
 
     def test_buy_now_updates_gift_wrap_for_existing_cart_item(self):
         category = Category.objects.create(category_name='Toys')

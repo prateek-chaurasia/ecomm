@@ -8,7 +8,7 @@
     {% include 'accounts/_checkout_steps.html' %}
     <h1 class="h3 mb-4">Review delivery address</h1>
 
-    <form method="post">
+    <form method="post" id="checkout-address-form">
       {% csrf_token %}
       <div class="card checkout-address-section mb-4">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
@@ -58,29 +58,161 @@
           {% endif %}
         </div>
       </div>
-
-      <div class="card checkout-review-section mb-4">
-        <div class="card-header"><strong>Review items and charges</strong></div>
-        <div class="card-body">
-          {% include 'accounts/_cart_review.html' %}
-        </div>
-      </div>
-
-      <div class="d-flex justify-content-between flex-wrap">
-        <a href="{% url 'cart' %}" class="btn btn-light mb-2">
-          <i class="fa fa-chevron-left mr-1"></i>Back to cart
-        </a>
-        {% if addresses %}
-        <button type="submit" class="btn btn-primary mb-2">
-          Continue to payment <i class="fa fa-chevron-right ml-1"></i>
-        </button>
-        {% endif %}
-      </div>
     </form>
+
+    <div class="card checkout-review-section mb-4">
+      <div class="card-header"><strong>Review items and charges</strong></div>
+      <div class="card-body">
+        {% include 'accounts/_cart_review.html' %}
+      </div>
+    </div>
+
+    {% if coupon_enabled %}
+    <details class="card mb-4 cart-coupon-disclosure checkout-coupon-section"{% if cart.coupon %} open{% endif %}>
+      <summary class="card-header cart-coupon-summary">
+        <span class="cart-coupon-title">Apply Coupon</span>
+        <span class="cart-coupon-summary-detail">
+          <span>{% if cart.coupon %}Coupon applied{% else %}View available coupons{% endif %}</span>
+          <span class="checkout-coupon-chevron" aria-hidden="true"></span>
+        </span>
+      </summary>
+      <div class="card-body">
+        {% if cart.coupon %}
+        <div class="alert alert-success cart-coupon-applied">
+          <span>
+            Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied
+            (₹{{ cart.coupon.discount_amount }} off).
+          </span>
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" name="remove_checkout_coupon" class="btn btn-sm btn-outline-danger">Remove</button>
+          </form>
+        </div>
+        {% endif %}
+
+        <form method="post" class="cart-coupon-form">
+          {% csrf_token %}
+          <div class="form-group">
+            <label for="checkout-coupon-code">Have a coupon code?</label>
+            <div class="input-group">
+              <input id="checkout-coupon-code" type="text" class="form-control" name="coupon" placeholder="Enter coupon code" {% if cart.coupon %}disabled{% endif %}>
+              <span class="input-group-append">
+                <button type="submit" name="apply_coupon" class="btn btn-primary" {% if cart.coupon %}disabled{% endif %}>Apply</button>
+              </span>
+            </div>
+          </div>
+        </form>
+
+        <h6 class="mt-3">Available coupons</h6>
+        {% for coupon in available_coupons %}
+        <div class="border rounded p-2 mb-2 cart-available-coupon">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="cart-available-coupon-details">
+              <strong>{{ coupon.coupon_code }}</strong>
+              <p class="small text-muted mb-0">
+                ₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.
+              </p>
+            </div>
+            {% if cart.coupon_id == coupon.uid %}
+            <span class="badge badge-success">Applied</span>
+            {% elif cart.coupon %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" disabled>Apply</button>
+            {% else %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="coupon" value="{{ coupon.coupon_code }}">
+              <button type="submit" name="apply_coupon" class="btn btn-sm btn-outline-primary">Apply</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <p class="small text-muted mb-0">There are no available coupons right now.</p>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+
+    <div class="d-flex justify-content-between flex-wrap">
+      <a href="{% url 'cart' %}" class="btn btn-light mb-2">
+        <i class="fa fa-chevron-left mr-1"></i>Back to cart
+      </a>
+      {% if addresses %}
+      <button type="submit" form="checkout-address-form" class="btn btn-primary mb-2">
+          Continue to payment <i class="fa fa-chevron-right ml-1"></i>
+      </button>
+      {% endif %}
+    </div>
   </div>
 </section>
 
 <style>
+  .checkout-coupon-section {
+    overflow: hidden;
+  }
+
+  .checkout-coupon-section .cart-coupon-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .checkout-coupon-section .cart-coupon-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .checkout-coupon-section .cart-coupon-summary:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -3px;
+  }
+
+  .checkout-coupon-section .cart-coupon-title {
+    color: var(--text-dark);
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .checkout-coupon-section .cart-coupon-summary-detail {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.85rem;
+    margin-left: auto;
+    color: #64748b;
+    font-size: 0.875rem;
+    text-align: right;
+  }
+
+  .checkout-coupon-chevron {
+    width: 0.55rem;
+    height: 0.55rem;
+    flex: 0 0 auto;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.2s ease;
+  }
+
+  .checkout-coupon-section[open] .checkout-coupon-chevron {
+    transform: rotate(225deg) translateY(-2px);
+  }
+
+  @media (max-width: 575px) {
+    .checkout-coupon-section .cart-coupon-summary {
+      align-items: flex-start;
+      padding: 0.85rem 1rem;
+    }
+
+    .checkout-coupon-section .cart-coupon-summary-detail {
+      max-width: 58%;
+      gap: 0.65rem;
+      line-height: 1.35;
+    }
+  }
+
   .checkout-address-option {
     display: flex;
     align-items: stretch;

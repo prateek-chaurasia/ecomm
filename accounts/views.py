@@ -268,10 +268,37 @@ def cart_owner_filter(request):
     return {'session_key': request.session.session_key}
 
 
+def _apply_coupon(request, cart_obj):
+    coupon_obj = Coupon.objects.filter(
+        coupon_code__exact=request.POST.get('coupon'),
+    ).first()
+    if not coupon_obj:
+        messages.error(request, 'Invalid coupon code.')
+        return False
+    if cart_obj.coupon:
+        messages.error(
+            request, 'Remove the applied coupon before applying another one.')
+        return False
+    if coupon_obj.is_expired:
+        messages.error(request, 'Coupon code expired.')
+        return False
+    if cart_obj.get_cart_total() < coupon_obj.minimum_amount:
+        messages.error(
+            request, f'Amount should be greater than {coupon_obj.minimum_amount}')
+        return False
+
+    cart_obj.coupon = coupon_obj
+    cart_obj.save(update_fields=['coupon', 'updated_at'])
+    messages.success(request, 'Coupon applied successfully.')
+    return True
+
+
 @require_POST
 def add_to_cart(request, uid):
     buy_now = request.POST.get('buy_now') == '1'
     buy_now_added = False
+    if buy_now:
+        request.session.pop('buy_now_checkout_cart_uid', None)
     try:
         variant = request.POST.get('size') or request.GET.get('size')
         product = get_object_or_404(Product, uid=uid)
@@ -298,6 +325,8 @@ def add_to_cart(request, uid):
                 if existing_item.gift_wrap != gift_wrap:
                     existing_item.gift_wrap = gift_wrap
                     existing_item.save(update_fields=['gift_wrap', 'updated_at'])
+                request.session['buy_now_checkout_cart_uid'] = str(
+                    existing_item.cart_id)
                 return redirect(
                     'checkout' if request.user.is_authenticated else 'guest-checkout')
 
@@ -358,6 +387,7 @@ def add_to_cart(request, uid):
         messages.error(request, 'Error adding item to cart.')
 
     if buy_now and buy_now_added:
+        request.session['buy_now_checkout_cart_uid'] = str(cart.uid)
         return redirect(
             'checkout' if request.user.is_authenticated else 'guest-checkout')
 
@@ -372,6 +402,7 @@ def add_to_cart(request, uid):
 
 
 def cart(request):
+    request.session.pop('buy_now_checkout_cart_uid', None)
     cart_obj = get_active_cart(request)
     if not cart_obj:
         messages.warning(
@@ -379,32 +410,8 @@ def cart(request):
         return redirect(reverse('index'))
 
     if request.method == 'POST':
-        coupon = request.POST.get('coupon')
-        coupon_obj = Coupon.objects.filter(coupon_code__exact=coupon).first()
-
-        if not coupon_obj:
-            messages.error(request, 'Invalid coupon code.')
-            return redirect('cart')
-
-        if cart_obj and cart_obj.coupon:
-            messages.error(
-                request, 'Remove the applied coupon before applying another one.')
-            return redirect('cart')
-
-        if coupon_obj and coupon_obj.is_expired:
-            messages.error(request, 'Coupon code expired.')
-            return redirect('cart')
-
-        if cart_obj and coupon_obj and cart_obj.get_cart_total() < coupon_obj.minimum_amount:
-            messages.error(
-                request, f'Amount should be greater than {coupon_obj.minimum_amount}')
-            return redirect('cart')
-
-        if cart_obj and coupon_obj:
-            cart_obj.coupon = coupon_obj
-            cart_obj.save()
-            messages.success(request, 'Coupon applied successfully.')
-            return redirect('cart')
+        _apply_coupon(request, cart_obj)
+        return redirect('cart')
 
     cart_items = list(cart_obj.cart_items.select_related('product'))
     stock_notices = []
@@ -439,6 +446,23 @@ def checkout(request):
         messages.warning(request, 'Your cart is empty. Please add a product to cart.')
         return redirect('cart')
 
+    coupon_enabled = (
+        request.session.get('buy_now_checkout_cart_uid') == str(cart_obj.uid)
+    )
+    if request.method == 'POST' and (
+        'apply_coupon' in request.POST or 'remove_checkout_coupon' in request.POST
+    ):
+        if not coupon_enabled:
+            messages.error(request, 'Coupons can only be changed from the cart.')
+            return redirect('checkout')
+        if 'remove_checkout_coupon' in request.POST:
+            cart_obj.coupon = None
+            cart_obj.save(update_fields=['coupon', 'updated_at'])
+            messages.success(request, 'Coupon Removed.')
+        else:
+            _apply_coupon(request, cart_obj)
+        return redirect('checkout')
+
     addresses = list(
         ShippingAddress.objects.filter(user=request.user)
         .order_by('-is_default', '-created_at')
@@ -466,6 +490,7 @@ def checkout(request):
                 'One or more products are no longer available in the requested quantity.',
             )
         else:
+            request.session.pop('buy_now_checkout_cart_uid', None)
             return redirect(f'{reverse("payment")}?address={selected_address.uid}')
 
     if selected_address is None and addresses:
@@ -489,6 +514,10 @@ def checkout(request):
         'current_step': 'checkout',
         'addresses': addresses,
         'selected_address_id': str(selected_address.uid) if selected_address else '',
+        'coupon_enabled': coupon_enabled,
+        'available_coupons': Coupon.objects.filter(
+            is_expired=False,
+        ).order_by('minimum_amount', 'coupon_code') if coupon_enabled else (),
         **_cart_pricing_context(cart_obj),
     }
     return render(request, 'accounts/checkout.html', context)
@@ -866,6 +895,22 @@ def guest_checkout(request):
     cart_obj = get_active_cart(request)
     if not cart_obj or (not cart_obj.cart_items.exists() and not cart_obj.bundle_items.exists()):
         return redirect('cart')
+    coupon_enabled = (
+        request.session.get('buy_now_checkout_cart_uid') == str(cart_obj.uid)
+    )
+    if request.method == 'POST' and (
+        'apply_coupon' in request.POST or 'remove_checkout_coupon' in request.POST
+    ):
+        if not coupon_enabled:
+            messages.error(request, 'Coupons can only be changed from the cart.')
+            return redirect('guest-checkout')
+        if 'remove_checkout_coupon' in request.POST:
+            cart_obj.coupon = None
+            cart_obj.save(update_fields=['coupon', 'updated_at'])
+            messages.success(request, 'Coupon Removed.')
+        else:
+            _apply_coupon(request, cart_obj)
+        return redirect('guest-checkout')
 
     next_url = request.GET.get('next') or request.POST.get('next') or reverse('cart')
     if not url_has_allowed_host_and_scheme(
@@ -1027,6 +1072,12 @@ def guest_checkout(request):
         'delivery_fee': delivery_fee,
         'cart_total_after_delivery': cart_total_after_delivery,
         'shipping_address_summary': shipping_address_summary,
+        'cart': cart_obj,
+        'coupon_enabled': coupon_enabled,
+        'available_coupons': Coupon.objects.filter(
+            is_expired=False,
+        ).order_by('minimum_amount', 'coupon_code') if coupon_enabled else (),
+        **_cart_pricing_context(cart_obj),
     })
 
 

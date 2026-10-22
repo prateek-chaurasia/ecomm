@@ -197,8 +197,12 @@ class GuestShippingAddressForm(ShippingAddressForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         field_order = list(self.fields)
-        field_order.remove('state')
-        field_order.insert(field_order.index('city'), 'state')
+        location_fields = ['country', 'state', 'city', 'zip_code']
+        insert_at = min(field_order.index(field) for field in location_fields)
+        field_order = [
+            field for field in field_order if field not in location_fields
+        ]
+        field_order[insert_at:insert_at] = location_fields
         self.order_fields(field_order)
 
 
@@ -295,6 +299,13 @@ class ReturnRequestForm(forms.ModelForm):
     def __init__(self, *args, order=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.order = order or getattr(self.instance, 'order', None)
+        requested_type = (
+            self.data.get(self.add_prefix('request_type'))
+            if self.is_bound
+            else self.initial.get('request_type')
+        )
+        if requested_type == ReturnRequest.RequestType.REPLACEMENT:
+            self.fields['replacement_reason'].required = True
         self.fields['replacement_reason'].queryset = ReplacementReason.objects.filter(
             is_active=True)
         self.fields['request_type'].widget.choices = (
@@ -325,16 +336,17 @@ class ReturnRequestForm(forms.ModelForm):
                 self._clean_cod_refund_details(cleaned_data)
             else:
                 self._clear_cod_refund_details(cleaned_data)
-        if (
-            request_type == ReturnRequest.RequestType.REPLACEMENT
-            and not replacement_reason
-        ):
-            self.add_error(
-                'replacement_reason', 'Choose why you need a replacement.')
-        elif request_type == ReturnRequest.RequestType.REPLACEMENT:
-            cleaned_data['reason'] = (
-                f'{replacement_reason.name}: {reason}'.rstrip(': ')
-            )
+        if request_type == ReturnRequest.RequestType.REPLACEMENT:
+            if not replacement_reason:
+                if not self.errors.get('replacement_reason'):
+                    self.add_error(
+                        'replacement_reason',
+                        'Choose why you need a replacement.',
+                    )
+            else:
+                cleaned_data['reason'] = (
+                    f'{replacement_reason.name}: {reason}'.rstrip(': ')
+                )
             self._clear_cod_refund_details(cleaned_data)
         return cleaned_data
 

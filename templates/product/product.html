@@ -3,7 +3,12 @@
 {% block start %} {% load crispy_forms_tags product_description %}
 
 <style>
-  .product-main-image {
+  .product-detail-card .gallery-wrap .img-big-wrap .product-main-image {
+    display: block;
+    width: 100%;
+    height: min(70vh, 600px);
+    margin: 0 auto;
+    object-fit: contain;
     cursor: zoom-in;
   }
 
@@ -551,16 +556,6 @@
   @media (max-width: 768px) {
     .product-detail-card .content-body {
       padding-right: 1.25rem;
-    }
-
-    .product-detail-card .gallery-wrap .img-big-wrap img {
-      display: block;
-      width: 100%;
-      max-width: 100%;
-      height: auto;
-      max-height: 70vh;
-      margin: 0 auto;
-      object-fit: contain;
     }
 
     .like-btn,

@@ -743,8 +743,28 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.assertContains(response, 'Items subtotal')
         self.assertContains(response, 'order total is below')
         self.assertContains(response, 'Continue to payment')
+        self.assertNotContains(response, 'Apply Coupon')
+        self.assertNotContains(response, 'Have a coupon code?')
         self.assertNotContains(response, 'Cash on Delivery')
         self.assertNotContains(response, 'Pay Online')
+
+    def test_standard_checkout_does_not_offer_or_apply_coupons(self):
+        coupon = Coupon.objects.create(
+            coupon_code='CHECKOUT',
+            discount_amount=50,
+            minimum_amount=500,
+        )
+        self.client.get(reverse('cart'))
+
+        response = self.client.get(reverse('checkout'))
+        self.assertNotContains(response, 'Apply Coupon')
+
+        self.client.post(reverse('checkout'), {
+            'coupon': coupon.coupon_code,
+            'apply_coupon': '1',
+        })
+        self.cart.refresh_from_db()
+        self.assertIsNone(self.cart.coupon)
 
     def test_free_delivery_notice_is_hidden_on_cart_checkout_and_payment(self):
         guideline = DeliveryGuideline.get_solo()
@@ -942,8 +962,16 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertContains(initial_response, 'select2-state')
         initial_response_html = initial_response.content.decode()
         self.assertLess(
+            initial_response_html.index('name="country"'),
+            initial_response_html.index('name="state"'),
+        )
+        self.assertLess(
             initial_response_html.index('name="state"'),
             initial_response_html.index('name="city"'),
+        )
+        self.assertLess(
+            initial_response_html.index('name="city"'),
+            initial_response_html.index('name="zip_code"'),
         )
 
         with patch('accounts.views.send_order_confirmation_email'), patch(
@@ -980,6 +1008,22 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertEqual(order.delivery_option, Order.DeliveryOption.STANDARD)
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertEqual(order.grand_total, 600)
+
+    def test_standard_guest_checkout_does_not_offer_or_apply_coupons(self):
+        coupon = Coupon.objects.create(
+            coupon_code='GUESTSTD',
+            discount_amount=50,
+            minimum_amount=500,
+        )
+        response = self.client.get(reverse('guest-checkout'))
+        self.assertNotContains(response, 'Apply Coupon')
+
+        self.client.post(reverse('guest-checkout'), {
+            'coupon': coupon.coupon_code,
+            'apply_coupon': '1',
+        })
+        self.cart.refresh_from_db()
+        self.assertIsNone(self.cart.coupon)
 
     def test_confirmation_requotes_when_cart_total_changes(self):
         self.client.post(reverse('guest-checkout'), self.checkout_data())
@@ -3051,6 +3095,29 @@ class ReturnWorkflowTests(TestCase):
             response,
             'Upload at least 1 clear product photo for a replacement request.',
         )
+        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
+
+    def test_replacement_request_requires_a_reason_even_with_product_photo(self):
+        from products.models import ReturnDetails
+
+        ReturnDetails.objects.create(
+            product=self.product,
+            is_returnable=True,
+            return_policy='replaceable',
+            return_window_days=4,
+        )
+
+        response = self.client.post(
+            reverse('return_request', args=[self.order.order_id]),
+            {
+                'action': 'request',
+                'request_type': ReturnRequest.RequestType.REPLACEMENT,
+                'request_images': [self.create_request_photo()],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This field is required.')
         self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
 
     def test_replacement_can_be_requested_for_products_marked_replaceable(self):
