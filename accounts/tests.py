@@ -958,7 +958,7 @@ class GuestCheckoutDeliveryTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         order = Order.objects.get(guest_email='guest@example.com')
-        self.assertEqual(order.delivery_option, Order.DeliveryOption.NEXT_DAY)
+        self.assertEqual(order.delivery_option, Order.DeliveryOption.STANDARD)
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertEqual(order.grand_total, 600)
 

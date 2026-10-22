@@ -161,7 +161,7 @@ class Order(BaseModel):
     class DeliveryOption(models.TextChoices):
         LOCAL_FREE = 'local_free', 'Free local delivery'
         EXPRESS = 'express', 'Express delivery'
-        NEXT_DAY = 'next_day', 'Next day delivery'
+        STANDARD = 'next_day', 'Standard delivery'
 
     class Status(models.TextChoices):
         PENDING_REVIEW = 'pending_review', 'Pending review'

@@ -94,14 +94,22 @@ class DeliveryGuideline(models.Model):
     express_delivery_enabled = models.BooleanField(default=True)
     express_delivery_min_hours = models.PositiveSmallIntegerField(default=4)
     express_delivery_max_hours = models.PositiveSmallIntegerField(default=5)
-    next_day_delivery_enabled = models.BooleanField(default=True)
+    next_day_delivery_enabled = models.BooleanField(
+        default=True,
+        verbose_name='Standard delivery enabled',
+    )
     summary = models.TextField(
-        default='Delivery availability and timelines depend on your location and order details.')
+        default=(
+            'We strive to deliver your order at the earliest possible opportunity. '
+            'Most orders are delivered within 2-3 business days, subject to location '
+            'and service availability.'
+        ),
+    )
     details = models.TextField(
         default=(
-            'Delivery timelines depend on your delivery area, order time, product availability, '
-            'and weather. Orders to PIN codes outside the Standard Service Area are estimated '
-            'to arrive within 4–6 days.'
+            'We strive to deliver your order at the earliest possible opportunity. '
+            'Most orders are delivered within 2-3 business days, subject to location '
+            'and service availability.'
         ),
     )
     outside_area_notice = models.TextField(

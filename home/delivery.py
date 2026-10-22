@@ -91,8 +91,12 @@ def get_delivery_options(
     if guideline.next_day_delivery_enabled:
         options.append({
             'value': 'next_day',
-            'label': 'Next-day delivery',
-            'description': 'Delivery on the next day.',
+            'label': 'Standard delivery',
+            'description': (
+                'We strive to deliver your order at the earliest possible opportunity. '
+                'Most orders are delivered within 2-3 business days, subject to location '
+                'and service availability.'
+            ),
         })
 
     return {

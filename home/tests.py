@@ -135,6 +135,40 @@ class ContactFormTests(TestCase):
 
 
 class DeliveryGuidelineTests(TestCase):
+    def test_standard_delivery_option_uses_approved_copy(self):
+        guideline = DeliveryGuideline()
+
+        option = next(
+            option for option in get_delivery_options(guideline, 'Dehradun')['options']
+            if option['value'] == 'next_day'
+        )
+
+        self.assertEqual(option['label'], 'Standard delivery')
+        self.assertEqual(
+            option['description'],
+            'We strive to deliver your order at the earliest possible opportunity. '
+            'Most orders are delivered within 2-3 business days, subject to location '
+            'and service availability.',
+        )
+        self.assertNotIn('next day', option['label'].casefold())
+        self.assertNotIn('next day', option['description'].casefold())
+
+    def test_guideline_defaults_use_approved_delivery_copy(self):
+        approved_copy = (
+            'We strive to deliver your order at the earliest possible opportunity. '
+            'Most orders are delivered within 2-3 business days, subject to location '
+            'and service availability.'
+        )
+        guideline = DeliveryGuideline()
+
+        self.assertEqual(guideline.summary, approved_copy)
+        self.assertEqual(guideline.details, approved_copy)
+        self.assertContains(self.client.get(reverse('about')), approved_copy)
+        self.assertContains(
+            self.client.get(reverse('terms-and-conditions')),
+            approved_copy,
+        )
+
     def test_delivery_options_check_city_radius_accuracy_and_order_threshold(self):
         guideline = DeliveryGuideline(
             operational_office_city='Dehradun',
@@ -195,12 +229,12 @@ class DeliveryGuidelineTests(TestCase):
 
         automatic_express = get_automatic_delivery_selection(
             guideline, 'Dehradun', True, 30.32, 78.03, 200, Decimal('500.01'))
-        automatic_next_day = get_automatic_delivery_selection(
+        automatic_standard = get_automatic_delivery_selection(
             guideline, 'Dehradun', True, 30.5, 78.03, 0, Decimal('400'))
         outside_service_area = get_automatic_delivery_selection(
             guideline, 'Dehradun', False, 30.32, 78.03, 0, Decimal('400'))
         self.assertEqual(automatic_express[0], 'express')
-        self.assertEqual(automatic_next_day, ('next_day', None))
+        self.assertEqual(automatic_standard, ('next_day', None))
         self.assertEqual(outside_service_area, ('', None))
 
     def test_delivery_fee_applies_below_threshold_and_is_free_at_threshold(self):
@@ -353,6 +387,17 @@ class DehradunShoppingGuideTests(TestCase):
             sitemap_response,
             guide_url,
         )
+
+    def test_guide_shows_approved_delivery_copy_from_guideline(self):
+        response = self.client.get(reverse('dehradun_shopping_guide'))
+        approved_copy = (
+            'We strive to deliver your order at the earliest possible opportunity. '
+            'Most orders are delivered within 2-3 business days, subject to location '
+            'and service availability.'
+        )
+
+        self.assertContains(response, approved_copy)
+        self.assertEqual(response.content.count(approved_copy.encode()), 1)
 
 
 class HomeBannerTests(TestCase):
