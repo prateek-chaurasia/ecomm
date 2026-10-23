@@ -3,7 +3,7 @@ from django import forms
 from base.admin import FilterCollapsibleModelAdmin
 from .models import (
     City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
-    DeliveryGuideline, ReturnRefundPolicy,
+    DeliveryGuideline, ReturnRefundPolicy, ReplacePolicy,
 )
 
 # Register your models here.
@@ -49,8 +49,21 @@ class DeliveryGuidelineAdmin(FilterCollapsibleModelAdmin):
         return not DeliveryGuideline.objects.exists()
 
 
+class ReturnRefundPolicyAdminForm(forms.ModelForm):
+    class Meta:
+        model = ReturnRefundPolicy
+        fields = '__all__'
+        help_texts = {
+            'return_summary': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'return_details': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'refund_summary': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'refund_details': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+        }
+
+
 @admin.register(ReturnRefundPolicy)
 class ReturnRefundPolicyAdmin(FilterCollapsibleModelAdmin):
+    form = ReturnRefundPolicyAdminForm
     fields = (
         'return_title', 'return_summary', 'return_details',
         'refund_title', 'refund_summary', 'refund_details',
@@ -60,6 +73,25 @@ class ReturnRefundPolicyAdmin(FilterCollapsibleModelAdmin):
 
     def has_add_permission(self, request):
         return not ReturnRefundPolicy.objects.exists()
+
+
+class ReplacePolicyAdminForm(forms.ModelForm):
+    class Meta:
+        model = ReplacePolicy
+        fields = '__all__'
+        help_texts = {
+            'replace_summary': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'replace_details': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+        }
+
+
+@admin.register(ReplacePolicy)
+class ReplacePolicyAdmin(FilterCollapsibleModelAdmin):
+    form = ReplacePolicyAdminForm
+    fields = ('replace_summary', 'replace_details')
+
+    def has_add_permission(self, request):
+        return not ReplacePolicy.objects.exists()
 
 
 class HomeBannerAdminForm(forms.ModelForm):

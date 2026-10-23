@@ -167,6 +167,11 @@ def login_page(request):
 def register_page(request):
     if request.method == 'POST':
         username = request.POST.get('username')
+        email = request.POST.get('email')
+        if User.objects.filter(Q(username=username) | Q(email=email)).exists():
+            messages.error(request, 'Username or email already exists!')
+            return HttpResponseRedirect(request.path_info)
+
         registration_form = RegistrationForm(request.POST)
         if not registration_form.is_valid():
             return render(
@@ -178,12 +183,6 @@ def register_page(request):
         last_name = registration_form.cleaned_data['last_name']
         email = registration_form.cleaned_data['email']
         password = registration_form.cleaned_data['password']
-
-        user_obj = User.objects.filter(Q(username=username) | Q(email=email))
-
-        if user_obj.exists():
-            messages.error(request, 'Username or email already exists!')
-            return HttpResponseRedirect(request.path_info)
 
         user_obj = User.objects.create(
             username=username, first_name=first_name, last_name=last_name, email=email)
@@ -1707,9 +1706,20 @@ def order_details(request, order_id):
     if not order.guest_access_token:
         order.guest_access_token = uuid.uuid4().hex
         order.save(update_fields=['guest_access_token', 'updated_at'])
-    order_items = OrderItem.objects.filter(order=order).select_related(
-        'product', 'size_variant', 'color_variant').prefetch_related(
-            'product__product_images')
+    order_items = list(
+        OrderItem.objects.filter(order=order).select_related(
+            'product', 'size_variant', 'color_variant').prefetch_related(
+                'product__product_images')
+    )
+    for item in order_items:
+        image = next(
+            (
+                image for image in item.product.product_images.all()
+                if image.image_url
+            ),
+            None,
+        ) if item.product_id else None
+        item.order_thumbnail_url = image.thumbnail_url if image else ''
     bundle_items = order.bundle_items.prefetch_related(
         'selected_products__product__product_images')
     review_products = {}

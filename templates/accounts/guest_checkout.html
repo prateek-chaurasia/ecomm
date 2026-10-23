@@ -57,7 +57,7 @@
               {% endif %}
               <div class="d-flex justify-content-between mt-2">
                 <span>Total to pay</span>
-                <strong>₹{{ cart_total_after_delivery }}</strong>
+                <strong>₹{{ cart_total_after_delivery|floatformat:2 }}</strong>
               </div>
             </div>
             <form method="post" class="mt-3">

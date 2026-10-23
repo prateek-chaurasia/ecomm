@@ -93,8 +93,18 @@
             <i class="fas fa-phone"></i>
           </div>
           <h2 class="h4">Call Us</h2>
-          <p class="text-muted">Speak with our team</p>
-          <p class="text-muted">+91 8368258978</p>
+          <p class="text-muted">Speak to our team</p>
+          <p class="text-muted">
+            <a href="tel:+919762983929">+91 9762983929</a>
+          </p>
+          <a
+            class="btn btn-success btn-sm"
+            href="https://wa.me/919762983929"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <i class="fab fa-whatsapp me-2" aria-hidden="true"></i>WhatsApp Us
+          </a>
         </div>
       </div>
     </div>
@@ -446,13 +456,13 @@
   /* Contact Methods Section */
   .contact-methods-section {
     background: #f8fafc;
-    padding: 80px 0;
+    padding: 32px 0;
   }
 
   .contact-method-card {
     background: white;
-    padding: 2.5rem 2rem;
-    border-radius: 24px;
+    padding: 1.5rem 1.25rem;
+    border-radius: 16px;
     box-shadow: var(--shadow-md);
     border: 1px solid var(--border-color);
     transition: all 0.3s ease;
@@ -482,30 +492,34 @@
   }
 
   .method-icon-wrapper {
-    width: 80px;
-    height: 80px;
+    width: 56px;
+    height: 56px;
     background: var(--primary-color);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 1.5rem;
-    font-size: 1.5rem;
+    margin: 0 auto 0.75rem;
+    font-size: 1.25rem;
     color: white;
     box-shadow: var(--shadow-md);
   }
 
   .contact-method-card h4 {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--text-dark);
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
   }
 
   .contact-method-card p {
     color: var(--text-muted);
-    margin-bottom: 1.5rem;
-    line-height: 1.6;
+    margin-bottom: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .contact-method-card p:last-of-type {
+    overflow-wrap: anywhere;
   }
 
   /* Main Contact Section */
@@ -825,7 +839,7 @@
     }
 
     .contact-methods-section {
-      padding: 60px 0;
+      padding: 28px 0;
     }
 
     .main-contact-section {
@@ -868,18 +882,11 @@
     }
 
     .contact-methods-section {
-      padding: 40px 0;
+      padding: 24px 0;
     }
 
     .contact-method-card {
-      padding: 2rem 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .method-icon-wrapper {
-      width: 60px;
-      height: 60px;
-      font-size: 1.25rem;
+      padding: 1.25rem 1rem;
     }
 
     .main-contact-section {
@@ -931,7 +938,7 @@
     }
 
     .contact-method-card {
-      padding: 1.5rem 1rem;
+      padding: 1rem 0.75rem;
     }
 
     .contact-form-wrapper {

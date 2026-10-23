@@ -85,12 +85,25 @@ class ProductAdminForm(forms.ModelForm):
 
 
 class ReturnDetailsInlineForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['return_window_days'].required = False
+
     class Meta:
         model = ReturnDetails
         fields = ['return_policy', 'return_window_days', 'policy', 'refund_policy', 'conditions']
         help_texts = {
             'return_policy': 'Choose whether this product is returnable, replaceable, or non-returnable.',
+            'policy': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'refund_policy': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
+            'conditions': 'HTML formatting is supported; unsafe tags and attributes are removed when displayed.',
         }
+
+    def clean_return_window_days(self):
+        days = self.cleaned_data.get('return_window_days')
+        if days is None:
+            return ReturnDetails._meta.get_field('return_window_days').get_default()
+        return days
 
     def save(self, commit=True):
         return_details = super().save(commit=False)

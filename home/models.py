@@ -207,6 +207,32 @@ class ReturnRefundPolicy(models.Model):
         return 'Return and refund policy'
 
 
+class ReplacePolicy(models.Model):
+    replace_summary = models.TextField(
+        default='Replacement requests are reviewed under the product-specific terms shown on each product page.',
+    )
+    replace_details = models.TextField(
+        default='Contact our support team with your order details to request a replacement.',
+    )
+
+    class Meta:
+        verbose_name = 'replace policy'
+        verbose_name_plural = 'replace policy'
+
+    @classmethod
+    def get_solo(cls):
+        policy, _ = cls.objects.get_or_create(pk=1)
+        return policy
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        kwargs.pop('force_insert', None)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return 'Replace Policy'
+
+
 class CountryModel(models.Model):
     # You can still use CountryField for choices/flags on the parent table
     code = CountryField(unique=True, primary_key=True)

@@ -1,5 +1,7 @@
 from django.conf import settings
-from .models import DeliveryGuideline, MarqueeAnnouncement, ReturnRefundPolicy
+from .models import (
+    DeliveryGuideline, MarqueeAnnouncement, ReplacePolicy, ReturnRefundPolicy,
+)
 from products.models import Category
 
 
@@ -13,6 +15,7 @@ def delivery_guideline(request):
     return {
         'delivery_guideline': DeliveryGuideline.get_solo(),
         'return_refund_policy': ReturnRefundPolicy.get_solo(),
+        'replace_policy': ReplacePolicy.get_solo(),
         'footer_categories': Category.objects.order_by('category_name'),
         'service_area_message': service_area_message,
         'marquee_announcements': MarqueeAnnouncement.objects.filter(

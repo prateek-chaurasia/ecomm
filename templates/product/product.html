@@ -813,9 +813,9 @@
 
     <div class="return-policy-heading">
       {% if product.return_details.return_policy == 'non_returnable' %}
-      <span class="product-return-badge non-returnable">Product is Non-Returnable</span>
+      <span class="product-return-badge non-returnable">Non-Returnable</span>
       {% else %}
-      <details class="return-policy-section" aria-label="Return and refund policy">
+      <details class="return-policy-section" aria-label="{% if product.return_details.return_policy == 'replaceable' %}Replace policy{% else %}Return and refund policy{% endif %}">
         {% if product.return_details.return_policy == 'returnable' %}
         <summary class="product-return-badge return-policy-toggle">
           Product is Returnable
@@ -834,44 +834,59 @@
         {% endif %}
         <div class="return-policy-content">
           <div class="return-policy-cards">
+            {% if product.return_details.return_policy == 'replaceable' %}
+            <section class="return-policy-card return-details-section">
+              <h2 class="h5">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                Replace Policy
+              </h2>
+              {% if product.return_details.policy %}
+              <div class="mb-2">{{ product.return_details.policy|render_product_description }}</div>
+              {% else %}
+              <div class="mb-2">{{ replace_policy.replace_summary|render_product_description }}</div>
+              {% endif %}
+              {% if product.return_details.conditions %}
+              <div class="text-muted mb-0"><strong>Guidelines:</strong> {{ product.return_details.conditions|render_product_description }}</div>
+              {% else %}
+              <div class="text-muted mb-0">{{ replace_policy.replace_details|render_product_description }}</div>
+              {% endif %}
+              {% if product.return_details.return_window_days %}
+              <p class="mb-0">Replacement requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
+              {% endif %}
+            </section>
+            {% else %}
             <section class="return-policy-card return-details-section">
               <h2 class="h5">
                 <i class="fas fa-undo" aria-hidden="true"></i>
-                {% if product.return_details %}Return Details{% else %}{{ return_refund_policy.return_title }}{% endif %}
+                Return
               </h2>
-              {% if product.return_details %}
-              {% if product.return_details.return_policy == 'returnable' %}
-              <p class="mb-0">Return requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
-              {% elif product.return_details.return_policy == 'replaceable' %}
-              <p class="mb-0">Replacement requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
-              {% endif %}
-              {% if product.return_details.policy or product.return_details.conditions %}
-              <div class="return-policy-guidelines">
-                {% if product.return_details.policy %}
-                <p class="text-muted mb-2">{{ product.return_details.policy|linebreaksbr }}</p>
-                {% endif %}
-                {% if product.return_details.conditions %}
-                <p class="text-muted mb-0"><strong>Guidelines:</strong> {{ product.return_details.conditions|linebreaksbr }}</p>
-                {% endif %}
-              </div>
-              {% endif %}
+              {% if product.return_details.policy %}
+              <div class="mb-2">{{ product.return_details.policy|render_product_description }}</div>
               {% else %}
-              <p class="mb-2">{{ return_refund_policy.return_summary }}</p>
-              <p class="text-muted mb-0">{{ return_refund_policy.return_details|linebreaksbr }}</p>
+              <div class="mb-2">{{ return_refund_policy.return_summary|render_product_description }}</div>
+              {% endif %}
+              {% if product.return_details.conditions %}
+              <div class="text-muted mb-0"><strong>Guidelines:</strong> {{ product.return_details.conditions|render_product_description }}</div>
+              {% else %}
+              <div class="text-muted mb-0">{{ return_refund_policy.return_details|render_product_description }}</div>
+              {% endif %}
+              {% if product.return_details.return_window_days %}
+              <p class="mt-2 mb-0">Return requests can be submitted within {{ product.return_details.return_window_days }} days of delivery.</p>
               {% endif %}
             </section>
             <section class="return-policy-card refund-details-section">
               <h2 class="h5">
                 <i class="fas fa-wallet" aria-hidden="true"></i>
-                {{ return_refund_policy.refund_title }}
+                Refund
               </h2>
               {% if product.return_details.refund_policy %}
-              <p class="text-muted mb-0">{{ product.return_details.refund_policy|linebreaksbr }}</p>
+              <div class="text-muted mb-0">{{ product.return_details.refund_policy|render_product_description }}</div>
               {% else %}
-              <p class="mb-2">{{ return_refund_policy.refund_summary }}</p>
-              <p class="text-muted mb-0">{{ return_refund_policy.refund_details|linebreaksbr }}</p>
+              <div class="mb-2">{{ return_refund_policy.refund_summary|render_product_description }}</div>
+              <div class="text-muted mb-0">{{ return_refund_policy.refund_details|render_product_description }}</div>
               {% endif %}
             </section>
+            {% endif %}
           </div>
         </div>
       </details>

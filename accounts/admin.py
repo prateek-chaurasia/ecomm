@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from django.contrib import admin
 from django import forms
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.conf import settings
 import logging
 import razorpay
@@ -221,7 +221,7 @@ class ServiceablePincodeAdmin(FilterCollapsibleModelAdmin):
 @admin.register(Order)
 class OrderAdmin(PaginatedModelAdmin):
     list_display = (
-        'order_id', 'customer_name', 'delivery_pincode', 'delivery_option',
+        'order_id', 'product_thumbnails', 'customer_name', 'delivery_pincode', 'delivery_option',
         'status', 'additional_delivery_fee', 'payment_status',
         'grand_total', 'order_date',
     )
@@ -237,6 +237,54 @@ class OrderAdmin(PaginatedModelAdmin):
     list_editable = ('status', 'additional_delivery_fee')
     search_fields = ('order_id', 'guest_email', 'guest_name', 'user__username')
     readonly_fields = ('order_id', 'guest_access_token', 'order_date', 'delivery_pincode')
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related(
+            'order_items__product__product_images',
+            'bundle_items__selected_products__product__product_images',
+        )
+
+    @admin.display(description='Products')
+    def product_thumbnails(self, obj):
+        products = {}
+        for item in obj.order_items.all():
+            if item.product_id:
+                products.setdefault(item.product_id, item.product)
+        for bundle_item in obj.bundle_items.all():
+            for selected_product in bundle_item.selected_products.all():
+                products.setdefault(selected_product.product_id, selected_product.product)
+
+        thumbnails = []
+        for product in products.values():
+            image = next(
+                (image for image in product.product_images.all() if image.image_url),
+                None,
+            )
+            if image:
+                thumbnails.append((image.thumbnail_url, product.product_name))
+
+        if not thumbnails:
+            return '—'
+
+        visible_thumbnails = thumbnails[:4]
+        images = format_html_join(
+            '',
+            '<img src="{}" alt="{}" title="{}" width="40" height="40" '
+            'style="object-fit: cover; border-radius: 4px;" />',
+            ((url, name, name) for url, name in visible_thumbnails),
+        )
+        extra_count = len(thumbnails) - len(visible_thumbnails)
+        if extra_count:
+            return format_html(
+                '<span style="display: inline-flex; align-items: center; gap: 4px;">'
+                '{}<span>+{}</span></span>',
+                images,
+                extra_count,
+            )
+        return format_html(
+            '<span style="display: inline-flex; align-items: center; gap: 4px;">{}</span>',
+            images,
+        )
 
     @admin.display(description='Customer')
     def customer_name(self, obj):

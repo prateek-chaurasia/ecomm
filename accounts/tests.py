@@ -272,6 +272,25 @@ class OrderCancellationTests(TestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.stock_quantity, 7)
 
+    def test_order_details_shows_product_thumbnail(self):
+        image = ProductImage.objects.create(
+            product=self.product,
+            image_url='products/order-item-thumbnail.jpg',
+        )
+        self.assertTrue(image.image_url)
+        self.assertEqual(
+            image.thumbnail_url,
+            '/media/products/order-item-thumbnail.jpg',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse('order_details', args=[self.order.order_id]))
+
+        self.assertContains(response, '<img\n', html=False)
+        self.assertContains(response, 'src="/media/products/order-item-thumbnail.jpg"', html=False)
+        self.assertContains(response, 'alt="Gift box"', html=False)
+
     @override_settings(ADMIN_EMAIL='ops@example.com, warehouse@example.com')
     def test_cancellation_emails_customer_and_admin_team(self):
         self.client.force_login(self.user)
@@ -1214,6 +1233,35 @@ class OrderAdminFilterTests(TestCase):
             reverse('admin:accounts_order_changelist'), query)
         self.assertEqual(response.status_code, 200)
         return set(response.context['cl'].queryset.values_list('order_id', flat=True))
+
+    def test_order_changelist_shows_order_product_thumbnail(self):
+        category = Category.objects.create(category_name='Admin order gifts')
+        product = Product.objects.create(
+            product_name='Admin order gift',
+            category=category,
+            price=500,
+            product_desription='Gift listed in admin order',
+        )
+        ProductImage.objects.create(
+            product=product,
+            image_url='products/admin-order-thumbnail.jpg',
+        )
+        OrderItem.objects.create(
+            order=self.placed_order,
+            product=product,
+            quantity=1,
+            product_price=500,
+        )
+
+        response = self.client.get(reverse('admin:accounts_order_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<img src="/media/products/admin-order-thumbnail.jpg"',
+            html=False,
+        )
+        self.assertContains(response, 'alt="Admin order gift"', html=False)
 
     def test_order_changelist_supports_page_sizes_and_preserves_filters(self):
         for index in range(26):

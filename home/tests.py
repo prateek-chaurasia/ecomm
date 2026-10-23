@@ -22,7 +22,7 @@ from home.delivery import (
 )
 from home.models import (
     City, DeliveryGuideline, HomeBanner, MarqueeAnnouncement,
-    ReturnRefundPolicy, State,
+    ReplacePolicy, ReturnRefundPolicy, State,
 )
 from products.models import Category, Product
 
@@ -330,6 +330,41 @@ class ReturnRefundPolicyTests(TestCase):
             'Updated policy',
         )
 
+    def test_replace_policy_is_available_on_site_pages(self):
+        policy = ReplacePolicy.get_solo()
+        policy.replace_summary = 'Replacement terms for eligible products.'
+        policy.replace_details = 'Contact support to request a replacement.'
+        policy.save()
+
+        response = self.client.get(reverse('about'))
+
+        self.assertEqual(response.context['replace_policy'], policy)
+        self.assertEqual(ReplacePolicy.objects.count(), 1)
+
+    def test_only_one_replace_policy_can_be_saved(self):
+        ReplacePolicy.objects.create(replace_summary='First policy')
+        ReplacePolicy.objects.create(replace_summary='Updated policy')
+
+        self.assertEqual(ReplacePolicy.objects.count(), 1)
+        self.assertEqual(
+            ReplacePolicy.objects.get(pk=1).replace_summary,
+            'Updated policy',
+        )
+
+    def test_replace_policy_is_managed_from_admin(self):
+        admin_user = User.objects.create_superuser(
+            username='policy-admin',
+            email='policy-admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('admin:home_replacepolicy_add'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Replace summary')
+        self.assertContains(response, 'Replace details')
+
 
 class DehradunShoppingGuideTests(TestCase):
     def test_guide_shows_seo_content_and_links_all_database_categories(self):
@@ -359,7 +394,8 @@ class DehradunShoppingGuideTests(TestCase):
         )
         self.assertContains(response, 'Open-Box Inspection in the Local Service Range')
         self.assertContains(response, 'decline it immediately')
-        self.assertContains(response, 'Cash on Delivery, UPI')
+        self.assertContains(response, 'Cash on Delivery (COD)')
+        self.assertContains(response, 'UPI at the time of delivery')
         self.assertContains(response, 'Toys')
         self.assertEqual(
             list(response.context['guide_categories']),
@@ -647,7 +683,7 @@ class RenderBlockingResourceTests(TestCase):
         )
         self.assertContains(
             response,
-            '/static/fonts/local-fonts.css',
+            '/static/fonts/local-fonts.min.css',
         )
         self.assertContains(response, '/static/css/vendor/bootstrap-5.3.0-alpha1.min.css')
         self.assertNotContains(
@@ -670,7 +706,7 @@ class RenderBlockingResourceTests(TestCase):
         not_found_page = render_to_string('404.html')
         server_error_page = render_to_string('500.html')
 
-        self.assertIn('/static/fonts/local-fonts.css', not_found_page)
+        self.assertIn('/static/fonts/local-fonts.min.css', not_found_page)
         self.assertNotIn('cdnjs.cloudflare.com', not_found_page)
         self.assertIn('/static/js/vendor/TweenLite-2.1.3.min.js', server_error_page)
         self.assertIn('/static/js/vendor/CSSPlugin-2.1.3.min.js', server_error_page)

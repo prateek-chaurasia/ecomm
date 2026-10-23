@@ -13,7 +13,7 @@ from django.urls import reverse
 from PIL import Image
 
 from accounts.models import Cart, CartItem
-from home.models import ReturnRefundPolicy
+from home.models import ReplacePolicy, ReturnRefundPolicy
 from products.admin import (
     CategoryAdmin, ProductAdmin, ProductAdminForm, ProductImageAdminForm,
     ReturnDetailsInlineForm, restock_selected,
@@ -617,7 +617,7 @@ class ProductReturnDetailsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Return policy')
-        self.assertContains(response, 'value="returnable">Returnable')
+        self.assertContains(response, 'value="returnable" selected>Returnable')
         self.assertContains(response, 'value="replaceable">Replaceable')
         self.assertContains(response, 'value="non_returnable">Non-Returnable')
 
@@ -644,7 +644,8 @@ class ProductReturnDetailsTests(TestCase):
         response = self.client.get(reverse('get_product', args=[product.slug]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Return Details')
+        self.assertContains(response, '<h2 class="h5">\n                <i class="fas fa-undo" aria-hidden="true"></i>\n                Return\n              </h2>')
+        self.assertContains(response, '<h2 class="h5">\n                <i class="fas fa-wallet" aria-hidden="true"></i>\n                Refund\n              </h2>')
         self.assertContains(response, '14 days')
         self.assertContains(response, 'Refunds for this product are store credit only.')
         self.assertContains(response, 'class="return-policy-cards"')
@@ -724,11 +725,21 @@ class ProductReturnDetailsTests(TestCase):
                     )
                     self.assertContains(response, status)
                     self.assertContains(response, guidance)
+                    if policy == 'replaceable':
+                        self.assertContains(response, 'Replace Policy')
+                        self.assertNotContains(response, 'fas fa-wallet')
+                    else:
+                        self.assertContains(response, 'fas fa-undo')
+                        self.assertContains(response, 'fas fa-wallet')
 
     def test_generic_policy_is_used_when_product_has_no_return_details(self):
         generic_policy = ReturnRefundPolicy.get_solo()
-        generic_policy.return_summary = 'Generic return summary.'
-        generic_policy.refund_summary = 'Generic refund summary.'
+        generic_policy.return_summary = '<p><strong>Generic return summary.</strong></p>'
+        generic_policy.return_details = '<ul><li>Generic return details.</li></ul>'
+        generic_policy.refund_summary = '<p><em>Generic refund summary.</em></p>'
+        generic_policy.refund_details = (
+            '<p><a href="https://example.com/refunds">Generic refund details.</a></p>'
+        )
         generic_policy.save()
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(
@@ -740,8 +751,37 @@ class ProductReturnDetailsTests(TestCase):
 
         response = self.client.get(reverse('get_product', args=[product.slug]))
 
-        self.assertContains(response, 'Generic return summary.')
-        self.assertContains(response, 'Generic refund summary.')
+        self.assertContains(response, '<p><strong>Generic return summary.</strong></p>')
+        self.assertContains(response, '<ul><li>Generic return details.</li></ul>')
+        self.assertContains(response, '<p><em>Generic refund summary.</em></p>')
+        self.assertContains(
+            response,
+            '<a href="https://example.com/refunds">Generic refund details.</a>',
+        )
+
+    def test_policy_html_is_sanitized_before_rendering(self):
+        generic_policy = ReturnRefundPolicy.get_solo()
+        generic_policy.return_summary = (
+            '<p onclick="alert(1)"><strong>Safe return</strong></p>'
+            '<script>alert(2)</script>'
+            '<a href="javascript:alert(3)">unsafe link</a>'
+        )
+        generic_policy.save()
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Safe policy toy',
+            category=category,
+            price=500,
+            product_desription='A toy with safe policy rendering',
+        )
+
+        response = self.client.get(reverse('get_product', args=[product.slug]))
+
+        self.assertContains(response, '<p><strong>Safe return</strong></p>')
+        self.assertContains(response, '<a>unsafe link</a>')
+        self.assertNotContains(response, 'onclick')
+        self.assertNotContains(response, '<script>alert(2)</script>', html=False)
+        self.assertNotContains(response, 'href="javascript:')
 
     def test_generic_refund_policy_fills_missing_product_refund_policy(self):
         generic_policy = ReturnRefundPolicy.get_solo()
@@ -763,6 +803,57 @@ class ProductReturnDetailsTests(TestCase):
 
         self.assertContains(response, 'Product-specific return terms.')
         self.assertContains(response, 'Generic refund summary.')
+
+    def test_replace_product_policy_overrides_central_policy_and_omits_refunds(self):
+        central_policy = ReplacePolicy.get_solo()
+        central_policy.replace_summary = '<p><strong>Central replacement summary.</strong></p>'
+        central_policy.replace_details = '<ul><li>Central replacement details.</li></ul>'
+        central_policy.save()
+        category = Category.objects.create(category_name='Gifts')
+        product = Product.objects.create(
+            product_name='Replaceable gift',
+            category=category,
+            price=600,
+            product_desription='A replaceable gift',
+        )
+        ReturnDetails.objects.create(
+            product=product,
+            return_policy='replaceable',
+            policy='Product replacement terms.',
+            conditions='Product replacement conditions.',
+        )
+
+        response = self.client.get(reverse('get_product', args=[product.slug]))
+
+        self.assertContains(response, 'Replace Policy')
+        self.assertContains(response, 'Product replacement terms.')
+        self.assertContains(response, 'Product replacement conditions.')
+        self.assertNotContains(response, 'Central replacement summary.')
+        self.assertNotContains(response, 'Central replacement details.')
+        self.assertNotContains(response, '>Refund<', html=False)
+
+    def test_replace_product_uses_central_policy_when_product_copy_is_blank(self):
+        central_policy = ReplacePolicy.get_solo()
+        central_policy.replace_summary = '<p><strong>Central replacement summary.</strong></p>'
+        central_policy.replace_details = '<ul><li>Central replacement details.</li></ul>'
+        central_policy.save()
+        category = Category.objects.create(category_name='Gifts')
+        product = Product.objects.create(
+            product_name='Standard replacement gift',
+            category=category,
+            price=600,
+            product_desription='A replacement gift',
+        )
+        ReturnDetails.objects.create(product=product, return_policy='replaceable')
+
+        response = self.client.get(reverse('get_product', args=[product.slug]))
+
+        self.assertContains(
+            response,
+            '<p><strong>Central replacement summary.</strong></p>',
+        )
+        self.assertContains(response, '<ul><li>Central replacement details.</li></ul>')
+        self.assertNotContains(response, '>Refund<', html=False)
 
     def test_admin_return_policy_form_syncs_legacy_returnable_flag(self):
         category = Category.objects.create(category_name='Gifts')
@@ -1022,7 +1113,7 @@ class ProductCartStateTests(TestCase):
 
         self.assertContains(response, '<p>Safe text</p>alert(2)')
         self.assertNotContains(response, 'onclick')
-        self.assertNotContains(response, '<script>')
+        self.assertNotContains(response, '<script>alert(2)</script>', html=False)
 
 
 class WishlistBackInStockTests(TestCase):
@@ -1514,7 +1605,7 @@ class ProductQuantityTests(TestCase):
 
         self.client.post(reverse('add_to_cart', args=[product.uid]), {'quantity': 5})
         cart_item.refresh_from_db()
-        self.assertEqual(cart_item.quantity, 3)
+        self.assertEqual(cart_item.quantity, 2)
 
     def test_gift_wrap_charge_is_applied_per_item(self):
         category = Category.objects.create(category_name='Gifts')

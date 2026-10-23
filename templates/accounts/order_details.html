@@ -117,12 +117,29 @@
                     <td class="py-3 text-end"><span class="price-text">₹{{ item.get_total_price }}</span></td>
                   </tr>
                   {% endfor %}
-                  {% for item in order_items.all %}
+                  {% for item in order_items %}
                   <tr class="order-item-row">
                     <td class="py-3">
-                      <a href="{% url 'get_product' item.product.slug %}" class="product-link">
-                        {{ item.product.product_name }}
-                      </a>
+                      <div class="d-flex align-items-center" style="gap: 0.75rem;">
+                        {% if item.order_thumbnail_url %}
+                        <img
+                          src="{{ item.order_thumbnail_url }}"
+                          alt="{{ item.product.product_name }}"
+                          width="56"
+                          height="56"
+                          loading="lazy"
+                          decoding="async"
+                          style="object-fit: cover; border-radius: 6px; flex: 0 0 auto;"
+                        >
+                        {% endif %}
+                        {% if item.product %}
+                        <a href="{% url 'get_product' item.product.slug %}" class="product-link">
+                          {{ item.product.product_name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Product no longer available</span>
+                        {% endif %}
+                      </div>
                     </td>
                     <td class="py-3">
                       <span class="size-badge">{{ item.size_variant.size_name|default:"N/A" }}</span>
