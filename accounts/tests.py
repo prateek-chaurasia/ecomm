@@ -480,8 +480,13 @@ class CartItemQuantityUpdateTests(TestCase):
             coupon_code='SAVE100',
             discount_amount=100,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
-        Coupon.objects.create(coupon_code='EXPIRED', is_expired=True)
+        Coupon.objects.create(
+            coupon_code='EXPIRED',
+            is_expired=True,
+            expiry_date=timezone.localdate() + timedelta(days=30),
+        )
 
         response = self.client.get(reverse('cart'))
 
@@ -521,11 +526,13 @@ class CartItemQuantityUpdateTests(TestCase):
             coupon_code='FIRST',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         second_coupon = Coupon.objects.create(
             coupon_code='SECOND',
             discount_amount=75,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         cart_url = reverse('cart')
 
@@ -556,6 +563,58 @@ class CartItemQuantityUpdateTests(TestCase):
         self.client.post(cart_url, {'coupon': second_coupon.coupon_code})
         self.cart_item.cart.refresh_from_db()
         self.assertEqual(self.cart_item.cart.coupon, second_coupon)
+
+    def test_coupon_expiry_date_is_inclusive_and_inactive_coupons_are_unavailable(self):
+        valid_today = Coupon.objects.create(
+            coupon_code='VALIDTODAY',
+            expiry_date=timezone.localdate(),
+        )
+        expired_yesterday = Coupon.objects.create(
+            coupon_code='OLD',
+            expiry_date=timezone.localdate() - timedelta(days=1),
+        )
+        inactive_coupon = Coupon.objects.create(
+            coupon_code='INACTIVE',
+            is_active=False,
+            expiry_date=timezone.localdate() + timedelta(days=1),
+        )
+        Coupon.objects.create(coupon_code='NOEXPIRY')
+
+        self.assertTrue(valid_today.is_available)
+        self.assertFalse(expired_yesterday.is_available)
+        self.assertFalse(inactive_coupon.is_available)
+
+        response = self.client.get(reverse('cart'))
+        self.assertEqual(
+            list(response.context['available_coupons']),
+            [valid_today],
+        )
+        self.assertNotContains(response, 'OLD')
+        self.assertNotContains(response, 'INACTIVE')
+
+    def test_expired_coupon_cannot_be_applied_or_discount_an_existing_cart(self):
+        coupon = Coupon.objects.create(
+            coupon_code='PASTDATE',
+            discount_amount=100,
+            minimum_amount=500,
+            expiry_date=timezone.localdate() - timedelta(days=1),
+        )
+        self.cart_item.cart.coupon = coupon
+        self.cart_item.cart.save(update_fields=['coupon', 'updated_at'])
+
+        self.assertEqual(
+            self.cart_item.cart.get_cart_total_price_after_coupon(),
+            self.cart_item.cart.get_cart_total(),
+        )
+
+        response = self.client.post(
+            reverse('cart'),
+            {'coupon': coupon.coupon_code},
+        )
+
+        self.assertRedirects(response, reverse('cart'))
+        self.cart_item.cart.refresh_from_db()
+        self.assertIsNone(self.cart_item.cart.coupon)
 
     def test_reaching_delivery_threshold_shows_free_delivery_and_updates_subtotal(self):
         guideline = DeliveryGuideline.get_solo()
@@ -591,6 +650,12 @@ class CartItemQuantityUpdateTests(TestCase):
         )
 
     def test_zero_quantity_removes_cart_item(self):
+        coupon = Coupon.objects.create(
+            coupon_code='LASTITEM',
+            expiry_date=timezone.localdate() + timedelta(days=30),
+        )
+        self.cart_item.cart.coupon = coupon
+        self.cart_item.cart.save(update_fields=['coupon', 'updated_at'])
         remaining_item = CartItem.objects.create(
             cart=self.cart_item.cart,
             product=self.product,
@@ -616,6 +681,29 @@ class CartItemQuantityUpdateTests(TestCase):
         })
         self.assertFalse(CartItem.objects.filter(pk=self.cart_item.pk).exists())
         self.assertTrue(CartItem.objects.filter(pk=remaining_item.pk).exists())
+        self.cart_item.cart.refresh_from_db()
+        self.assertEqual(self.cart_item.cart.coupon, coupon)
+
+    def test_removing_last_item_clears_coupon(self):
+        coupon = Coupon.objects.create(
+            coupon_code='LASTITEM',
+            expiry_date=timezone.localdate() + timedelta(days=30),
+        )
+        self.cart_item.cart.coupon = coupon
+        self.cart_item.cart.save(update_fields=['coupon', 'updated_at'])
+
+        response = self.client.post(
+            reverse('update_cart_item'),
+            data=json.dumps({
+                'cart_item_id': str(self.cart_item.uid),
+                'quantity': 0,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.cart_item.cart.refresh_from_db()
+        self.assertIsNone(self.cart_item.cart.coupon)
 
     def test_update_rejects_quantity_above_inventory(self):
         response = self.client.post(
@@ -772,6 +860,7 @@ class RegisteredCheckoutFlowTests(TestCase):
             coupon_code='CHECKOUT',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         self.client.get(reverse('cart'))
 
@@ -1014,6 +1103,8 @@ class GuestCheckoutDeliveryTests(TestCase):
                 3,
             )
             self.assertContains(quote_response, 'class="card guest-delivery-address')
+            self.assertContains(quote_response, '>Edit</a>')
+            self.assertNotContains(quote_response, 'Change address')
             self.assertNotContains(quote_response, 'First name:')
             self.assertNotContains(quote_response, 'Street:')
             self.assertFalse(Order.objects.filter(guest_email='guest@example.com').exists())
@@ -1033,6 +1124,7 @@ class GuestCheckoutDeliveryTests(TestCase):
             coupon_code='GUESTQUOTE',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         self.cart.coupon = coupon
         self.cart.save(update_fields=['coupon', 'updated_at'])
@@ -1079,6 +1171,7 @@ class GuestCheckoutDeliveryTests(TestCase):
             coupon_code='GUESTSTD',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         response = self.client.get(reverse('guest-checkout'))
         self.assertNotContains(response, 'Apply Coupon')

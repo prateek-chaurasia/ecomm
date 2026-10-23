@@ -14,7 +14,7 @@ from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from home.models import HomeBanner
+from home.models import HomeBanner, ReplacePolicy, ReturnRefundPolicy
 from home.forms import ContactForm
 
 logger = logging.getLogger(__name__)
@@ -200,6 +200,13 @@ def terms_and_conditions(request):
 
 def privacy_policy(request):
     return render(request, 'home/privacy_policy.html')
+
+
+def return_refund_replace_policy(request):
+    return render(request, 'home/return_refund_replace_policy.html', {
+        'return_refund_policy': ReturnRefundPolicy.get_solo(),
+        'replace_policy': ReplacePolicy.get_solo(),
+    })
 
 
 @csrf_exempt

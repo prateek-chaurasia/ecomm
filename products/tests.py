@@ -1,4 +1,6 @@
 from io import BytesIO
+from datetime import timedelta
+import json
 import tempfile
 
 from django.contrib import admin
@@ -9,13 +11,14 @@ from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from PIL import Image
 
 from accounts.models import Cart, CartItem
 from home.models import ReplacePolicy, ReturnRefundPolicy
 from products.admin import (
-    CategoryAdmin, ProductAdmin, ProductAdminForm, ProductImageAdminForm,
+    CategoryAdmin, CouponAdminForm, ProductAdmin, ProductAdminForm, ProductImageAdminForm,
     ReturnDetailsInlineForm, restock_selected,
 )
 from products.models import (
@@ -24,6 +27,13 @@ from products.models import (
     BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
 )
 from products.image_utils import product_thumbnail_name
+
+
+class CouponAdminTests(TestCase):
+    def test_coupon_expiry_date_is_required_in_admin(self):
+        form = CouponAdminForm()
+
+        self.assertTrue(form.fields['expiry_date'].required)
 
 
 class CategoryAdminThumbnailTests(TestCase):
@@ -916,6 +926,7 @@ class ProductCartStateTests(TestCase):
             coupon_code='BUYNOW',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
 
         response = self.client.post(
@@ -958,6 +969,46 @@ class ProductCartStateTests(TestCase):
             applied_response,
             '<details class="card mb-4 cart-coupon-disclosure checkout-coupon-section" open>',
             html=False,
+        )
+        self.assertContains(
+            applied_response,
+            'class="checkout-coupon-remove-form"',
+        )
+
+    def test_buy_now_after_emptying_cart_does_not_keep_previous_coupon(self):
+        coupon = Coupon.objects.create(
+            coupon_code='PREVIOUS',
+            expiry_date=timezone.localdate() + timedelta(days=30),
+        )
+        cart = Cart.objects.create(user=self.user)
+        item = CartItem.objects.create(cart=cart, product=self.product)
+        cart.coupon = coupon
+        cart.save(update_fields=['coupon', 'updated_at'])
+
+        removal = self.client.post(
+            reverse('update_cart_item'),
+            data=json.dumps({
+                'cart_item_id': str(item.uid),
+                'quantity': 0,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(removal.status_code, 200)
+        cart.refresh_from_db()
+        self.assertIsNone(cart.coupon)
+
+        buy_now_response = self.client.post(
+            reverse('add_to_cart', args=[self.product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(buy_now_response, reverse('checkout'))
+        checkout_response = self.client.get(reverse('checkout'))
+        self.assertNotContains(checkout_response, 'Coupon applied')
+        self.assertNotContains(
+            checkout_response,
+            f'Coupon <strong>{coupon.coupon_code}</strong> applied',
         )
 
     def test_cart_visit_clears_buy_now_coupon_checkout_state(self):
@@ -1502,6 +1553,7 @@ class ProductQuantityTests(TestCase):
             coupon_code='GUESTNOW',
             discount_amount=50,
             minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
         )
         self.client.post(
             reverse('add_to_cart', args=[product.uid]),

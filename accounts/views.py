@@ -224,11 +224,24 @@ def activate_email_account(request, email_token):
         return HttpResponse('Invalid email token.')
 
 
+def _clear_coupon_if_cart_empty(cart):
+    if (
+        cart
+        and cart.coupon_id
+        and not cart.cart_items.exists()
+        and not cart.bundle_items.exists()
+    ):
+        cart.coupon = None
+        cart.save(update_fields=['coupon', 'updated_at'])
+
+
 def get_active_cart(request, create=False):
     if request.user.is_authenticated:
         cart = Cart.objects.filter(user=request.user, is_paid=False).first()
         if not cart and create:
             cart = Cart.objects.create(user=request.user)
+        _clear_unavailable_cart_coupon(cart)
+        _clear_coupon_if_cart_empty(cart)
         return cart
 
     if not request.session.session_key:
@@ -242,7 +255,15 @@ def get_active_cart(request, create=False):
             session_key=request.session.session_key, is_paid=True
         ).update(session_key=None)
         cart = Cart.objects.create(session_key=request.session.session_key)
+    _clear_unavailable_cart_coupon(cart)
+    _clear_coupon_if_cart_empty(cart)
     return cart
+
+
+def _clear_unavailable_cart_coupon(cart):
+    if cart and cart.coupon_id and not cart.coupon.is_available:
+        cart.coupon = None
+        cart.save(update_fields=['coupon', 'updated_at'])
 
 
 def _cart_has_available_stock(cart):
@@ -274,11 +295,14 @@ def _apply_coupon(request, cart_obj):
     if not coupon_obj:
         messages.error(request, 'Invalid coupon code.')
         return False
-    if cart_obj.coupon:
+    if cart_obj.coupon and cart_obj.coupon.is_available:
         messages.error(
             request, 'Remove the applied coupon before applying another one.')
         return False
-    if coupon_obj.is_expired:
+    if cart_obj.coupon_id:
+        cart_obj.coupon = None
+        cart_obj.save(update_fields=['coupon', 'updated_at'])
+    if not coupon_obj.is_available:
         messages.error(request, 'Coupon code expired.')
         return False
     if cart_obj.get_cart_total() < coupon_obj.minimum_amount:
@@ -430,9 +454,8 @@ def cart(request):
         'stock_notices': stock_notices,
         'current_step': 'cart',
         'base_url': settings.BASE_URL,
-        'available_coupons': Coupon.objects.filter(
-            is_expired=False,
-        ).order_by('minimum_amount', 'coupon_code'),
+        'available_coupons': Coupon.objects.available().order_by(
+            'minimum_amount', 'coupon_code'),
         **_cart_pricing_context(cart_obj),
     }
     return render(request, 'accounts/cart.html', context)
@@ -514,9 +537,8 @@ def checkout(request):
         'addresses': addresses,
         'selected_address_id': str(selected_address.uid) if selected_address else '',
         'coupon_enabled': coupon_enabled,
-        'available_coupons': Coupon.objects.filter(
-            is_expired=False,
-        ).order_by('minimum_amount', 'coupon_code') if coupon_enabled else (),
+        'available_coupons': Coupon.objects.available().order_by(
+            'minimum_amount', 'coupon_code') if coupon_enabled else (),
         **_cart_pricing_context(cart_obj),
     }
     return render(request, 'accounts/checkout.html', context)
@@ -1073,9 +1095,8 @@ def guest_checkout(request):
         'shipping_address_summary': shipping_address_summary,
         'cart': cart_obj,
         'coupon_enabled': coupon_enabled,
-        'available_coupons': Coupon.objects.filter(
-            is_expired=False,
-        ).order_by('minimum_amount', 'coupon_code') if coupon_enabled else (),
+        'available_coupons': Coupon.objects.available().order_by(
+            'minimum_amount', 'coupon_code') if coupon_enabled else (),
         **_cart_pricing_context(cart_obj),
     })
 
@@ -1095,6 +1116,7 @@ def update_cart_item(request):
             uid=cart_item_id, cart=cart, cart__is_paid=False)
         if quantity == 0:
             cart_item.delete()
+            _clear_coupon_if_cart_empty(cart)
             return JsonResponse({
                 "success": True,
                 "removed": True,
@@ -1131,7 +1153,9 @@ def update_cart_item(request):
 def remove_cart(request, uid):
     try:
         cart_item = get_object_or_404(CartItem, uid=uid, cart=get_active_cart(request))
+        cart = cart_item.cart
         cart_item.delete()
+        _clear_coupon_if_cart_empty(cart)
         messages.success(request, 'Item removed from cart.')
 
     except Exception as e:
@@ -1144,7 +1168,9 @@ def remove_cart(request, uid):
 @require_POST
 def remove_bundle(request, uid):
     bundle_item = get_object_or_404(BundleCartItem, uid=uid, cart=get_active_cart(request), cart__is_paid=False)
+    cart = bundle_item.cart
     bundle_item.delete()
+    _clear_coupon_if_cart_empty(cart)
     messages.success(request, 'Bundle removed from cart.')
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
@@ -1641,6 +1667,15 @@ def create_order(
         is_serviceable = ServiceablePincode.objects.filter(
             pincode=delivery_pincode, is_active=True).exists()
         delivery_fee = _cart_delivery_fee(cart)
+        order_coupon = cart.coupon
+        if (
+            order_coupon
+            and (
+                not order_coupon.is_available
+                or cart.get_cart_total() < order_coupon.minimum_amount
+            )
+        ):
+            order_coupon = None
         order, created = Order.objects.get_or_create(
             user=cart.user,
             order_id=order_id or generate_order_id(),
@@ -1658,7 +1693,7 @@ def create_order(
             shipping_address=str(selected_address) if selected_address else '',
             payment_mode=payment_mode,
             order_total_price=cart.get_cart_total(),
-            coupon=cart.coupon,
+            coupon=order_coupon,
             grand_total=cart.get_cart_total_price_after_coupon() + delivery_fee,
         )
 

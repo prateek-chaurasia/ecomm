@@ -2,6 +2,7 @@ from django.db import models
 from django.core.files.storage import default_storage
 from base.models import BaseModel
 from django.utils.text import slugify
+from django.utils import timezone
 from django.utils.html import format_html
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -282,11 +283,40 @@ class ProductImage(BaseModel):
         return format_html('<img src="{}" width="500"/>', self.image_url.url)
 
 
+class CouponQuerySet(models.QuerySet):
+    def available(self, on_date=None):
+        return self.filter(
+            is_active=True,
+            is_expired=False,
+            expiry_date__gte=on_date or timezone.localdate(),
+        )
+
+
 class Coupon(BaseModel):
+    objects = CouponQuerySet.as_manager()
+
     coupon_code = models.CharField(max_length=10)
+    is_active = models.BooleanField(default=True)
     is_expired = models.BooleanField(default=False)
+    expiry_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text='Required to make the coupon available; valid through this date.',
+    )
     discount_amount = models.IntegerField(default=100)
     minimum_amount = models.IntegerField(default=500)
+
+    @property
+    def is_available(self):
+        return (
+            self.is_active
+            and not self.is_expired
+            and self.expiry_date is not None
+            and self.expiry_date >= timezone.localdate()
+        )
+
+    def __str__(self):
+        return self.coupon_code
 
 
 class BundleConfiguration(models.Model):

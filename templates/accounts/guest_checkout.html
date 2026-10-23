@@ -40,7 +40,7 @@
                 </p>
               </div>
             </div>
-            <a href="{% url 'guest-checkout' %}?next={{ next_url|urlencode }}&amp;edit=1" class="btn btn-outline-secondary btn-sm mt-2">Change address</a>
+            <a href="{% url 'guest-checkout' %}?next={{ next_url|urlencode }}&amp;edit=1" class="btn btn-outline-secondary btn-sm mt-2">Edit</a>
             {% endif %}
             {% if quote_ready %}
             <div class="alert alert-info mt-4 mb-0" role="status" aria-live="polite">

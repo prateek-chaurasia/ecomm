@@ -1,0 +1,213 @@
+{% extends "base/base.html" %}
+{% load product_description %}
+{% block title %}Returns, Refunds &amp; Replacements - BundleofGifts.com{% endblock %}
+{% block start %}
+<section class="policy-hero">
+  <div class="container">
+    <div class="row justify-content-center text-center">
+      <div class="col-lg-9">
+        <div class="policy-hero-icon mb-3" aria-hidden="true">
+          <i class="fas fa-box-open"></i>
+        </div>
+        <span class="badge bg-primary-soft text-primary mb-3">Customer Care</span>
+        <h1 class="policy-hero-title mb-3">Returns, Refunds &amp; Replacements</h1>
+        <p class="policy-hero-subtitle mb-0">
+          Review our policies for returning an item, receiving a refund, or requesting a replacement.
+          Product-specific eligibility and time limits are shown on each product page.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="policy-page-content py-5">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-10">
+        <div class="policy-content-card mb-4">
+          <div class="policy-content-heading">
+            <span class="policy-content-icon" aria-hidden="true"><i class="fas fa-undo"></i></span>
+            <h2 class="h3 mb-0">{{ return_refund_policy.return_title }}</h2>
+          </div>
+          <div class="policy-copy">
+            <div class="policy-copy-summary">
+              {{ return_refund_policy.return_summary|render_product_description }}
+            </div>
+            <div class="policy-copy-details">
+              {{ return_refund_policy.return_details|render_product_description }}
+            </div>
+          </div>
+          {% if return_refund_policy.return_shipping_address %}
+          <div class="policy-shipping-address mt-4">
+            <h3 class="h5">Return Shipping Address</h3>
+            <div>{{ return_refund_policy.return_shipping_address|render_product_description }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="policy-content-card mb-4">
+          <div class="policy-content-heading">
+            <span class="policy-content-icon" aria-hidden="true"><i class="fas fa-wallet"></i></span>
+            <h2 class="h3 mb-0">{{ return_refund_policy.refund_title }}</h2>
+          </div>
+          <div class="policy-copy">
+            <div class="policy-copy-summary">
+              {{ return_refund_policy.refund_summary|render_product_description }}
+            </div>
+            <div class="policy-copy-details">
+              {{ return_refund_policy.refund_details|render_product_description }}
+            </div>
+          </div>
+        </div>
+
+        <div class="policy-content-card">
+          <div class="policy-content-heading">
+            <span class="policy-content-icon" aria-hidden="true"><i class="fas fa-sync-alt"></i></span>
+            <h2 class="h3 mb-0">Replace Policy</h2>
+          </div>
+          <div class="policy-copy">
+            <div class="policy-copy-summary">
+              {{ replace_policy.replace_summary|render_product_description }}
+            </div>
+            <div class="policy-copy-details">
+              {{ replace_policy.replace_details|render_product_description }}
+            </div>
+          </div>
+        </div>
+
+        <p class="policy-contact-note text-center mt-4 mb-0">
+          Need help with an order? <a href="{% url 'contact' %}">Contact our support team</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<style>
+  .policy-hero {
+    padding: 4.5rem 0 4rem;
+    background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+    color: var(--text-dark, #1e293b);
+  }
+
+  .policy-hero-icon {
+    color: var(--primary-color, #6366f1);
+    font-size: 2.5rem;
+  }
+
+  .policy-hero-title {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .policy-hero-subtitle {
+    max-width: 720px;
+    margin-inline: auto;
+    color: #64748b;
+    font-size: 1.1rem;
+    line-height: 1.7;
+  }
+
+  .policy-page-content {
+    background: #f8fafc;
+  }
+
+  .policy-content-card {
+    padding: 2rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(31, 55, 45, 0.07);
+  }
+
+  .policy-content-heading {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    color: var(--text-dark, #1e293b);
+  }
+
+  .policy-content-heading h2 {
+    font-size: clamp(1.25rem, 3vw, 1.65rem);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .policy-content-icon {
+    display: inline-flex;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: #eef2ff;
+    color: var(--primary-color, #6366f1);
+    font-size: 1.2rem;
+  }
+
+  .policy-copy,
+  .policy-shipping-address {
+    color: #475569;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+  }
+
+  .policy-copy-summary {
+    color: #1e293b;
+    font-weight: 600;
+  }
+
+  .policy-copy > :last-child,
+  .policy-copy-summary > :last-child,
+  .policy-copy-details > :last-child,
+  .policy-shipping-address > :last-child {
+    margin-bottom: 0;
+  }
+
+  .policy-contact-note {
+    color: #64748b;
+  }
+
+  .policy-contact-note a {
+    color: var(--primary-color, #6366f1);
+    font-weight: 600;
+  }
+
+  @media (max-width: 576px) {
+    .policy-hero {
+      padding: 3rem 0 2.5rem;
+    }
+
+    .policy-hero-subtitle {
+      font-size: 1rem;
+    }
+
+    .policy-page-content {
+      padding-top: 1.5rem !important;
+      padding-bottom: 1.5rem !important;
+    }
+
+    .policy-content-card {
+      padding: 1.25rem;
+      border-radius: 12px;
+    }
+
+    .policy-content-heading {
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .policy-content-icon {
+      flex-basis: 40px;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+    }
+  }
+</style>
+{% endblock %}

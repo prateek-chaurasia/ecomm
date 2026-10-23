@@ -78,12 +78,12 @@
       </summary>
       <div class="card-body">
         {% if cart.coupon %}
-        <div class="alert alert-success cart-coupon-applied">
-          <span>
+        <div class="alert alert-success cart-coupon-applied d-flex justify-content-between align-items-center flex-wrap">
+          <span class="checkout-coupon-applied-message">
             Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied
             (₹{{ cart.coupon.discount_amount }} off).
           </span>
-          <form method="post">
+          <form method="post" class="checkout-coupon-remove-form">
             {% csrf_token %}
             <button type="submit" name="remove_checkout_coupon" class="btn btn-sm btn-outline-danger">Remove</button>
           </form>
@@ -200,6 +200,20 @@
     transform: rotate(225deg) translateY(-2px);
   }
 
+  .checkout-coupon-section .cart-coupon-applied {
+    gap: 0.75rem 1rem;
+  }
+
+  .checkout-coupon-remove-form {
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .checkout-coupon-applied-message {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   @media (max-width: 575px) {
     .checkout-coupon-section .cart-coupon-summary {
       align-items: flex-start;
@@ -210,6 +224,14 @@
       max-width: 58%;
       gap: 0.65rem;
       line-height: 1.35;
+    }
+
+    .checkout-coupon-section .cart-coupon-applied {
+      align-items: flex-start !important;
+    }
+
+    .checkout-coupon-remove-form {
+      margin-left: 0;
     }
   }
 

@@ -260,8 +260,28 @@ class SizeVariantAdmin(FilterCollapsibleModelAdmin):
     model = SizeVariant
 
 
+class CouponAdminForm(forms.ModelForm):
+    class Meta:
+        model = Coupon
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['expiry_date'].required = True
+
+
+@admin.register(Coupon)
+class CouponAdmin(FilterCollapsibleModelAdmin):
+    form = CouponAdminForm
+    list_display = (
+        'coupon_code', 'is_active', 'is_expired', 'expiry_date',
+        'discount_amount', 'minimum_amount',
+    )
+    list_filter = ('is_active', 'is_expired', 'expiry_date')
+    search_fields = ('coupon_code',)
+
+
 admin.site.register(Category, CategoryAdmin)
-admin.site.register(Coupon)
 admin.site.register(Product, ProductAdmin)
 admin.site.register(ProductImage, ProductImageStandaloneAdmin)
 admin.site.register(ProductReview)

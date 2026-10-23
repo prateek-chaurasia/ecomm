@@ -365,6 +365,49 @@ class ReturnRefundPolicyTests(TestCase):
         self.assertContains(response, 'Replace summary')
         self.assertContains(response, 'Replace details')
 
+    def test_customer_policy_page_renders_centralized_policy_html(self):
+        return_policy = ReturnRefundPolicy.get_solo()
+        return_policy.return_title = 'Our Returns'
+        return_policy.return_summary = '<p><strong>Return summary from database.</strong></p>'
+        return_policy.return_details = '<ul><li>Return details from database.</li></ul>'
+        return_policy.refund_title = 'Our Refunds'
+        return_policy.refund_summary = '<p>Refund summary from database.</p>'
+        return_policy.refund_details = '<p>Refund details from database.</p>'
+        return_policy.return_shipping_address = '<p>Return address from database.</p>'
+        return_policy.save()
+        replace_policy = ReplacePolicy.get_solo()
+        replace_policy.replace_summary = '<p>Replace summary from database.</p>'
+        replace_policy.replace_details = '<p>Replace details from database.</p>'
+        replace_policy.save()
+
+        response = self.client.get(reverse('return-refund-replace-policy'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['return_refund_policy'], return_policy)
+        self.assertEqual(response.context['replace_policy'], replace_policy)
+        for content in (
+            'Our Returns',
+            '<p><strong>Return summary from database.</strong></p>',
+            '<ul><li>Return details from database.</li></ul>',
+            'Our Refunds',
+            '<p>Refund summary from database.</p>',
+            '<p>Refund details from database.</p>',
+            '<p>Return address from database.</p>',
+            'Replace Policy',
+            '<p>Replace summary from database.</p>',
+            '<p>Replace details from database.</p>',
+        ):
+            with self.subTest(content=content):
+                self.assertContains(response, content)
+
+    def test_policy_page_is_linked_from_footer(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(
+            response,
+            f'href="{reverse("return-refund-replace-policy")}"',
+        )
+
 
 class DehradunShoppingGuideTests(TestCase):
     def test_guide_shows_seo_content_and_links_all_database_categories(self):
@@ -445,6 +488,7 @@ class HomeBannerTests(TestCase):
             'contact',
             'privacy-policy',
             'terms-and-conditions',
+            'return-refund-replace-policy',
             'categories',
             'product_search',
         ):
