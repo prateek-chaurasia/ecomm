@@ -138,6 +138,9 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_LOGIN_ON_GET=True
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -390,3 +393,16 @@ WHATSAPP_API_TOKEN = config("WHATSAPP_API_TOKEN")
 WHATSAPP_API_VERSION = "v25.0"
 WHATSAPP_URL = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
 WHATSAPP_TOKEN = f"Bearer {config('WHATSAPP_API_TOKEN')}"
+
+
+# Maximum size (in bytes) that a request body can be before a SuspiciousOperation is raised.
+# 10MB = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760
+
+# Maximum size (in bytes) that a file upload can be before it gets streamed to the disk.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760
+
+import mimetypes
+
+mimetypes.add_type("image/svg+xml", ".svg", True)
+mimetypes.add_type("image/svg+xml", ".svgz", True)
