@@ -252,8 +252,13 @@ class ReturnRequestForm(forms.ModelForm):
             'class': 'form-control',
             'rows': 4,
             'maxlength': 2000,
-            'placeholder': 'Tell us why you would like to return this order.',
+            'placeholder': 'Tell us why you would like to return this item.',
         }),
+    )
+    requested_item = forms.ChoiceField(
+        required=False,
+        choices=(),
+        widget=forms.Select(attrs={'class': 'form-control'}),
     )
 
     refund_method = forms.ChoiceField(
@@ -296,14 +301,32 @@ class ReturnRequestForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, order=None, **kwargs):
+    def __init__(self, *args, order=None, eligible_items=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.order = order or getattr(self.instance, 'order', None)
+        eligible_items = eligible_items or []
+        self.eligible_item_by_key = {
+            item['key']: item for item in eligible_items
+        }
+        self.fields['requested_item'].choices = [
+            (item['key'], item['label'])
+            for item in eligible_items
+        ]
         requested_type = (
             self.data.get(self.add_prefix('request_type'))
             if self.is_bound
             else self.initial.get('request_type')
         )
+        if not self.is_bound and requested_type:
+            first_matching_item = next(
+                (
+                    item['key'] for item in eligible_items
+                    if item['request_type'] == requested_type
+                ),
+                None,
+            )
+            if first_matching_item:
+                self.initial['requested_item'] = first_matching_item
         if requested_type == ReturnRequest.RequestType.REPLACEMENT:
             self.fields['replacement_reason'].required = True
         self.fields['replacement_reason'].queryset = ReplacementReason.objects.filter(
@@ -315,6 +338,26 @@ class ReturnRequestForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         request_type = cleaned_data.get('request_type')
+        requested_item = cleaned_data.get('requested_item')
+        if not requested_item:
+            matching_items = [
+                item for item in self.eligible_item_by_key.values()
+                if item['request_type'] == request_type
+            ]
+            if len(matching_items) == 1:
+                requested_item = matching_items[0]['key']
+                cleaned_data['requested_item'] = requested_item
+            else:
+                self.add_error(
+                    'requested_item',
+                    'Choose an eligible item for this request.',
+                )
+        item = self.eligible_item_by_key.get(requested_item)
+        if item and item['request_type'] != request_type:
+            self.add_error(
+                'requested_item',
+                'Choose an item eligible for the selected request type.',
+            )
         reason = (cleaned_data.get('reason') or '').strip()
         return_reason = cleaned_data.get('return_reason')
         replacement_reason = cleaned_data.get('replacement_reason')

@@ -33,7 +33,9 @@
       </div>
     </div>
 
-    {% if return_request %}
+    {% if return_request_entries %}
+    {% for entry in return_request_entries %}
+    {% with return_request=entry.request return_timeline=entry.timeline %}
     <div class="card modern-card mb-5">
       <div class="card-header">
         <h2 class="h4 card-title mb-0">
@@ -42,6 +44,18 @@
         </h2>
       </div>
       <div class="card-main-body p-4">
+        <p class="mb-2">
+          Item:
+          <strong>
+            {% if return_request.order_item %}
+            {{ return_request.order_item.product.product_name|default:"Product no longer available" }}
+            {% elif return_request.bundle_order_product %}
+            {{ return_request.bundle_order_product.product.product_name }}
+            {% else %}
+            Order items
+            {% endif %}
+          </strong>
+        </p>
         <div class="current-status-callout mb-3">
           <span class="current-status-label">Current status</span>
           <strong class="current-status-value">{{ return_request.get_status_display }}</strong>
@@ -64,6 +78,8 @@
         </ol>
       </div>
     </div>
+    {% endwith %}
+    {% endfor %}
     {% else %}
     <div class="card modern-card mb-5">
       <div class="card-header"><h2 class="h4 card-title mb-0"><i class="fas fa-route me-2"></i>Delivery progress</h2></div>
@@ -305,15 +321,7 @@
               </div>
               <div class="info-item">
                 <div class="info-label">Customer Name</div>
-                <div class="info-value">
-                  {% if order.user.first_name or order.user.last_name %}
-                  {{ order.user.first_name }} {{ order.user.last_name }}
-                  {% elif order.user.get_full_name %}
-                  {{ order.user.get_full_name }}
-                  {% else %}
-                  {{ order.user.username }}
-                  {% endif %}
-                </div>
+                <div class="info-value">{{ order.guest_name|default:"Customer" }}</div>
               </div>
               <div class="info-item">
                 <div class="info-label">Payment Status</div>
@@ -391,8 +399,22 @@
         <h2 class="h4 card-title mb-0"><i class="fas fa-undo me-2"></i>Returns</h2>
       </div>
       <div class="card-main-body p-4">
-        {% if return_request %}
-        <p class="mb-2">Return status: <strong>{{ return_request.get_status_display }}</strong></p>
+        {% if return_requests %}
+        {% for return_request in return_requests %}
+        <p class="mb-2">
+          {% if return_request.request_type == 'replacement' %}Replacement{% else %}Return{% endif %}
+          for
+          <strong>
+            {% if return_request.order_item %}
+            {{ return_request.order_item.product.product_name|default:"Product no longer available" }}
+            {% elif return_request.bundle_order_product %}
+            {{ return_request.bundle_order_product.product.product_name }}
+            {% else %}
+            order items
+            {% endif %}
+          </strong>:
+          <strong>{{ return_request.get_status_display }}</strong>
+        </p>
         {% if return_request.tracking_number %}
         <p class="mb-2">Courier partner: {{ return_request.courier_partner_name }}</p>
         <p class="mb-2">Your shipment tracking number: {{ return_request.tracking_number }}</p>
@@ -400,10 +422,16 @@
         {% if return_request.refund_amount is not None %}
         <p class="mb-2">Refund amount: ₹{{ return_request.refund_amount }}</p>
         {% endif %}
+        {% endfor %}
         <a class="btn btn-outline-primary mt-2" href="{% url 'return_request' order.order_id %}">View return request</a>
-        {% elif not return_eligibility_error or not replacement_eligibility_error %}
-        <p>Start an eligible return or request a replacement for the same item if the wrong or a damaged item was delivered.</p>
-        <a class="btn btn-outline-primary" href="{% url 'return_request' order.order_id %}">Start return or replacement</a>
+        {% endif %}
+        {% if not return_eligibility_error or not replacement_eligibility_error %}
+        <p class="mt-3">Start a return or replacement for another eligible item in this order.</p>
+        <a class="btn btn-outline-primary" href="{% url 'return_request' order.order_id %}">
+          {% if return_requests %}Request another item{% else %}Start return or replacement{% endif %}
+        </a>
+        {% elif return_requests %}
+        <p class="text-muted mt-3 mb-0">There are no additional eligible items available for a return or replacement.</p>
         {% else %}
         <p class="text-muted mb-0">
           {{ return_eligibility_error }}

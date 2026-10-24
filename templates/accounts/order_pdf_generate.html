@@ -272,6 +272,9 @@
     </tr>
     <tr><td>Payment status</td><td class="amount">{{ order.payment_status|default:"Not specified" }}</td></tr>
     <tr><td>Payment method</td><td class="amount">{{ order.payment_mode|default:"Not specified" }}</td></tr>
+    {% if order.razorpay_payment_id %}
+    <tr><td>Transaction ID</td><td class="amount">{{ order.razorpay_payment_id }}</td></tr>
+    {% endif %}
     <tr><td>Total amount before tax</td><td class="amount">₹{{ taxable_total|floatformat:2 }}</td></tr>
     <tr><td>Total tax amount</td><td class="amount">₹{{ tax_total|floatformat:2 }}</td></tr>
     {% if same_state_supply %}

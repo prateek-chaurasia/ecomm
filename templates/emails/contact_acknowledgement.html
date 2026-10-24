@@ -1,0 +1,11 @@
+{% extends "emails/base_email.html" %}
+
+{% block email_title %}Acknowledgement to your query{% endblock %}
+{% block email_preheader %}We have received your query and our team is reviewing it.{% endblock %}
+{% block email_content %}
+<h1 style="margin:0 0 16px; color:#243047; font-size:24px; line-height:1.3;">Thank you for reaching out{% if customer_name %}, {{ customer_name }}{% endif %}.</h1>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="9" border="0" style="margin:0 0 18px; border-collapse:collapse; font-size:14px;">
+  <tr><td>{{ acknowledgement_message }}</td></tr>
+  <tr><td style="border-top:1px solid #e2e8f0;">Best Regards,<br><strong>Team BundleofGifts</strong></td></tr>
+</table>
+{% endblock %}

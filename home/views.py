@@ -14,6 +14,7 @@ from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
+from base.emails import send_customer_email
 from home.models import HomeBanner, ReplacePolicy, ReturnRefundPolicy
 from home.forms import ContactForm
 
@@ -193,7 +194,46 @@ def contact(request):
                     'We could not send your message right now. Please try again later.',
                 )
             else:
-                messages.success(request, 'Your message has been sent. We will get back to you soon.')
+                try:
+                    acknowledgement = (
+                        'Thank you for reaching out to us. Your query has been '
+                        'received and is currently being reviewed by our team. '
+                        'We will get back to you shortly with an update. Thank '
+                        'you for your patience.\n\n'
+                        'Best Regards,\n'
+                        'Team BundleofGifts'
+                    )
+                    send_customer_email(
+                        'Acknowledgement to your query',
+                        acknowledgement,
+                        form.cleaned_data['email'],
+                        'emails/contact_acknowledgement.html',
+                        {
+                            'customer_name': form.cleaned_data['first_name'],
+                            'acknowledgement_message': (
+                                'Thank you for reaching out to us. Your query '
+                                'has been received and is currently being '
+                                'reviewed by our team. We will get back to '
+                                'you shortly with an update. Thank you for '
+                                'your patience.'
+                            ),
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        'Contact form acknowledgement email delivery failed '
+                        'for %s',
+                        form.cleaned_data['email'],
+                    )
+                    messages.error(
+                        request,
+                        'Your message was sent, but we could not send the acknowledgement email.',
+                    )
+                else:
+                    messages.success(
+                        request,
+                        'Your message has been sent. We will get back to you soon.',
+                    )
                 return redirect('contact')
 
     return render(request, 'home/contact.html', {'form': form})

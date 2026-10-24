@@ -417,8 +417,22 @@ class ReturnRequest(BaseModel):
         MINOR_DAMAGE = 'minor_damage', 'Minor damage'
         DAMAGED = 'damaged', 'Damaged'
 
-    order = models.OneToOneField(
-        Order, on_delete=models.CASCADE, related_name='return_request')
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name='return_requests')
+    order_item = models.ForeignKey(
+        'accounts.OrderItem',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='return_requests',
+    )
+    bundle_order_product = models.ForeignKey(
+        'accounts.BundleOrderProduct',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='return_requests',
+    )
     request_type = models.CharField(
         max_length=20, choices=RequestType.choices, default=RequestType.RETURN)
     replacement_reason = models.ForeignKey(
@@ -462,13 +476,93 @@ class ReturnRequest(BaseModel):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=~(
+                    models.Q(order_item__isnull=False)
+                    & models.Q(bundle_order_product__isnull=False)
+                ),
+                name='return_request_single_order_line',
+            ),
+            models.UniqueConstraint(
+                fields=['order_item'],
+                condition=(
+                    models.Q(order_item__isnull=False)
+                    & ~models.Q(status='rejected')
+                ),
+                name='unique_active_order_item_return_request',
+            ),
+            models.UniqueConstraint(
+                fields=['bundle_order_product'],
+                condition=(
+                    models.Q(bundle_order_product__isnull=False)
+                    & ~models.Q(status='rejected')
+                ),
+                name='unique_active_bundle_product_return_request',
+            ),
+        ]
 
     def __str__(self):
         return f'Return for {self.order.order_id}'
 
     @property
+    def requested_item_name(self):
+        if self.order_item_id:
+            return (
+                self.order_item.product.product_name
+                if self.order_item.product_id else 'Product no longer available'
+            )
+        if self.bundle_order_product_id:
+            return self.bundle_order_product.product.product_name
+        return 'Order items'
+
+    @property
+    def calculated_refund_amount_before_deduction(self):
+        line_amount = self.requested_line_amount
+        if line_amount is None:
+            return self.order.grand_total
+        else:
+            order_line_total = sum(
+                (
+                    amount or Decimal('0.00')
+                    for amount in OrderItem.objects.filter(
+                        order_id=self.order_id,
+                    ).values_list('product_price', flat=True)
+                ),
+                Decimal('0.00'),
+            )
+            order_line_total += sum(
+                (
+                    item.product_price * item.bundle_item.quantity
+                    for item in BundleOrderProduct.objects.filter(
+                        bundle_item__order_id=self.order_id,
+                    ).select_related('bundle_item')
+                ),
+                Decimal('0.00'),
+            )
+            refund_basis = (
+                self.order.grand_total * line_amount / order_line_total
+                if order_line_total else line_amount
+            ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        return refund_basis
+
+    @property
     def calculated_refund_amount(self):
-        return max(self.order.grand_total - self.deduction_amount, 0)
+        return max(
+            self.calculated_refund_amount_before_deduction - self.deduction_amount,
+            Decimal('0.00'),
+        )
+
+    @property
+    def requested_line_amount(self):
+        if self.order_item_id:
+            return self.order_item.product_price
+        if self.bundle_order_product_id:
+            return (
+                self.bundle_order_product.product_price
+                * self.bundle_order_product.bundle_item.quantity
+            )
+        return None
 
     def clean(self):
         from django.core.exceptions import ValidationError
@@ -482,10 +576,25 @@ class ReturnRequest(BaseModel):
             })
         if (
             self.order_id
-            and self.deduction_amount > self.order.grand_total
+            and self.deduction_amount
+            > self.calculated_refund_amount_before_deduction
         ):
             raise ValidationError({
-                'deduction_amount': 'The deduction cannot exceed the order total.',
+                'deduction_amount': 'The deduction cannot exceed the item refund amount.',
+            })
+        if (
+            self.order_item_id
+            and self.order_item.order_id != self.order_id
+        ):
+            raise ValidationError({
+                'order_item': 'Choose an item from this order.',
+            })
+        if (
+            self.bundle_order_product_id
+            and self.bundle_order_product.bundle_item.order_id != self.order_id
+        ):
+            raise ValidationError({
+                'bundle_order_product': 'Choose an item from this order.',
             })
         if self.deduction_amount and not self.deduction_reason.strip():
             raise ValidationError({

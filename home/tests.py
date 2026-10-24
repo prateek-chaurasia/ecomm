@@ -8,6 +8,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from PIL import Image
+from axes.utils import reset as reset_axes_attempts
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.management import call_command
@@ -70,7 +71,7 @@ class ContactFormTests(TestCase):
         ADMIN_EMAIL='support@example.com,orders@example.com',
         DEFAULT_FROM_EMAIL='noreply@example.com',
     )
-    def test_valid_contact_form_emails_admins_and_sets_reply_to(self):
+    def test_valid_contact_form_emails_admins_and_acknowledges_sender(self):
         response = self.client.post(reverse('contact'), {
             'first_name': 'Asha',
             'last_name': 'Sharma',
@@ -81,7 +82,7 @@ class ContactFormTests(TestCase):
         })
 
         self.assertRedirects(response, reverse('contact'))
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox), 2)
         sent_email = mail.outbox[0]
         self.assertEqual(
             sent_email.to,
@@ -92,6 +93,26 @@ class ContactFormTests(TestCase):
         self.assertIn('Order Support', sent_email.subject)
         self.assertIn('Please help with my order.', sent_email.body)
         self.assertIn('Newsletter updates requested: Yes', sent_email.body)
+
+        acknowledgement = mail.outbox[1]
+        self.assertEqual(
+            acknowledgement.subject,
+            'Acknowledgement to your query',
+        )
+        self.assertEqual(acknowledgement.to, ['asha@example.com'])
+        self.assertEqual(acknowledgement.from_email, 'noreply@example.com')
+        self.assertIn(
+            'Thank you for reaching out to us. Your query has been received '
+            'and is currently being reviewed by our team.',
+            acknowledgement.body,
+        )
+        self.assertIn('Best Regards,\nTeam BundleofGifts', acknowledgement.body)
+        self.assertEqual(len(acknowledgement.alternatives), 1)
+        acknowledgement_html, mimetype = acknowledgement.alternatives[0]
+        self.assertEqual(mimetype, 'text/html')
+        self.assertIn('Acknowledgement to your query', acknowledgement_html)
+        self.assertIn('src="cid:bundleofgifts-brand-icon"', acknowledgement_html)
+        self.assertIn('Best Regards,<br><strong>Team BundleofGifts</strong>', acknowledgement_html)
 
     @override_settings(ADMIN_EMAIL='support@example.com')
     def test_invalid_contact_form_does_not_send_email(self):
@@ -357,6 +378,7 @@ class ReturnRefundPolicyTests(TestCase):
         response = self.client.get(reverse('terms-and-conditions'))
 
         self.assertContains(response, 'at any time before they are dispatched')
+        self.assertContains(response, 'order details page')
 
     def test_only_one_policy_can_be_saved(self):
         ReturnRefundPolicy.objects.create(return_title='First policy')

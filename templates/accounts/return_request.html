@@ -81,6 +81,108 @@
     box-shadow: 0 0.35rem 1.2rem rgba(24, 50, 75, 0.055);
   }
 
+  .return-request-card {
+    display: block;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+    border: 1px solid #d9ebe6;
+    border-radius: 0.9rem;
+    background: #f4faf8;
+    box-shadow: 0 0.35rem 1.2rem rgba(24, 50, 75, 0.055);
+  }
+
+  .return-request-card-replacement {
+    border-color: #dce4f2;
+    background: #f5f7fb;
+  }
+
+  .return-request-card-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(24, 50, 75, 0.1);
+    color: var(--return-ink);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .return-request-card-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .return-request-card:not([open]) > .return-request-card-summary {
+    border-bottom: 0;
+  }
+
+  .return-request-card-summary::after {
+    content: "+";
+    flex: 0 0 auto;
+    color: var(--return-accent);
+    font-size: 1.4rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .return-request-card[open] > .return-request-card-summary::after {
+    content: "−";
+  }
+
+  .return-request-card-replacement > .return-request-card-summary::after {
+    color: #3f5f91;
+  }
+
+  .return-request-card-title {
+    display: block;
+    color: var(--return-ink);
+    font-size: 1.15rem;
+    font-weight: 750;
+  }
+
+  .return-request-card-summary-meta {
+    display: block;
+    margin-top: 0.2rem;
+    color: var(--return-muted);
+    font-size: 0.88rem;
+    font-weight: 500;
+  }
+
+  .return-request-card .return-request-section {
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid rgba(24, 50, 75, 0.1);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .return-request-card > .return-request-section:last-child {
+    border-bottom: 0;
+  }
+
+  .return-request-card .return-status-banner {
+    border-bottom-color: rgba(24, 50, 75, 0.1);
+  }
+
+  .return-request-card-replacement .return-status-banner {
+    border-bottom-color: #dce4f2;
+    background: #eaf0fa;
+  }
+
+  .return-request-card-replacement .return-status-icon {
+    background: #dce6f7;
+    color: #3f5f91;
+  }
+
+  .return-request-card .return-form-card {
+    padding: 1.25rem;
+  }
+
+  .return-request-card .return-card-header {
+    background: transparent;
+  }
+
   .return-card-header {
     display: flex;
     align-items: center;
@@ -295,6 +397,15 @@
     grid-template-columns: minmax(0, 1.8fr) minmax(240px, 0.8fr);
     gap: 1.25rem;
     align-items: start;
+  }
+
+  .return-shipping-layout {
+    align-items: stretch;
+  }
+
+  .return-shipping-layout .return-guidance-card,
+  .return-shipping-layout .return-form-card {
+    height: 100%;
   }
 
   .return-form-card {
@@ -535,6 +646,19 @@
       padding: 1rem;
     }
 
+    .return-request-card-summary {
+      align-items: flex-start;
+      padding: 1rem;
+    }
+
+    .return-request-card-title {
+      font-size: 1.05rem;
+    }
+
+    .return-request-card-summary-meta {
+      font-size: 0.82rem;
+    }
+
     .return-status-timeline {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.45rem;
@@ -627,12 +751,25 @@
       </div>
     </section>
 
-    {% if return_request %}
-    <section class="return-card" aria-labelledby="return-status-heading">
+    {% for entry in return_request_entries %}
+    {% with return_request=entry.request return_timeline=entry.timeline %}
+    <details class="return-request-card{% if return_request.request_type == 'replacement' %} return-request-card-replacement{% endif %}"
+      {% if forloop.first %}open{% endif %}>
+      <summary class="return-request-card-summary">
+        <span>
+          <span class="return-request-card-title">
+            {% if return_request.request_type == 'replacement' %}Replacement Request Details{% else %}Return Request Details{% endif %}
+          </span>
+          <span class="return-request-card-summary-meta">
+            {{ return_request.requested_item_name }} · {{ return_request.get_status_display }}
+          </span>
+        </span>
+      </summary>
+      <section class="return-request-section" aria-labelledby="return-status-heading-{{ return_request.pk }}">
       <div class="return-status-banner">
         <span class="return-status-icon" aria-hidden="true"><i class="fas fa-sync-alt"></i></span>
         <div>
-          <span class="return-status-label" id="return-status-heading">Current request status</span>
+          <span class="return-status-label" id="return-status-heading-{{ return_request.pk }}">Current request status</span>
           <strong class="return-status-value">{{ return_request.get_status_display }}</strong>
         </div>
       </div>
@@ -654,10 +791,10 @@
       </ol>
     </section>
 
-    <section class="return-card" aria-labelledby="return-details-heading">
+    <section class="return-request-section" aria-labelledby="return-details-heading-{{ return_request.pk }}">
       <div class="return-card-header">
         <div>
-          <h2 id="return-details-heading">Request details</h2>
+          <h2 id="return-details-heading-{{ return_request.pk }}">Request details</h2>
           <p>Information submitted for this return or replacement.</p>
         </div>
       </div>
@@ -666,6 +803,18 @@
           <div class="return-detail">
             <dt>Request type</dt>
             <dd>{{ return_request.get_request_type_display }}</dd>
+          </div>
+          <div class="return-detail">
+            <dt>Item</dt>
+            <dd>
+              {% if return_request.order_item %}
+              {{ return_request.order_item.product.product_name|default:"Product no longer available" }}
+              {% elif return_request.bundle_order_product %}
+              {{ return_request.bundle_order_product.product.product_name }}
+              {% else %}
+              Order items
+              {% endif %}
+            </dd>
           </div>
           <div class="return-detail">
             <dt>Reason</dt>
@@ -712,9 +861,9 @@
     </section>
 
     {% if return_request.request_type == 'return' and return_request.status == 'approved' %}
-    <div class="return-form-layout">
-      <section class="return-card return-guidance-card" aria-labelledby="return-shipping-heading">
-        <h2 id="return-shipping-heading"><i class="fas fa-box-open mr-2" aria-hidden="true"></i>Ship your return</h2>
+    <div class="return-form-layout return-shipping-layout return-request-section">
+      <section class="return-request-section return-guidance-card" aria-labelledby="return-shipping-heading-{{ return_request.pk }}">
+        <h2 id="return-shipping-heading-{{ return_request.pk }}"><i class="fas fa-box-open mr-2" aria-hidden="true"></i>Ship your return</h2>
         <p>Ship the item to our office at your own cost. Once the item is received and inspected, we’ll continue processing your refund.</p>
         {% if return_shipping_address %}
         <address>{{ return_shipping_address|linebreaksbr }}</address>
@@ -728,24 +877,25 @@
         </ul>
       </section>
       {% if return_shipping_address %}
-      <section class="return-card return-form-card" aria-labelledby="shipment-details-heading">
-        <h2 id="shipment-details-heading">Shipment details</h2>
+      <section class="return-request-section return-form-card" aria-labelledby="shipment-details-heading-{{ return_request.pk }}">
+        <h2 id="shipment-details-heading-{{ return_request.pk }}">Shipment details</h2>
         <p class="return-form-intro">Add the details so our team can track your return.</p>
         <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
           <input type="hidden" name="action" value="shipment">
+          <input type="hidden" name="return_request_id" value="{{ return_request.pk }}">
           <div class="form-group">
-            <label for="courier_partner_name">Courier partner <span class="required-indicator" aria-hidden="true">*</span></label>
-            <input class="form-control" id="courier_partner_name" name="courier_partner_name" maxlength="120" required>
+            <label for="courier_partner_name-{{ return_request.pk }}">Courier partner <span class="required-indicator" aria-hidden="true">*</span></label>
+            <input class="form-control" id="courier_partner_name-{{ return_request.pk }}" name="courier_partner_name" maxlength="120" required>
           </div>
           <div class="form-group">
-            <label for="tracking_number">Tracking number <span class="required-indicator" aria-hidden="true">*</span></label>
-            <input class="form-control" id="tracking_number" name="tracking_number" maxlength="120" required>
+            <label for="tracking_number-{{ return_request.pk }}">Tracking number <span class="required-indicator" aria-hidden="true">*</span></label>
+            <input class="form-control" id="tracking_number-{{ return_request.pk }}" name="tracking_number" maxlength="120" required>
           </div>
           <div class="form-group">
-            <label for="shipment_images">Shipment photos <span class="required-indicator" aria-hidden="true">*</span></label>
+            <label for="shipment_images-{{ return_request.pk }}">Shipment photos <span class="required-indicator" aria-hidden="true">*</span></label>
             <div class="return-upload-box">
-              <input class="form-control-file" id="shipment_images" name="shipment_images" type="file" accept="image/*" multiple required>
+              <input class="form-control-file" id="shipment_images-{{ return_request.pk }}" name="shipment_images" type="file" accept="image/*" multiple required>
               <small class="form-text text-muted">Choose 1–5 photos, up to 5 MB each.</small>
             </div>
           </div>
@@ -771,10 +921,10 @@
     {% endif %}
 
     {% if return_request.shipment_images.exists %}
-    <section class="return-card" aria-labelledby="shipment-photos-heading">
+    <section class="return-request-section" aria-labelledby="shipment-photos-heading-{{ return_request.pk }}">
       <div class="return-card-header">
         <div>
-          <h2 id="shipment-photos-heading">Submitted shipment photos</h2>
+          <h2 id="shipment-photos-heading-{{ return_request.pk }}">Submitted shipment photos</h2>
           <p>Photos of your return parcel and item condition.</p>
         </div>
       </div>
@@ -788,10 +938,10 @@
     </section>
     {% endif %}
     {% if return_request.request_images.exists %}
-    <section class="return-card" aria-labelledby="request-photos-heading">
+    <section class="return-request-section" aria-labelledby="request-photos-heading-{{ return_request.pk }}">
       <div class="return-card-header">
         <div>
-          <h2 id="request-photos-heading">Photos submitted with your request</h2>
+          <h2 id="request-photos-heading-{{ return_request.pk }}">Photos submitted with your request</h2>
           <p>Product photos included for review.</p>
         </div>
       </div>
@@ -805,7 +955,11 @@
     </section>
     {% endif %}
 
-    {% else %}
+    </details>
+    {% endwith %}
+    {% endfor %}
+
+    {% if available_request_types %}
     <div class="return-form-layout">
       <section class="return-card return-form-card" aria-labelledby="request-form-heading">
         <h2 id="request-form-heading">{{ request_form_heading }}</h2>
@@ -836,6 +990,22 @@
             </div>
             {% for error in form.request_type.errors %}<div class="text-danger mt-2">{{ error }}</div>{% endfor %}
           </fieldset>
+          <div class="return-form-section form-group">
+            <label for="id_requested_item">
+              Which item is this request for?
+              <span class="required-indicator" aria-hidden="true">*</span>
+            </label>
+            <select class="form-control" id="id_requested_item" name="requested_item" required>
+              <option value="">Choose an eligible item</option>
+              {% for item in eligible_items %}
+              <option value="{{ item.key }}" data-request-type="{{ item.request_type }}"
+                {% if form.requested_item.value == item.key %}selected{% endif %}>
+                {{ item.label }} — {% if item.request_type == 'replacement' %}Replacement{% else %}Return{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            {% for error in form.requested_item.errors %}<div class="text-danger mt-1">{{ error }}</div>{% endfor %}
+          </div>
           {% if return_eligibility_error %}
           <div class="alert alert-warning" data-eligibility="return"><i class="fas fa-info-circle mr-1" aria-hidden="true"></i>{{ return_eligibility_error }}</div>
           {% endif %}
@@ -975,13 +1145,32 @@
         </section>
       </aside>
     </div>
+    {% else %}
+    <div class="alert alert-info">
+      {% if return_requests %}
+      There are no additional eligible items available for a return or replacement.
+      {% else %}
+      {{ return_eligibility_error }}{% if replacement_eligibility_error != return_eligibility_error %} {{ replacement_eligibility_error }}{% endif %}
+      {% endif %}
+    </div>
     {% endif %}
   </div>
 </section>
 <script>
+  document.querySelectorAll('.return-request-card').forEach(function (card) {
+    card.addEventListener('toggle', function () {
+      if (!card.open) return;
+      document.querySelectorAll('.return-request-card[open]').forEach(function (otherCard) {
+        if (otherCard !== card) otherCard.open = false;
+      });
+    });
+  });
+</script>
+<script>
   (function () {
     const form = document.getElementById('return-request-form');
     if (!form) return;
+    const requestedItem = document.getElementById('id_requested_item');
     const returnReasonField = document.getElementById('return-reason-field');
     const returnReason = document.getElementById('return-reason');
     const replacementReason = document.getElementById('replacement-reason-field');
@@ -1027,6 +1216,7 @@
         if (selected) selected.checked = true;
       }
       const isReplacement = selected && selected.value === 'replacement';
+      updateRequestedItem(selected && selected.value);
       const needsRefundDetails = codRefundDetails && !isReplacement;
       const needsCustomReturnReason = returnReason && returnReason.value === 'not_defined';
       returnReasonField.hidden = Boolean(isReplacement);
@@ -1043,11 +1233,28 @@
       replacementNotice.hidden = !isReplacement;
       reasonDetailsField.hidden = !isReplacement && !needsCustomReturnReason;
       reasonDetailsInput.required = !isReplacement && Boolean(needsCustomReturnReason);
-      reasonDetailsRequired.hidden = !isReplacement && Boolean(needsCustomReturnReason);
+      reasonDetailsRequired.hidden = isReplacement || !needsCustomReturnReason;
       if (detailsLabel) {
         detailsLabel.textContent = isReplacement
           ? 'Additional details'
           : 'Tell us more';
+      }
+
+      function updateRequestedItem(requestType) {
+        if (!requestedItem) return;
+        const options = Array.from(requestedItem.options).filter(option => option.value);
+        options.forEach(option => {
+          option.hidden = Boolean(requestType && option.dataset.requestType !== requestType);
+        });
+        if (requestedItem.selectedOptions[0] && requestedItem.selectedOptions[0].hidden) {
+          requestedItem.value = '';
+        }
+        if (requestType && !requestedItem.value) {
+          const firstEligible = options.find(
+            option => option.dataset.requestType === requestType,
+          );
+          if (firstEligible) requestedItem.value = firstEligible.value;
+        }
       }
       if (returnEligibility) returnEligibility.hidden = Boolean(isReplacement);
       if (replacementEligibility) replacementEligibility.hidden = !isReplacement;

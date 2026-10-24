@@ -44,7 +44,7 @@ from base.emails import (
 from django.views.decorators.http import require_GET, require_POST
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F, Q
 from django.http import HttpResponseRedirect, HttpResponse
 from django.contrib.auth import authenticate, login, logout
@@ -57,6 +57,7 @@ from accounts.forms import (
 )
 from products.forms import ReviewForm
 from accounts.returns import (
+    eligible_return_items,
     return_eligibility_error,
     return_request_timeline,
 )
@@ -136,8 +137,8 @@ def _cart_pricing_context(cart):
         delivery_fee_reason = 'No free-delivery threshold is configured.'
     elif cart_total_after_coupon < delivery_guideline.delivery_charge_threshold:
         delivery_fee_reason = (
-            f'Applies because the order total is below the '
-            f'₹{delivery_guideline.delivery_charge_threshold} free-delivery threshold.'
+            f'Applies because the order total is below '
+            f'₹{delivery_guideline.delivery_charge_threshold}.'
         )
     else:
         delivery_fee_reason = ''
@@ -193,6 +194,10 @@ def login_page(request):
         credentials_match_unverified_user = (
             user is not None
             and password
+            # Commenting the below line as it does not gives proper error
+            # if the error is email address is not verified. 
+            # It will show invalid username or password error
+            # and user.check_password(password)
             and not getattr(user.profile, 'is_email_verified', False)
         )
         if credentials_match_unverified_user:
@@ -658,6 +663,15 @@ def payment(request):
         return redirect('cart')
 
     delivery_guideline = DeliveryGuideline.get_solo()
+    cart_total = cart_obj.get_cart_total_price_after_coupon()
+    automatic_delivery_option, _ = _automatic_delivery_selection(
+        selected_address.city.name,
+        selected_address.zip_code,
+        None,
+        None,
+        None,
+        cart_total,
+    )
     context = {
         'cart': cart_obj,
         'current_step': 'payment',
@@ -668,8 +682,9 @@ def payment(request):
         'local_delivery_radius_km': delivery_guideline.free_delivery_radius_km,
         'priority_delivery_eligible': (
             delivery_guideline.next_day_delivery_enabled
+            and automatic_delivery_option == Order.DeliveryOption.STANDARD
             and delivery_guideline.delivery_charge_threshold is not None
-            and cart_obj.get_cart_total_price_after_coupon()
+            and cart_total
             >= delivery_guideline.delivery_charge_threshold
         ),
         'razorpay_key_id': settings.RAZORPAY_KEY_ID,
@@ -1300,6 +1315,7 @@ def guest_checkout(request):
     if quote_ready:
         quote = request.session.get(quote_key, {})
         address = form.cleaned_data
+        delivery_guideline = DeliveryGuideline.get_solo()
         delivery_option, _ = _automatic_delivery_selection(
             address['city'].name,
             address['zip_code'],
@@ -1309,10 +1325,11 @@ def guest_checkout(request):
             cart_obj.get_cart_total_price_after_coupon(),
         )
         priority_delivery_eligible = (
-            delivery_option == Order.DeliveryOption.STANDARD
-            and DeliveryGuideline.get_solo().delivery_charge_threshold is not None
+            delivery_guideline.next_day_delivery_enabled
+            and delivery_option == Order.DeliveryOption.STANDARD
+            and delivery_guideline.delivery_charge_threshold is not None
             and cart_obj.get_cart_total_price_after_coupon()
-            >= DeliveryGuideline.get_solo().delivery_charge_threshold
+            >= delivery_guideline.delivery_charge_threshold
         )
         if request.method != 'POST' or request.POST.get('confirm_order') != '1':
             priority_delivery_selected = (
@@ -1336,7 +1353,7 @@ def guest_checkout(request):
         elif delivery_option == Order.DeliveryOption.LOCAL_FREE:
             delivery_promise = (
                 'Order will be delivered within 4–5 hours.'
-                if is_before_local_delivery_cutoff(DeliveryGuideline.get_solo())
+                if is_before_local_delivery_cutoff(delivery_guideline)
                 else 'Delivery timing will be confirmed after order placement.'
             )
         address = form.cleaned_data
@@ -1659,24 +1676,54 @@ def return_request(request, order_id, access_token=None):
     else:
         return redirect('login')
 
-    current_request = ReturnRequest.objects.filter(order=order).first()
-    form = ReturnRequestForm(order=order)
+    return_requests = list(
+        ReturnRequest.objects.filter(order=order).select_related(
+            'order_item__product',
+            'bundle_order_product__product',
+            'replacement_reason',
+        ).prefetch_related('shipment_images', 'request_images')
+    )
+    eligible_items_by_type = {
+        request_type: eligible_return_items(
+            order, request_type, return_requests,
+        )
+        for request_type in ReturnRequest.RequestType.values
+    }
+    eligible_items = [
+        item
+        for request_type in ReturnRequest.RequestType.values
+        for item in eligible_items_by_type[request_type]
+    ]
     eligibility_errors = {
-        ReturnRequest.RequestType.RETURN: return_eligibility_error(order),
-        ReturnRequest.RequestType.REPLACEMENT: return_eligibility_error(
-            order, ReturnRequest.RequestType.REPLACEMENT),
+        request_type: (
+            '' if eligible_items_by_type[request_type]
+            else return_eligibility_error(order, request_type)
+        )
+        for request_type in ReturnRequest.RequestType.values
     }
     available_request_types = tuple(
         choice for choice in ReturnRequest.RequestType.choices
-        if not eligibility_errors[choice[0]]
+        if eligible_items_by_type[choice[0]]
     )
     default_request_type = (
         available_request_types[0][0]
         if len(available_request_types) == 1
         else ''
     )
+    form = ReturnRequestForm(
+        order=order,
+        eligible_items=eligible_items,
+        initial=(
+            {'request_type': default_request_type}
+            if default_request_type else None
+        ),
+    )
     if default_request_type:
-        form.initial['request_type'] = default_request_type
+        first_item = next(
+            iter(eligible_items_by_type[default_request_type]), None,
+        )
+        if first_item:
+            form.initial['requested_item'] = first_item['key']
 
     if len(available_request_types) == 1:
         request_form_heading = (
@@ -1691,68 +1738,110 @@ def return_request(request, order_id, access_token=None):
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'request':
-            if current_request:
+            form = ReturnRequestForm(
+                request.POST,
+                order=order,
+                eligible_items=eligible_items,
+            )
+            form.fields['request_type'].choices = available_request_types
+            request_type = request.POST.get(
+                'request_type', ReturnRequest.RequestType.RETURN)
+            if request_type not in eligible_items_by_type:
+                messages.error(request, 'Choose a valid request type.')
+            elif not eligible_items_by_type[request_type]:
                 messages.error(
                     request,
-                    'A return or replacement request already exists for this order.',
+                    eligibility_errors[request_type]
+                    or 'No eligible items are available for this request.',
                 )
+            elif not form.is_valid():
+                messages.error(request, 'Please correct the request details below.')
+            elif (
+                request_type == ReturnRequest.RequestType.REPLACEMENT
+                and not request.FILES.getlist('request_images')
+            ):
+                image_error = (
+                    'Upload at least 1 clear product photo for a replacement request.'
+                )
+                messages.error(request, image_error)
+                form.add_error(None, image_error)
+            elif len(request.FILES.getlist('request_images')) > 5:
+                image_error = 'Upload no more than 5 product photos.'
+                messages.error(request, image_error)
+                form.add_error(None, image_error)
+            elif any(
+                image.size > 5 * 1024 * 1024
+                for image in request.FILES.getlist('request_images')
+            ):
+                image_error = 'Each photo must be 5 MB or smaller.'
+                messages.error(request, image_error)
+                form.add_error(None, image_error)
             else:
-                form = ReturnRequestForm(request.POST, order=order)
-                form.fields['request_type'].choices = available_request_types
-                request_type = request.POST.get(
-                    'request_type', ReturnRequest.RequestType.RETURN)
-                eligibility_error = eligibility_errors.get(
-                    request_type, 'Choose a valid request type.')
-                if eligibility_error:
-                    messages.error(request, eligibility_error)
-                elif not form.is_valid():
-                    messages.error(request, 'Please correct the request details below.')
-                elif (
-                    request_type == ReturnRequest.RequestType.REPLACEMENT
-                    and not request.FILES.getlist('request_images')
-                ):
-                    image_error = (
-                        'Upload at least 1 clear product photo for a replacement request.'
+                request_images = request.FILES.getlist('request_images')
+                image_field = ImageField()
+                try:
+                    validated_images = [
+                        image_field.clean(image) for image in request_images
+                    ]
+                except ValidationError:
+                    messages.error(
+                        request,
+                        'Upload valid image files in JPG, PNG, or another supported image format.',
                     )
-                    messages.error(request, image_error)
-                    form.add_error(None, image_error)
-                elif len(request.FILES.getlist('request_images')) > 5:
-                    image_error = 'Upload no more than 5 product photos.'
-                    messages.error(request, image_error)
-                    form.add_error(None, image_error)
-                elif any(
-                    image.size > 5 * 1024 * 1024
-                    for image in request.FILES.getlist('request_images')
-                ):
-                    image_error = 'Each photo must be 5 MB or smaller.'
-                    messages.error(request, image_error)
-                    form.add_error(None, image_error)
+                    form.add_error(
+                        None,
+                        'Upload valid image files in JPG, PNG, or another supported image format.',
+                    )
                 else:
-                    request_images = request.FILES.getlist('request_images')
-                    image_field = ImageField()
+                    requested_item_key = form.cleaned_data['requested_item']
+                    current_request = None
                     try:
-                        validated_images = [
-                            image_field.clean(image) for image in request_images
-                        ]
-                    except ValidationError:
+                        with transaction.atomic():
+                            Order.objects.select_for_update().get(pk=order.pk)
+                            requested_item = next(
+                                (
+                                    item for item in eligible_return_items(
+                                        order, request_type,
+                                    )
+                                    if item['key'] == requested_item_key
+                                ),
+                                None,
+                            )
+                            if requested_item is None:
+                                form.add_error(
+                                    'requested_item',
+                                    'This item already has an active request.',
+                                )
+                                messages.error(
+                                    request,
+                                    'This item already has an active request.',
+                                )
+                            else:
+                                current_request = form.save(commit=False)
+                                current_request.order = order
+                                current_request.order_item = requested_item[
+                                    'order_item'
+                                ]
+                                current_request.bundle_order_product = (
+                                    requested_item['bundle_order_product']
+                                )
+                                current_request.save()
+                                for image in validated_images:
+                                    ReturnRequestImage.objects.create(
+                                        return_request=current_request,
+                                        image=image,
+                                    )
+                    except IntegrityError:
+                        current_request = None
+                        form.add_error(
+                            'requested_item',
+                            'This item already has an active request.',
+                        )
                         messages.error(
                             request,
-                            'Upload valid image files in JPG, PNG, or another supported image format.',
+                            'This item already has an active request.',
                         )
-                        form.add_error(
-                            None,
-                            'Upload valid image files in JPG, PNG, or another supported image format.',
-                        )
-                    else:
-                        with transaction.atomic():
-                            current_request = form.save(commit=False)
-                            current_request.order = order
-                            current_request.save()
-                            for image in validated_images:
-                                ReturnRequestImage.objects.create(
-                                    return_request=current_request,
-                                    image=image,
-                                )
+                    if current_request:
                         try:
                             send_admin_return_request_email(current_request)
                         except Exception:
@@ -1785,8 +1874,19 @@ def return_request(request, order_id, access_token=None):
                             ),
                         )
         elif action == 'shipment':
-            current_request = get_object_or_404(
-                ReturnRequest, order=order)
+            shipment_requests = ReturnRequest.objects.filter(
+                order=order,
+                request_type=ReturnRequest.RequestType.RETURN,
+                status=ReturnRequest.Status.APPROVED,
+            )
+            return_request_id = request.POST.get('return_request_id')
+            if return_request_id:
+                shipment_requests = shipment_requests.filter(
+                    pk=return_request_id,
+                )
+            elif shipment_requests.count() != 1:
+                raise Http404
+            current_request = get_object_or_404(shipment_requests)
             if (
                 current_request.request_type != ReturnRequest.RequestType.RETURN
                 or current_request.status != ReturnRequest.Status.APPROVED
@@ -1866,9 +1966,14 @@ def return_request(request, order_id, access_token=None):
                             ),
                         )
 
-    if current_request:
-        current_request = ReturnRequest.objects.prefetch_related(
-            'shipment_images').get(pk=current_request.pk)
+    current_request = return_requests[0] if return_requests else None
+    request_entries = [
+        {
+            'request': item,
+            'timeline': return_request_timeline(item),
+        }
+        for item in return_requests
+    ]
     policy = ReturnRefundPolicy.get_solo()
     return render(request, 'accounts/return_request.html', {
         'order': order,
@@ -1879,11 +1984,15 @@ def return_request(request, order_id, access_token=None):
             'selected_products__product',
         ),
         'return_request': current_request,
+        'return_requests': return_requests,
+        'return_request_entries': request_entries,
+        'eligible_items': eligible_items,
         'return_timeline': (
             return_request_timeline(current_request)
             if current_request else []
         ),
         'form': form,
+        'available_request_types': available_request_types,
         'default_request_type': default_request_type,
         'request_form_heading': request_form_heading,
         'return_eligibility_error': eligibility_errors[
@@ -1931,7 +2040,11 @@ def create_order(
         selected_address = shipping_address or (
             getattr(cart.user.profile, 'shipping_address', None) if cart.user else None
         )
+        order_customer_name = guest_name
         if selected_address:
+            order_customer_name = (
+                f'{selected_address.first_name} {selected_address.last_name}'
+            ).strip()
             service_area_error = _service_area_error(
                 selected_address.city, selected_address.country,
             )
@@ -1967,7 +2080,7 @@ def create_order(
             user=cart.user,
             order_id=order_id or generate_order_id(),
             guest_access_token=guest_access_token or uuid.uuid4().hex,
-            guest_name=guest_name,
+            guest_name=order_customer_name,
             guest_email=guest_email,
             status=Order.Status.ACCEPTED,
             delivery_pincode=delivery_pincode,
@@ -2112,13 +2225,29 @@ def order_details(request, order_id):
             if product.order_review else 0
         )
         product.review_photo_remaining = 5 - product.review_photo_count
-    return_request_obj = ReturnRequest.objects.filter(order=order).first()
+    return_requests = list(
+        ReturnRequest.objects.filter(order=order).select_related(
+            'order_item__product',
+            'bundle_order_product__product',
+            'replacement_reason',
+        ).prefetch_related('shipment_images', 'request_images')
+    )
+    return_request_obj = return_requests[0] if return_requests else None
+    request_entries = [
+        {
+            'request': item,
+            'timeline': return_request_timeline(item),
+        }
+        for item in return_requests
+    ]
     context = {
         'order': order,
         'order_items': order_items,
         'bundle_items': bundle_items,
         'review_products': list(review_products.values()),
         'return_request': return_request_obj,
+        'return_requests': return_requests,
+        'return_request_entries': request_entries,
         'return_timeline': (
             return_request_timeline(return_request_obj)
             if return_request_obj else []

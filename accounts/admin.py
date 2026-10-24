@@ -331,7 +331,8 @@ class ReturnRequestImageInline(ReturnShipmentImageInline):
 @admin.register(ReturnRequest)
 class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
     list_display = (
-        'order', 'request_type', 'replacement_reason', 'status',
+        'order', 'requested_item_name', 'request_type',
+        'replacement_reason', 'status',
         'courier_partner_name', 'tracking_number',
         'replacement_tracking_number', 'item_condition', 'deduction_amount',
         'refund_amount', 'created_at',
@@ -339,10 +340,13 @@ class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
     list_filter = ('request_type', 'status', 'item_condition', 'created_at')
     search_fields = (
         'order__order_id', 'order__guest_email', 'order__user__username',
+        'order_item__product__product_name',
+        'bundle_order_product__product__product_name',
         'courier_partner_name', 'tracking_number',
     )
     readonly_fields = (
-        'order', 'request_type', 'replacement_reason', 'reason',
+        'order', 'order_item', 'bundle_order_product', 'requested_item_name',
+        'request_type', 'replacement_reason', 'reason',
         'courier_partner_name', 'tracking_number', 'refund_method',
         'refund_upi_id', 'refund_account_holder_name', 'refund_account_number',
         'refund_ifsc_code', 'shipped_at', 'received_at',
@@ -351,7 +355,8 @@ class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
         'refunded_at',
     )
     fields = (
-        'order', 'request_type', 'replacement_reason', 'status', 'reason',
+        'order', 'order_item', 'bundle_order_product', 'requested_item_name',
+        'request_type', 'replacement_reason', 'status', 'reason',
         'admin_note', 'courier_partner_name', 'tracking_number', 'shipped_at',
         'refund_method', 'refund_upi_id', 'refund_account_holder_name',
         'refund_account_number', 'refund_ifsc_code', 'received_at',
@@ -719,8 +724,11 @@ class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
     def _inspection_error(return_request):
         if return_request.item_condition == ReturnRequest.ItemCondition.NOT_REVIEWED:
             return 'Record the item condition before processing the refund.'
-        if return_request.deduction_amount > return_request.order.grand_total:
-            return 'The condition deduction cannot exceed the order total.'
+        if (
+            return_request.deduction_amount
+            > return_request.calculated_refund_amount_before_deduction
+        ):
+            return 'The condition deduction cannot exceed the item refund amount.'
         if return_request.deduction_amount and not return_request.deduction_reason.strip():
             return 'Enter a reason for the condition deduction.'
         return ''

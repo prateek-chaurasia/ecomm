@@ -32,10 +32,6 @@ def build_invoice_context(order):
     invoice_customer_name = order.guest_name
     invoice_customer_email = order.guest_email
     if order.user_id:
-        invoice_customer_name = (
-            order.user.get_full_name()
-            or order.user.username
-        )
         invoice_customer_email = order.user.email
 
     lines = []

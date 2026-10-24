@@ -199,7 +199,8 @@ class ReturnRefundPolicy(models.Model):
     )
     cancellation_policy = models.TextField(
         default=(
-            'Contact our support team as soon as possible to request an order cancellation.'
+            'Orders may be cancelled at any time before they are dispatched. '
+            'Use the cancellation option on your order details page to request cancellation.'
         ),
     )
 

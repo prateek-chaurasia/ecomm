@@ -837,6 +837,46 @@ class RegisteredCheckoutFlowTests(TestCase):
         guideline.save()
         self.client.force_login(self.user)
 
+    def test_order_customer_name_uses_selected_shipping_address(self):
+        self.user.first_name = 'Registered'
+        self.user.last_name = 'Customer'
+        self.user.save(update_fields=['first_name', 'last_name'])
+        selected_address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Address',
+            last_name='Recipient',
+            street='Park Lane',
+            street_number='7',
+            zip_code='248002',
+            city=self.city,
+            country='IN',
+            state=self.state,
+            phone='8888888888',
+        )
+
+        order = create_order(
+            self.cart,
+            order_id='ORDER-SELECTED-CUSTOMER-NAME',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            shipping_address=selected_address,
+        )
+
+        self.assertEqual(order.guest_name, 'Address Recipient')
+        self.assertEqual(
+            build_invoice_context(order)['invoice_customer_name'],
+            'Address Recipient',
+        )
+        response = self.client.get(
+            reverse('order_details', args=[order.order_id]),
+        )
+        self.assertContains(
+            response,
+            '<div class="info-value">Address Recipient</div>',
+            html=False,
+        )
+        self.assertNotContains(response, 'Registered Customer')
+
     def test_cart_is_items_and_charges_only_before_checkout(self):
         response = self.client.get(reverse('cart'))
 
@@ -871,8 +911,8 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.assertContains(response, 'Items subtotal')
         self.assertContains(
             response,
-            'Applies because the order total is below the '
-            '₹1000.00 free-delivery threshold.',
+            'Applies because the order total is below '
+            '₹1000.00.',
         )
         self.assertNotContains(response, 'Next-day priority delivery')
         self.assertContains(response, 'Continue to payment')
@@ -948,6 +988,47 @@ class RegisteredCheckoutFlowTests(TestCase):
 
         response = self.client.get(reverse('payment'))
         self.assertRedirects(response, reverse('checkout'))
+
+    def test_payment_hides_priority_delivery_for_nonserviceable_pincode(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('700.00')
+        guideline.next_day_delivery_enabled = True
+        guideline.save()
+
+        response = self.client.get(
+            reverse('payment'),
+            {'address': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['priority_delivery_eligible'])
+        self.assertContains(
+            response,
+            'id="priority-delivery-control"',
+        )
+        self.assertRegex(
+            response.content.decode(),
+            r'id="priority-delivery-control"\s+hidden',
+        )
+
+    def test_payment_shows_priority_delivery_for_serviceable_pincode(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('700.00')
+        guideline.next_day_delivery_enabled = True
+        guideline.save()
+        ServiceablePincode.objects.create(pincode=self.address.zip_code)
+
+        response = self.client.get(
+            reverse('payment'),
+            {'address': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['priority_delivery_eligible'])
+        self.assertContains(
+            response,
+            'Prioritize my order for next-day delivery',
+        )
 
     def test_registered_cash_on_delivery_order_reserves_product_stock(self):
         response = self.client.post(
@@ -1604,19 +1685,39 @@ class GuestCheckoutDeliveryTests(TestCase):
     def test_guest_checkout_accepts_nonserviceable_pincode_without_review(self):
         data = self.checkout_data()
         data['zip_code'] = '110002'
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('500.00')
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.next_day_delivery_enabled = True
+        guideline.save()
+
         with patch('accounts.views.send_order_confirmation_email'), patch(
             'accounts.views.send_admin_new_order_email'
         ):
             quote_response = self.client.post(reverse('guest-checkout'), data)
             self.assertEqual(quote_response.status_code, 200)
+            self.assertFalse(
+                quote_response.context['priority_delivery_eligible'],
+            )
+            self.assertNotContains(
+                quote_response,
+                'Prioritize my order for next-day delivery',
+            )
             response = self.client.post(
-                reverse('guest-checkout'), {'confirm_order': '1'})
+                reverse('guest-checkout'),
+                {
+                    'confirm_order': '1',
+                    'priority_delivery': 'on',
+                },
+            )
 
         self.assertEqual(response.status_code, 302)
         order = Order.objects.get(guest_email='guest@example.com')
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertTrue(order.outside_service_area)
         self.assertEqual(order.delivery_option, '')
+        self.assertFalse(order.is_priority_delivery)
+        self.assertEqual(order.priority_delivery_fee, Decimal('0.00'))
 
     def test_cart_displays_delivery_estimates_without_delivery_modal(self):
         response = self.client.get(reverse('cart'))
@@ -1980,6 +2081,7 @@ class RegistrationTests(TestCase):
         )
         self.assertNotIn('_auth_user_id', self.client.session)
 
+    @override_settings(AXES_ENABLED=False)
     def test_unverified_email_is_not_disclosed_when_password_is_invalid(self):
         User.objects.create_user(
             username='unverified-private',
@@ -2547,6 +2649,9 @@ class UserShippingAddressTests(TestCase):
 
     def test_checkout_requires_selected_address_when_multiple_addresses_exist(self):
         self.client.force_login(self.user)
+        self.user.first_name = 'Registered'
+        self.user.last_name = 'Customer'
+        self.user.save(update_fields=['first_name', 'last_name'])
         state = State.objects.get(country_id='IN', name='Uttarakhand')
         first_address = ShippingAddress.objects.create(
             user=self.user,
@@ -2597,6 +2702,16 @@ class UserShippingAddressTests(TestCase):
         order = Order.objects.get(user=self.user)
         self.assertTrue(order.outside_service_area)
         self.assertEqual(order.delivery_option, '')
+        self.assertEqual(order.guest_name, 'Bob Jones')
+        details_response = self.client.get(
+            reverse('order_details', args=[order.order_id]),
+        )
+        self.assertContains(
+            details_response,
+            '<div class="info-value">Bob Jones</div>',
+            html=False,
+        )
+        self.assertNotContains(details_response, 'Registered Customer')
 
     def test_user_can_delete_only_non_default_addresses(self):
         self.client.force_login(self.user)
@@ -2740,6 +2855,28 @@ class UserShippingAddressTests(TestCase):
         self.assertIn('Paid', invoice_text)
         self.assertIn('Payment method', invoice_text)
         self.assertIn('Cash on Delivery', invoice_text)
+        self.assertNotIn('Transaction ID', invoice_text)
+
+    def test_invoice_shows_transaction_id_when_available(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-INVOICE-TRANSACTION',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            razorpay_payment_id='pay_selected_transaction_123',
+            order_total_price=100,
+            grand_total=100,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse('download_invoice', args=[order.order_id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invoice_text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn('Transaction ID', invoice_text)
+        self.assertIn('pay_selected_transaction_123', invoice_text)
 
     def test_invoice_payment_summary_separates_product_and_coupon_discounts(self):
         coupon = Coupon.objects.create(
@@ -3694,6 +3831,10 @@ class ReturnWorkflowTests(TestCase):
         self.assertContains(response, 'id="reason-details-field"')
         self.assertContains(response, 'id="return-reason-required"')
         self.assertContains(response, 'id="replacement-reason-required"')
+        self.assertContains(
+            response,
+            'reasonDetailsRequired.hidden = isReplacement || !needsCustomReturnReason;',
+        )
         self.assertContains(response, 'class="required-indicator"')
         self.assertContains(response, '(optional for returns)')
         self.assertContains(response, '(required for replacements)')
@@ -4178,6 +4319,10 @@ class ReturnWorkflowTests(TestCase):
         response = self.client.get(
             reverse('return_request', args=[self.order.order_id]))
 
+        self.assertTrue(
+            response.context['eligible_items'],
+            response.context['return_eligibility_error'],
+        )
         self.assertEqual(
             list(response.context['form'].fields['request_type'].choices),
             list(ReturnRequest.RequestType.choices),
@@ -4188,6 +4333,193 @@ class ReturnWorkflowTests(TestCase):
         )
         self.assertContains(response, 'Send an eligible item back for a refund')
         self.assertContains(response, 'Request the same item again')
+
+    def test_mixed_order_supports_separate_return_and_replacement_requests(self):
+        from products.models import ReturnDetails
+
+        replaceable_product = Product.objects.create(
+            product_name='Replaceable gift',
+            category=self.product.category,
+            price=600,
+            product_desription='A gift eligible for replacement.',
+            stock_quantity=2,
+        )
+        non_returnable_product = Product.objects.create(
+            product_name='Final sale gift',
+            category=self.product.category,
+            price=300,
+            product_desription='A non-returnable gift.',
+            stock_quantity=2,
+        )
+        ReturnDetails.objects.create(
+            product=self.product,
+            is_returnable=True,
+            return_policy='returnable',
+            return_window_days=7,
+        )
+        ReturnDetails.objects.create(
+            product=replaceable_product,
+            is_returnable=True,
+            return_policy='replaceable',
+            return_window_days=7,
+        )
+        ReturnDetails.objects.create(
+            product=non_returnable_product,
+            is_returnable=False,
+            return_policy='non_returnable',
+            return_window_days=7,
+        )
+        replaceable_order_item = OrderItem.objects.create(
+            order=self.order,
+            product=replaceable_product,
+            quantity=1,
+            product_price=600,
+        )
+        non_returnable_order_item = OrderItem.objects.create(
+            order=self.order,
+            product=non_returnable_product,
+            quantity=1,
+            product_price=300,
+        )
+        self.order.order_total_price = Decimal('1900.00')
+        self.order.grand_total = Decimal('1900.00')
+        self.order.save(update_fields=[
+            'order_total_price', 'grand_total', 'updated_at',
+        ])
+        endpoint = reverse('return_request', args=[self.order.order_id])
+        response = self.client.get(endpoint)
+        eligible_keys = {
+            item['key'] for item in response.context['eligible_items']
+        }
+        self.assertIn(f'return:order:{self.order.order_items.get(product=self.product).pk}', eligible_keys)
+        self.assertIn(f'replacement:order:{replaceable_order_item.pk}', eligible_keys)
+        self.assertNotIn(f'return:order:{non_returnable_order_item.pk}', eligible_keys)
+        self.assertNotIn(
+            f'replacement:order:{non_returnable_order_item.pk}',
+            eligible_keys,
+        )
+
+        return_response = self.client.post(
+            endpoint,
+            {
+                'action': 'request',
+                'request_type': ReturnRequest.RequestType.RETURN,
+                'requested_item': (
+                    f'return:order:{self.order.order_items.get(product=self.product).pk}'
+                ),
+                'return_reason': 'no_longer_needed',
+            },
+        )
+        self.assertEqual(return_response.status_code, 302)
+        return_request = ReturnRequest.objects.get(
+            order=self.order,
+            request_type=ReturnRequest.RequestType.RETURN,
+        )
+        self.assertEqual(
+            return_request.order_item.product,
+            self.product,
+        )
+        self.assertEqual(
+            return_request.calculated_refund_amount,
+            Decimal('1000.00'),
+        )
+
+        with patch(
+            'accounts.returns.timezone.localdate',
+            return_value=timezone.localdate() + timedelta(days=1),
+        ):
+            next_day_response = self.client.get(endpoint)
+            self.assertIn(
+                f'replacement:order:{replaceable_order_item.pk}',
+                {
+                    item['key']
+                    for item in next_day_response.context['eligible_items']
+                },
+            )
+            replacement_response = self.client.post(
+                endpoint,
+                {
+                    'action': 'request',
+                    'request_type': ReturnRequest.RequestType.REPLACEMENT,
+                    'requested_item': (
+                        f'replacement:order:{replaceable_order_item.pk}'
+                    ),
+                    'replacement_reason': ReplacementReason.objects.get(
+                        name='Wrong item received',
+                    ).pk,
+                    'request_images': [self.create_request_photo()],
+                },
+            )
+        self.assertEqual(replacement_response.status_code, 302)
+        replacement_request = ReturnRequest.objects.get(
+            order=self.order,
+            request_type=ReturnRequest.RequestType.REPLACEMENT,
+        )
+        self.assertEqual(
+            replacement_request.order_item,
+            replaceable_order_item,
+        )
+        self.assertEqual(
+            ReturnRequest.objects.filter(order=self.order).count(),
+            2,
+        )
+
+        request_page = self.client.get(endpoint)
+        self.assertContains(request_page, 'Return Request Details')
+        self.assertContains(request_page, 'Replacement Request Details')
+        self.assertEqual(
+            request_page.content.decode().count('open>'),
+            1,
+        )
+
+        detail_response = self.client.get(
+            reverse('order_details', args=[self.order.order_id]),
+        )
+        self.assertContains(detail_response, 'Return status')
+        self.assertContains(detail_response, 'Replacement status')
+        self.assertContains(detail_response, 'Replaceable gift')
+
+    def test_non_returnable_item_cannot_be_requested_with_forged_item_key(self):
+        from products.models import ReturnDetails
+
+        ReturnDetails.objects.create(
+            product=self.product,
+            is_returnable=True,
+            return_policy='returnable',
+            return_window_days=7,
+        )
+        non_returnable_product = Product.objects.create(
+            product_name='Final sale item',
+            category=self.product.category,
+            price=100,
+            product_desription='Not eligible for return.',
+            stock_quantity=1,
+        )
+        ReturnDetails.objects.create(
+            product=non_returnable_product,
+            is_returnable=False,
+            return_policy='non_returnable',
+            return_window_days=7,
+        )
+        order_item = OrderItem.objects.create(
+            order=self.order,
+            product=non_returnable_product,
+            quantity=1,
+            product_price=100,
+        )
+        response = self.client.post(
+            reverse('return_request', args=[self.order.order_id]),
+            {
+                'action': 'request',
+                'request_type': ReturnRequest.RequestType.RETURN,
+                'requested_item': f'return:order:{order_item.pk}',
+                'return_reason': 'no_longer_needed',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Select a valid choice')
+        self.assertFalse(ReturnRequest.objects.filter(order=self.order).exists())
 
     def test_replaceable_only_product_rejects_return_submission(self):
         from products.models import ReturnDetails

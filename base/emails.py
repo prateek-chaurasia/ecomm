@@ -493,6 +493,7 @@ def send_admin_return_request_email(return_request):
         f'Customer: {order.guest_name or (order.user.get_full_name() if order.user else "Guest")}\n'
         f'Email: {order.guest_email or (order.user.email if order.user else "Not provided")}\n'
         f'Request type: {return_request.get_request_type_display()}\n'
+        f'Item: {return_request.requested_item_name}\n'
         f'Replacement reason: {return_request.replacement_reason if is_replacement else "Not applicable"}\n'
         f'Reason: {return_request.reason}\n\n'
         f'Request photos: {return_request.request_images.count()}\n\n'
@@ -525,6 +526,7 @@ def send_admin_return_shipment_email(return_request):
     )
     message = (
         f'The customer shipped the return for order {return_request.order.order_id}.\n\n'
+        f'Item: {return_request.requested_item_name}\n'
         f'Courier partner: {return_request.courier_partner_name}\n'
         f'Carrier tracking number: {return_request.tracking_number}\n'
         f'Shipment photos are available in the return request in the seller portal.\n\n'
@@ -614,7 +616,8 @@ def send_return_status_update_email(return_request):
         f'Hello {customer_name},\n\n'
         f'Update for {"replacement" if is_replacement else "return"} '
         f'request on order {order.order_id}: '
-        f'{status_label}.\n\n'
+        f'{status_label}.\n'
+        f'Item: {return_request.requested_item_name}\n\n'
         f'{status_messages.get(return_request.status, "Your return request has been updated.")}'
         f'\n\nView your complete request status and updates:\n{status_link}'
     )
@@ -667,6 +670,7 @@ def send_return_status_update_email(return_request):
             'order': order,
             'customer_name': customer_name,
             'request_label': request_label,
+            'requested_item_name': return_request.requested_item_name,
             'status_label': status_label,
             'status_message': status_messages.get(
                 return_request.status,
