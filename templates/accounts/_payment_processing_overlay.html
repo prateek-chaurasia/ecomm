@@ -1,0 +1,97 @@
+<dialog id="payment-processing-overlay" class="payment-processing-overlay" aria-labelledby="payment-processing-title" aria-describedby="payment-processing-message">
+  <div class="payment-processing-dialog">
+    <span class="payment-processing-spinner" aria-hidden="true"></span>
+    <h2 id="payment-processing-title">Please wait</h2>
+    <p id="payment-processing-message" class="mb-3">Processing your payment securely...</p>
+    <div class="payment-progress-track" role="progressbar" aria-label="Payment processing" aria-valuetext="In progress">
+      <span class="payment-progress-bar"></span>
+    </div>
+  </div>
+</dialog>
+<style>
+  .payment-processing-overlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(calc(100% - 2.5rem), 26rem);
+    max-width: none;
+    height: fit-content;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .payment-processing-overlay::backdrop {
+    background: rgba(15, 23, 42, 0.42);
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+  }
+
+  .payment-processing-dialog {
+    padding: 2rem;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.25);
+    color: #1e293b;
+    text-align: center;
+  }
+
+  .payment-processing-dialog h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .payment-processing-dialog p {
+    color: #64748b;
+  }
+
+  .payment-processing-spinner {
+    display: block;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin: 0 auto 1rem;
+    border: 4px solid #dbeafe;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: payment-processing-spin 0.8s linear infinite;
+  }
+
+  .payment-progress-track {
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e2e8f0;
+  }
+
+  .payment-progress-bar {
+    display: block;
+    width: 40%;
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+    animation: payment-progress 1.4s ease-in-out infinite;
+  }
+
+  body.payment-processing-active {
+    overflow: hidden;
+  }
+
+  @keyframes payment-processing-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes payment-progress {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(260%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .payment-processing-spinner,
+    .payment-progress-bar { animation-duration: 3s; }
+  }
+</style>

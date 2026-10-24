@@ -6,12 +6,13 @@ from django.utils import timezone
 from base.models import BaseModel
 from products.models import (
     Product, ColorVariant, SizeVariant, Coupon, BundleOffer,
-    BundlePackagingOption,
+    BundlePackagingOption, GSTConfiguration,
 )
 from home.models import ShippingAddress
 from django.conf import settings
 import os
 import uuid
+from decimal import Decimal, ROUND_HALF_UP
 # Create your models here.
 
 
@@ -34,7 +35,11 @@ class Profile(BaseModel):
         return self.user.username
 
     def get_cart_count(self):
-        return CartItem.objects.filter(cart__is_paid=False, cart__user=self.user).count()
+        return CartItem.objects.filter(
+            cart__is_paid=False,
+            cart__is_buy_now=False,
+            cart__user=self.user,
+        ).count()
 
 
 class Cart(BaseModel):
@@ -44,37 +49,97 @@ class Cart(BaseModel):
     coupon = models.ForeignKey(
         Coupon, on_delete=models.SET_NULL, null=True, blank=True)
     is_paid = models.BooleanField(default=False)
+    is_buy_now = models.BooleanField(default=False)
     razorpay_order_id = models.CharField(max_length=100, null=True, blank=True)
     razorpay_payment_id = models.CharField(
         max_length=100, null=True, blank=True)
     razorpay_payment_signature = models.CharField(
         max_length=100, null=True, blank=True)
+    razorpay_delivery_option = models.CharField(max_length=20, blank=True)
+    razorpay_priority_delivery = models.BooleanField(default=False)
+    razorpay_priority_delivery_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+    )
+
+    @staticmethod
+    def _allocate_amount(amount, weights):
+        amount = Decimal(amount).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        weight_total = sum(weights, Decimal('0.00'))
+        if not weights:
+            return []
+        if weight_total <= 0:
+            weights = [Decimal('1.00')] * len(weights)
+            weight_total = Decimal(len(weights))
+        allocated = []
+        remaining = amount
+        for weight in weights[:-1]:
+            share = (amount * weight / weight_total).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP,
+            )
+            allocated.append(share)
+            remaining -= share
+        allocated.append(remaining)
+        return allocated
+
+    def _get_product_lines(self):
+        lines = [
+            (
+                Decimal(cart_item.get_product_price()),
+                Decimal(cart_item.product.gst_rate or 0),
+            )
+            for cart_item in self.cart_items.select_related('product')
+            if cart_item.product_id
+        ]
+        for bundle_item in self.bundle_items.all():
+            products = list(bundle_item.products.all())
+            if not products:
+                continue
+            amount = Decimal(bundle_item.get_product_price())
+            allocations = self._allocate_amount(
+                amount,
+                [Decimal(product.price) for product in products],
+            )
+            lines.extend(
+                (allocation, Decimal(product.gst_rate or 0))
+                for product, allocation in zip(products, allocations)
+            )
+        return lines
+
+    def _get_cart_total(self, apply_coupon):
+        lines = self._get_product_lines()
+        subtotal = sum((amount for amount, _ in lines), Decimal('0.00'))
+        discount = Decimal('0.00')
+        if (
+            apply_coupon
+            and self.coupon
+            and self.coupon.is_available
+        ):
+            discount = self.coupon.calculate_discount(subtotal)
+
+        line_discounts = self._allocate_amount(
+            discount, [amount for amount, _ in lines],
+        ) if lines else []
+        discounted_amounts = [
+            amount - line_discount
+            for (amount, _), line_discount in zip(lines, line_discounts)
+        ]
+        prices_include_tax = GSTConfiguration.get_solo().prices_include_tax
+        if prices_include_tax:
+            return sum(discounted_amounts, Decimal('0.00'))
+
+        total = Decimal('0.00')
+        for amount, (_, rate) in zip(discounted_amounts, lines):
+            tax = (amount * rate / Decimal('100')).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP,
+            )
+            total += amount + tax
+        return total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     def get_cart_total(self):
-        cart_items = self.cart_items.all()
-        total_price = 0
-
-        for cart_item in cart_items:
-            total_price += cart_item.get_product_price()
-
-        total_price += sum(
-            bundle_item.get_product_price()
-            for bundle_item in self.bundle_items.all()
-        )
-
-        return total_price
+        return self._get_cart_total(apply_coupon=False)
 
     def get_cart_total_price_after_coupon(self):
-        total = self.get_cart_total()
-
-        if (
-            self.coupon
-            and self.coupon.is_available
-            and total >= self.coupon.minimum_amount
-        ):
-            total -= self.coupon.discount_amount
-
-        return total
+        return self._get_cart_total(apply_coupon=True)
 
 
 class CartItem(BaseModel):
@@ -120,6 +185,16 @@ class CartItem(BaseModel):
         if self.gift_wrap and self.product.gift_wrap_available:
             price += self.product.gift_wrap_price * self.quantity
 
+        return price
+
+    def get_original_product_price(self):
+        price = max(self.product.marked_price, self.product.price) * self.quantity
+        if self.color_variant:
+            price += self.color_variant.price
+        if self.size_variant:
+            price += self.size_variant.price_adjustment
+        if self.gift_wrap and self.product.gift_wrap_available:
+            price += self.product.gift_wrap_price * self.quantity
         return price
 
 
@@ -200,8 +275,21 @@ class Order(BaseModel):
         max_digits=10, decimal_places=2, null=True, blank=True,
         help_text='Delivery charge applied when the order is below the free-delivery threshold.',
     )
+    is_priority_delivery = models.BooleanField(default=False)
+    priority_delivery_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+    )
+    local_delivery_window_promised = models.BooleanField(default=False)
     guest_name = models.CharField(max_length=200, blank=True)
     guest_email = models.EmailField(blank=True)
+    prices_include_tax = models.BooleanField(default=True)
+    seller_name = models.CharField(max_length=150, blank=True)
+    seller_address = models.TextField(blank=True)
+    seller_gstin = models.CharField(max_length=15, blank=True)
+    seller_email = models.EmailField(blank=True)
+    seller_state = models.CharField(max_length=100, blank=True)
+    seller_state_code = models.CharField(max_length=2, blank=True)
+    place_of_supply_state = models.CharField(max_length=100, blank=True)
     order_date = models.DateTimeField(auto_now_add=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     payment_status = models.CharField(max_length=100)
@@ -237,6 +325,18 @@ class Order(BaseModel):
         return self.order_total_price
 
     @property
+    def delivery_promise(self):
+        if self.delivery_option == self.DeliveryOption.STANDARD:
+            if self.is_priority_delivery:
+                return 'Order will be delivered next day.'
+            return 'Most orders will arrive in 2–3 business days.'
+        if self.delivery_option == self.DeliveryOption.LOCAL_FREE:
+            if self.local_delivery_window_promised:
+                return 'Order will be delivered within 4–5 hours.'
+            return 'Delivery timing will be confirmed after order placement.'
+        return ''
+
+    @property
     def can_be_cancelled(self):
         cancellable_statuses = {
             self.Status.PENDING_REVIEW,
@@ -268,6 +368,10 @@ class OrderItem(BaseModel):
     quantity = models.PositiveIntegerField(default=1)
     product_price = models.DecimalField(
         max_digits=10, decimal_places=2, null=True)
+    original_product_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True)
+    hsn_code = models.CharField(max_length=32, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
     gift_wrap = models.BooleanField(default=False)
 
     def __str__(self):
@@ -434,6 +538,10 @@ class BundleOrderItem(BaseModel):
 class BundleOrderProduct(BaseModel):
     bundle_item = models.ForeignKey(BundleOrderItem, on_delete=models.CASCADE, related_name='selected_products')
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    product_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    original_product_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    hsn_code = models.CharField(max_length=32, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['bundle_item', 'product'], name='unique_bundle_order_product')]

@@ -13,6 +13,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from weasyprint import HTML
 from decouple import config
+from accounts.invoices import build_invoice_context
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,7 @@ def send_order_confirmation_email(order):
         .prefetch_related('product__product_images')
     )
     inline_images = _prepare_order_thumbnails(order_items)
+    invoice_context = build_invoice_context(order)
 
     plain_lines = [
         f'Hello {customer_name},',
@@ -211,13 +213,25 @@ def send_order_confirmation_email(order):
             f'- {product_name} x {item.quantity}: '
             f'INR {item.product_price}'
         )
+    if order.coupon_id:
+        plain_lines.extend([
+            '',
+            (
+                f'Coupon applied: {order.coupon.coupon_code} '
+                f'({order.coupon.discount_percentage}% off, '
+                f'maximum INR {order.coupon.discount_amount})'
+            ),
+            f'Coupon discount: INR {invoice_context["coupon_discount_total"]}',
+        ])
     plain_lines.extend([
         '',
         f'Delivery charges: INR {order.additional_delivery_fee}' if order.additional_delivery_fee else 'Delivery charges: Free',
+        f'Next-day priority delivery: INR {order.priority_delivery_fee}' if order.priority_delivery_fee else '',
         'Delivery area: Outside Standard Service Area (estimated 4-6 days)' if order.outside_service_area else '',
         f'Total: INR {order.grand_total}',
         f'Payment mode: {order.payment_mode}',
         f'Delivery option: {order.get_delivery_option_display()}' if order.delivery_option else '',
+        order.delivery_promise,
         f'Shipping address: {order.shipping_address}',
         f'Order status: {order.get_status_display()}',
         '',
@@ -229,7 +243,7 @@ def send_order_confirmation_email(order):
 
     invoice_html = render_to_string(
         'accounts/order_pdf_generate.html',
-        {'order': order, 'order_items': order_items},
+        invoice_context,
     )
     invoice_pdf = HTML(string=invoice_html).write_pdf()
 
@@ -243,6 +257,7 @@ def send_order_confirmation_email(order):
             'order_items': order_items,
             'customer_name': customer_name,
             'tracking_link': tracking_link,
+            'coupon_discount_total': invoice_context['coupon_discount_total'],
         },
         attachments=(
             (f'invoice_{order.order_id}.pdf', invoice_pdf, 'application/pdf'),

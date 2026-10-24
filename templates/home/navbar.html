@@ -47,13 +47,6 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'index' %}">Home</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'categories' %}">Categories</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'bundle_offers' %}">Gift Bundles</a></li>
-          {% if user.is_authenticated %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'wishlist' %}">Wishlist ({{request.user.wishlist.count}})</a></li>
-          {% else %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'wishlist' %}">Wishlist</a></li>
-          {% endif %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'order_history' %}">Your Orders</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'product_reviews' %}">Your Reviews</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}">Contact Us</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'about' %}">About Us</a></li>
         </ul>
@@ -96,13 +89,7 @@
               <a href="{% url 'cart' %}" class="icon icon-sm rounded-circle border" aria-label="Shopping cart">
                 <i class="fa fa-shopping-cart" aria-hidden="true"></i>
               </a>
-              {% if user.is_authenticated %}
-              {% with cart_count=request.user.profile.get_cart_count %}
               <span class="badge badge-pill badge-danger notify" {% if not cart_count %}hidden{% endif %}>{% if cart_count %}{{ cart_count }}{% endif %}</span>
-              {% endwith %}
-              {% else %}
-              <span class="badge badge-pill badge-danger notify" hidden></span>
-              {% endif %}
             </div>
 
             <!-- Profile Icon -->

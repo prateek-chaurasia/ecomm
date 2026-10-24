@@ -222,7 +222,8 @@ class ServiceablePincodeAdmin(FilterCollapsibleModelAdmin):
 class OrderAdmin(PaginatedModelAdmin):
     list_display = (
         'order_id', 'product_thumbnails', 'customer_name', 'delivery_pincode', 'delivery_option',
-        'status', 'additional_delivery_fee', 'payment_status',
+        'status', 'additional_delivery_fee', 'is_priority_delivery',
+        'priority_delivery_fee', 'payment_status',
         'grand_total', 'order_date',
     )
     ordering = ('-order_date',)

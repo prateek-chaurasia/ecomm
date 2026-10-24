@@ -3,13 +3,20 @@ import logging
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
+from django.contrib.auth.signals import user_logged_in
 from accounts.models import Order, Profile, ReturnRequest
+from accounts.order_linking import attach_verified_guest_orders
 from base.emails import (
     send_order_status_update_email,
     send_return_status_update_email,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(user_logged_in)
+def link_guest_orders_after_login(sender, request, user, **kwargs):
+    attach_verified_guest_orders(user)
 
 
 @receiver(post_save, sender=User)
@@ -20,7 +27,7 @@ def create_user_profile(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
-    instance.profile.save()
+    Profile.objects.get_or_create(user=instance)
 
 
 @receiver(pre_save, sender=Order)

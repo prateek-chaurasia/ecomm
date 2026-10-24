@@ -25,10 +25,10 @@
   .brand-masthead {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    column-gap: 24px;
-    row-gap: 10px;
-    padding: 24px 4px 22px;
+    align-items: center;
+    column-gap: 32px;
+    row-gap: 8px;
+    padding: 6px 4px 18px;
   }
 
   .brand-masthead h1 {
@@ -53,30 +53,49 @@
   }
 
   .brand-masthead-description {
-    color: #64748b;
-    font-size: 1.05rem;
-    line-height: 1.6;
+    grid-column: 1;
+    grid-row: 1;
+    max-width: 52rem;
+    color: #0f172a;
+    font-size: clamp(1.15rem, 2vw, 1.5rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.35;
   }
 
   .brand-masthead-guide {
+    grid-row: 2;
     font-size: 0.95rem;
   }
 
   .brand-masthead-link {
     grid-column: 2;
     grid-row: 1;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 auto;
+    border: 1px solid #0f172a;
     border-radius: 10px;
-    padding: 11px 18px;
+    padding: 12px 18px;
     background: #0f172a;
     color: #fff;
     font-weight: 700;
     white-space: nowrap;
+    box-shadow: 0 4px 12px rgb(37 99 235 / 20%);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   }
 
   .brand-masthead-link:hover {
-    background: #2563eb;
+    background: #1d4ed8;
     color: #fff;
+    box-shadow: 0 6px 16px rgb(37 99 235 / 28%);
+    transform: translateY(-1px);
+  }
+
+  .brand-masthead-link i {
+    margin-left: 0.65rem;
   }
 
   .category-coming-soon {
@@ -115,7 +134,8 @@
   @media (max-width: 767.98px) {
     .brand-masthead {
       grid-template-columns: minmax(0, 1fr);
-      padding-top: 18px;
+      row-gap: 8px;
+      padding: 4px 0 12px;
     }
 
     .brand-masthead h1 {
@@ -123,19 +143,24 @@
     }
 
     .brand-masthead-description {
-      grid-row: 2;
+      grid-row: 1;
+      font-size: 1.2rem;
+      line-height: 1.35;
     }
 
     .brand-masthead-link {
       grid-column: 1;
-      grid-row: 3;
-      display: inline-block;
-      justify-self: start;
-      margin-top: 6px;
+      grid-row: 2;
+      width: 100%;
+      min-height: 46px;
+      justify-self: stretch;
+      margin-top: 2px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
     }
 
     .brand-masthead-guide {
-      grid-row: 4;
+      grid-row: 3;
     }
   }
 
@@ -315,10 +340,10 @@
     }
   }
 </style>
-<div class="container mt-3 pt-3">
+<div class="container mt-1 pt-0">
   <section class="brand-masthead" aria-labelledby="brand-heading">
-    <h1 id="brand-heading">BundleofGifts<span>.com</span></h1>
-    <p class="brand-masthead-description">Shop toys, kitchenware, household essentials, and thoughtful gifts for every occasion, with free delivery options in Dehradun.</p>
+    <!-- <h1 id="brand-heading">BundleofGifts<span>.com</span></h1> -->
+    <h2 id="brand-heading" class="brand-masthead-description">Shop toys, kitchenware, household essentials, and thoughtful gifts for every occasion, with free delivery options in Dehradun.</h2>
     <a class="brand-masthead-link" href="{% url 'categories' %}">Shop by Category <i class="fas fa-arrow-right ml-2" aria-hidden="true"></i></a>
     <p class="brand-masthead-guide"><a href="{% url 'dehradun_shopping_guide' %}">Read our online shopping guide for Dehradun</a></p>
   </section>

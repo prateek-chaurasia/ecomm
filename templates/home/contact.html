@@ -1,5 +1,5 @@
 {% extends "base/base.html" %}
-{% load static %}
+{% load static product_description %}
 {% block title %}Contact BundleofGifts.com - One Stop Gifting Solution{% endblock %}
 {% block start %}
 <script src="{% static 'js/form-validation.js' %}" defer></script>
@@ -284,11 +284,14 @@
             <div id="faq2" class="accordion-collapse collapse">
               <div class="accordion-body">
                 <p><strong>{{ return_refund_policy.return_title }}</strong></p>
-                <p>{{ return_refund_policy.return_summary|linebreaksbr }}</p>
-                <p>{{ return_refund_policy.return_details|linebreaksbr }}</p>
+                <div>{{ return_refund_policy.return_summary|render_product_description }}</div>
+                <div>{{ return_refund_policy.return_details|render_product_description }}</div>
                 <p><strong>{{ return_refund_policy.refund_title }}</strong></p>
-                <p>{{ return_refund_policy.refund_summary|linebreaksbr }}</p>
-                <p>{{ return_refund_policy.refund_details|linebreaksbr }}</p>
+                <div>{{ return_refund_policy.refund_summary|render_product_description }}</div>
+                <div>{{ return_refund_policy.refund_details|render_product_description }}</div>
+                <p><strong>Replace Policy</strong></p>
+                <div>{{ replace_policy.replace_summary|render_product_description }}</div>
+                <div>{{ replace_policy.replace_details|render_product_description }}</div>
               </div>
             </div>
           </div>

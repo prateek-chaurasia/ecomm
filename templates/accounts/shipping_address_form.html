@@ -76,11 +76,7 @@
   <div class="container-xl px-4 mt-4">
 
     {% include "base/alert.html" %}
-    <nav class="nav nav-borders">
-      <a class="nav-link ms-0" href="{% url 'profile' username=user.username %}">Profile</a>
-      <a class="nav-link active ms-0" href="{% url 'shipping-address' %}">Address</a>
-      <a class="nav-link ms-0" href="{% url 'change_password' %}">Security</a>
-    </nav>
+    {% include 'accounts/_account_navigation.html' %}
 
     <hr class="mt-0 mb-4" />
     <!--Change Password Detail Section -->

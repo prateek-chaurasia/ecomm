@@ -13,7 +13,7 @@
         <section class="card mb-4" aria-labelledby="payment-address-heading">
           <div class="card-header d-flex justify-content-between align-items-center">
             <strong id="payment-address-heading">Delivering to</strong>
-            <a href="{% url 'checkout' %}?address={{ selected_address.uid }}" class="btn btn-outline-secondary btn-sm">Change</a>
+            <a href="{% url 'checkout' %}?address={{ selected_address.uid }}" class="btn btn-outline-primary btn-sm">Change</a>
           </div>
           <div class="card-body">
             <strong>{{ selected_address.first_name }} {{ selected_address.last_name }}</strong>
@@ -27,6 +27,29 @@
         <section class="card mb-4" aria-labelledby="payment-options-heading">
           <div class="card-header"><strong id="payment-options-heading">Payment options</strong></div>
           <div class="card-body">
+            <div class="small text-muted mb-3">
+              <p class="mb-1">
+                <strong>Free Local Delivery:</strong>
+                If your address is within {{ local_delivery_radius_km|floatformat:"-2" }} km from our base location, orders placed before {{ local_delivery_cutoff_time|time:"g:i A" }} IST may arrive within 4–5 hours. Orders placed later will still enjoy Free Local Delivery, although delivery times may vary.
+              </p>
+              {% if priority_delivery_enabled %}
+              <p class="mb-0">
+                <strong>Standard Delivery:</strong> Most orders will arrive in 2–3 business days.
+              </p>
+              {% endif %}
+            </div>
+            <div class="form-check mb-3" id="priority-delivery-control"
+                 {% if not priority_delivery_eligible %}hidden{% endif %}>
+              <input class="form-check-input" type="checkbox" id="priority-delivery-checkbox"
+                     {% if not priority_delivery_enabled %}disabled{% endif %}>
+              <label class="form-check-label" for="priority-delivery-checkbox">
+                Prioritize my order for next-day delivery
+                <span class="text-muted small d-block">
+                  Additional fee ₹{{ priority_fee }}
+                </span>
+              </label>
+            </div>
+            <p id="delivery-selection-status" class="small text-muted" role="status" aria-live="polite"></p>
             <div class="payment-method-actions">
               <button id="cod-button" class="btn btn-outline-primary btn-block mb-3" type="button" aria-busy="false">
                 <span class="cod-button-label">Cash on Delivery</span>
@@ -69,16 +92,7 @@
   </div>
 </section>
 
-<dialog id="payment-processing-overlay" class="payment-processing-overlay" aria-labelledby="payment-processing-title" aria-describedby="payment-processing-message">
-  <div class="payment-processing-dialog">
-    <span class="payment-processing-spinner" aria-hidden="true"></span>
-    <h2 id="payment-processing-title">Please wait</h2>
-    <p id="payment-processing-message" class="mb-3">Processing your payment securely...</p>
-    <div class="payment-progress-track" role="progressbar" aria-label="Payment processing" aria-valuetext="In progress">
-      <span class="payment-progress-bar"></span>
-    </div>
-  </div>
-</dialog>
+{% include 'accounts/_payment_processing_overlay.html' %}
 
 {% if online_payment_enabled %}
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
@@ -89,6 +103,10 @@
   const paymentPage = document.getElementById("payment-page");
   const processingOverlay = document.getElementById("payment-processing-overlay");
   const processingMessage = document.getElementById("payment-processing-message");
+  const priorityDeliveryCheckbox = document.getElementById("priority-delivery-checkbox");
+  const priorityDeliveryFee = Number("{{ priority_fee|default:'0'|escapejs }}");
+  const deliverySelectionStatus = document.getElementById("delivery-selection-status");
+  const cartTotalAmount = document.getElementById("cart-total-amount");
   let isVerifyingPayment = false;
 
   function setPaymentProcessing(isProcessing, message = "") {
@@ -127,6 +145,44 @@
     });
   }
 
+  async function getAutomaticDeliveryOption(location) {
+    const response = await fetch("{% url 'delivery-options' %}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+      },
+      body: JSON.stringify({
+        selected_address_id: selectedAddressId,
+        latitude: location.delivery_latitude,
+        longitude: location.delivery_longitude,
+        accuracy_meters: location.delivery_accuracy_meters,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to check delivery options.");
+    return result.automatic_delivery_option;
+  }
+
+  async function checkAutomaticDeliveryOption(location) {
+    try {
+      return await getAutomaticDeliveryOption(location);
+    } catch (error) {
+      priorityDeliveryCheckbox.checked = false;
+      updatePriorityDeliverySummary(false);
+      deliverySelectionStatus.textContent =
+        "Delivery options could not be checked. You can still place your order; priority delivery will not be added.";
+      return "";
+    }
+  }
+
+  function updatePriorityDeliverySummary(applies) {
+    const priorityFeeApplies = applies && priorityDeliveryCheckbox.checked;
+    const baseTotal = Number(cartTotalAmount.dataset.baseTotal || 0);
+    cartTotalAmount.textContent =
+      `₹${(baseTotal + (priorityFeeApplies ? priorityDeliveryFee : 0)).toFixed(2)}`;
+  }
+
   function showPaymentError(message) {
     paymentStatus.textContent = message;
     paymentStatus.hidden = false;
@@ -149,6 +205,15 @@
     setCodButtonLoading(button, true);
     try {
       const location = await getDeliveryLocation();
+      const automaticOption = await checkAutomaticDeliveryOption(location);
+      if (priorityDeliveryCheckbox.checked && automaticOption !== "next_day") {
+        priorityDeliveryCheckbox.checked = false;
+        updatePriorityDeliverySummary(false);
+        deliverySelectionStatus.textContent =
+          "This order is not using Standard delivery, so next-day priority will not be added.";
+      } else {
+        updatePriorityDeliverySummary(automaticOption === "next_day");
+      }
       const response = await fetch("{% url 'place_cod_order' %}", {
         method: "POST",
         headers: {
@@ -157,6 +222,7 @@
         },
         body: JSON.stringify({
           selected_address_id: selectedAddressId,
+          priority_delivery: priorityDeliveryCheckbox.checked,
           ...location,
         }),
       });
@@ -177,13 +243,27 @@
     button.disabled = true;
     setPaymentProcessing(true, "Preparing your secure online payment...");
     try {
+      const location = await getDeliveryLocation();
+      const automaticOption = await checkAutomaticDeliveryOption(location);
+      if (priorityDeliveryCheckbox.checked && automaticOption !== "next_day") {
+        priorityDeliveryCheckbox.checked = false;
+        updatePriorityDeliverySummary(false);
+        deliverySelectionStatus.textContent =
+          "This order is not using Standard delivery, so next-day priority will not be added.";
+      } else {
+        updatePriorityDeliverySummary(automaticOption === "next_day");
+      }
       const orderResponse = await fetch("{% url 'create_payment_order' %}", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-CSRFToken": getCookie("csrftoken"),
         },
-        body: JSON.stringify({ selected_address_id: selectedAddressId }),
+        body: JSON.stringify({
+          selected_address_id: selectedAddressId,
+          priority_delivery: priorityDeliveryCheckbox.checked,
+          ...location,
+        }),
       });
       const order = await orderResponse.json();
       if (!orderResponse.ok) throw new Error(order.error || "Unable to create payment order.");
@@ -204,7 +284,6 @@
           isVerifyingPayment = true;
           setPaymentProcessing(true, "Confirming your payment and placing the order...");
           try {
-            const location = await getDeliveryLocation();
             const verifyResponse = await fetch("{% url 'verify_payment' %}", {
               method: "POST",
               headers: {
@@ -249,6 +328,27 @@
     }
   });
   {% endif %}
+
+  priorityDeliveryCheckbox.addEventListener("change", async () => {
+    updatePriorityDeliverySummary(false);
+    if (!priorityDeliveryCheckbox.checked) {
+      deliverySelectionStatus.textContent = "";
+      return;
+    }
+    deliverySelectionStatus.textContent = "Checking the selected delivery option...";
+    const location = await getDeliveryLocation();
+    const automaticOption = await checkAutomaticDeliveryOption(location);
+    if (automaticOption === "next_day") {
+      updatePriorityDeliverySummary(true);
+      deliverySelectionStatus.textContent =
+        "Next-day priority will be added to your order.";
+    } else if (automaticOption) {
+      priorityDeliveryCheckbox.checked = false;
+      updatePriorityDeliverySummary(false);
+      deliverySelectionStatus.textContent =
+        "This order is not using Standard delivery, so next-day priority is unavailable.";
+    }
+  });
 </script>
 
 <style>
@@ -327,91 +427,8 @@
     to { transform: rotate(360deg); }
   }
 
-  .payment-processing-overlay {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: min(calc(100% - 2.5rem), 26rem);
-    max-width: none;
-    height: fit-content;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    overflow: visible;
-    border: 0;
-    background: transparent;
-  }
-
-  .payment-processing-overlay::backdrop {
-    background: rgba(15, 23, 42, 0.42);
-    -webkit-backdrop-filter: blur(7px);
-    backdrop-filter: blur(7px);
-  }
-
-  .payment-processing-dialog {
-    padding: 2rem;
-    border-radius: 1rem;
-    background: #fff;
-    box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.25);
-    color: #1e293b;
-    text-align: center;
-  }
-
-  .payment-processing-dialog h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
-
-  .payment-processing-dialog p {
-    color: #64748b;
-  }
-
-  .payment-processing-spinner {
-    display: block;
-    width: 2.5rem;
-    height: 2.5rem;
-    margin: 0 auto 1rem;
-    border: 4px solid #dbeafe;
-    border-top-color: #2563eb;
-    border-radius: 50%;
-    animation: payment-processing-spin 0.8s linear infinite;
-  }
-
-  .payment-progress-track {
-    height: 0.5rem;
-    overflow: hidden;
-    border-radius: 999px;
-    background: #e2e8f0;
-  }
-
-  .payment-progress-bar {
-    display: block;
-    width: 40%;
-    height: 100%;
-    border-radius: inherit;
-    background: #2563eb;
-    animation: payment-progress 1.4s ease-in-out infinite;
-  }
-
-  body.payment-processing-active {
-    overflow: hidden;
-  }
-
-  @keyframes payment-processing-spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes payment-progress {
-    from { transform: translateX(-110%); }
-    to { transform: translateX(260%); }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .cod-button-spinner { animation-duration: 2s; }
-    .payment-processing-spinner,
-    .payment-progress-bar { animation-duration: 3s; }
   }
 </style>
 {% endblock %}

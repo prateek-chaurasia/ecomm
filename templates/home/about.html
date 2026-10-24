@@ -1,4 +1,4 @@
-{% extends "base/base.html" %} {% load static%}
+{% extends "base/base.html" %} {% load static product_description %}
 {% block title %}About BundleofGifts.com | Thoughtful Gifting{% endblock %} {% block start %}
 
 <!-- Hero Section -->
@@ -207,9 +207,12 @@
           <div class="feature-icon-wrapper">
             <i class="fas fa-undo"></i>
           </div>
-          <h3 class="h5">{{ return_refund_policy.return_title }}</h3>
-          <p>{{ return_refund_policy.return_summary }}</p>
-          <div class="feature-highlight">{{ return_refund_policy.refund_title }}: {{ return_refund_policy.refund_summary }}</div>
+          <h3 class="h5">Return Refund and Replace</h3>
+          <div>Return Shipping at Customer's Cost | Open Box Delivery if applicable <br>
+            Approved refunds are issued to the original payment method where possible.<br>
+            Eligible for replacement if the product is received damaged, defective, or incorrect.<br>
+            <a href="{% url 'return-refund-replace-policy' %}">Returns, Refunds &amp; Replacements</a>
+          </div>
         </div>
       </div>
     </div>

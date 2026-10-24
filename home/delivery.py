@@ -1,5 +1,11 @@
 from decimal import Decimal, InvalidOperation
 from math import asin, cos, radians, sin, sqrt
+from django.utils import timezone
+
+
+def is_before_local_delivery_cutoff(guideline, now=None):
+    local_now = timezone.localtime(now)
+    return local_now.time() < guideline.local_delivery_cutoff_time
 
 
 def _coordinate(value, minimum, maximum):
@@ -49,6 +55,7 @@ def get_delivery_options(
     )
     distance = None
     free_delivery_available = False
+    before_local_cutoff = is_before_local_delivery_cutoff(guideline)
 
     if (
         customer_city
@@ -76,7 +83,12 @@ def get_delivery_options(
             'label': 'Free local delivery',
             'description': (
                 f'Within {guideline.free_delivery_radius_km:g} km of '
-                f'{guideline.operational_office_city}.'
+                f'{guideline.operational_office_city}. '
+                + (
+                    'Order will be delivered within 4–5 hours.'
+                    if before_local_cutoff
+                    else 'Delivery timing will be confirmed after order placement.'
+                )
             ),
         })
     if guideline.express_delivery_enabled and free_delivery_available:
@@ -93,8 +105,7 @@ def get_delivery_options(
             'value': 'next_day',
             'label': 'Standard delivery',
             'description': (
-                'We strive to deliver your order at the earliest possible opportunity. '
-                'Most orders are delivered within 2-3 business days, subject to location '
+                'Most orders will arrive in 2–3 business days, subject to location '
                 'and service availability.'
             ),
         })
@@ -106,6 +117,7 @@ def get_delivery_options(
         'location_checked': latitude is not None and longitude is not None,
         'below_delivery_charge_threshold': below_delivery_charge_threshold,
         'delivery_charge_threshold': str(threshold) if threshold is not None else None,
+        'local_delivery_promise_available': before_local_cutoff,
     }
 
 

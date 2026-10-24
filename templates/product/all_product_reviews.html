@@ -6,17 +6,21 @@
 
 {% block start %} {% load static %}
 
-<div class="container mt-4">
-  <h1 class="h3 form-group mb-4">Product Reviews</h1>
-</div>
-
-<div class="container my-3 p-4 rounded">
+<div class="container-xl px-4 mt-4">
   {% include 'base/alert.html' %}
-  {% if reviews %}
+  {% include 'accounts/_account_navigation.html' %}
+  <hr class="mt-0 mb-4" />
+
   <div class="row">
-    {% for review in reviews %}
-    <div class="col-md-6 col-lg-4 mb-4">
-      <article class="card h-100 shadow-sm rounded review-card">
+    <div class="col-xl-12">
+      <div class="card mb-4 account-details-card">
+        <div class="card-header">My Reviews</div>
+        <div class="card-body">
+          {% if reviews %}
+          <div class="row">
+            {% for review in reviews %}
+            <div class="col-md-6 col-lg-4 mb-4">
+              <article class="card h-100 shadow-sm rounded review-card">
         <div class="review-card-main">
           <a href="{% url 'get_product' review.product.slug %}" class="review-image-frame"
             aria-label="View {{ review.product.product_name }}">
@@ -73,26 +77,26 @@
             </button>
           </form>
         </div>
-      </article>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="text-center py-5">
-    <div class="empty-state-container">
-      <div class="empty-state-icon mb-4">
-        <i class="fas fa-star" style="font-size: 4rem; color: #e2e8f0;"></i>
-      </div>
-      <h2 class="h3 empty-state-title mb-3" style="color: #64748b; font-weight: 600;">No Reviews Yet</h2>
-      <p class="empty-state-subtitle mb-4" style="color: #94a3b8; font-size: 1.1rem;">
-        You haven't written any product reviews yet. Start shopping and share your experience with others.
-      </p>
-      <a href="{% url 'index' %}" class="btn btn-primary btn-lg px-4 py-2 start-shopping-btn">
-        <i class="fas fa-shopping-bag me-2"></i>Start Shopping
-      </a>
-    </div>
-  </div>
-  {% endif %}
+              </article>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center py-5">
+            <div class="empty-state-container">
+              <div class="empty-state-icon mb-4">
+                <i class="fas fa-star" style="font-size: 4rem; color: #e2e8f0;"></i>
+              </div>
+              <h2 class="h3 empty-state-title mb-3" style="color: #64748b; font-weight: 600;">No Reviews Yet</h2>
+              <p class="empty-state-subtitle mb-4" style="color: #94a3b8; font-size: 1.1rem;">
+                You haven't written any product reviews yet. Start shopping and share your experience with others.
+              </p>
+              <a href="{% url 'index' %}" class="btn btn-primary btn-lg px-4 py-2 start-shopping-btn">
+                <i class="fas fa-shopping-bag me-2"></i>Start Shopping
+              </a>
+            </div>
+          </div>
+          {% endif %}
 
   <!-- Delete Review Confirmation Modal -->
   <div class="modal fade" id="deleteReviewModal" tabindex="-1" aria-labelledby="deleteReviewModalLabel"
@@ -150,8 +154,12 @@
         </form>
       </div>
     </div>
-  </div>
 </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
@@ -184,6 +192,17 @@
     --primary-color: #6366f1;
     --accent-color: #fbbf24;
     --text-dark: #1e293b;
+  }
+
+  .account-details-card {
+    box-shadow: 0 0.15rem 1.75rem 0 rgb(33 40 50 / 15%);
+  }
+
+  .account-details-card .card-header {
+    font-weight: 500;
+    padding: 1rem 1.35rem;
+    background-color: rgba(33, 40, 50, 0.03);
+    border-bottom: 1px solid rgba(33, 40, 50, 0.125);
   }
 
   .delete-review-btn {

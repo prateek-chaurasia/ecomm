@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import time, timedelta
 
 from django.contrib.auth.models import User
 from base.models import BaseModel
@@ -90,6 +90,20 @@ class DeliveryGuideline(models.Model):
         default=80,
         validators=[MinValueValidator(0)],
         help_text='Delivery charge applied when the order is below the free-delivery threshold.',
+    )
+    local_delivery_cutoff_time = models.TimeField(
+        default=time(12, 0),
+        help_text=(
+            'IST cutoff: orders placed before this time may be delivered within 4–5 hours '
+            'when Free Local delivery is available.'
+        ),
+    )
+    priority_delivery_fee = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text='Additional fee for next-day priority delivery.',
     )
     express_delivery_enabled = models.BooleanField(default=True)
     express_delivery_min_hours = models.PositiveSmallIntegerField(default=4)

@@ -12,6 +12,7 @@ from django.core.validators import (
     MaxValueValidator,
     RegexValidator,
 )
+from decimal import Decimal, ROUND_HALF_UP
 from .image_utils import create_product_thumbnail, product_thumbnail_name
 
 # Create your models here.
@@ -74,6 +75,29 @@ class SizeVariant(BaseModel):
         return self.size_name
 
 
+class HSNCode(BaseModel):
+    category = models.CharField(max_length=150)
+    product_material = models.CharField(max_length=200)
+    hsn_code = models.CharField(max_length=32)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2)
+    details = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['category', 'product_material']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['category', 'product_material', 'hsn_code', 'gst_rate'],
+                name='unique_hsn_material_rate',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f'{self.product_material} | {self.category} | '
+            f'HSN {self.hsn_code} | GST {self.gst_rate}%'
+        )
+
+
 class Product(BaseModel):
     SKU_VALIDATORS = [
         MinLengthValidator(8),
@@ -82,7 +106,6 @@ class Product(BaseModel):
             message='Enter an SKU containing only letters, numbers, and single hyphens.',
         ),
     ]
-
     AGE_GROUP_CHOICES = [
         ('0-2 years', '0-2 years'),
         ('3-5 years', '3-5 years'),
@@ -106,11 +129,31 @@ class Product(BaseModel):
     slug = models.SlugField(max_length=100, unique=True, null=True, blank=True)
     category = models.ForeignKey(
         Category, on_delete=models.CASCADE, related_name="products")
+    hsn_reference = models.ForeignKey(
+        HSNCode,
+        on_delete=models.PROTECT,
+        related_name='products',
+        blank=True,
+        null=True,
+        verbose_name='Product / Material',
+        help_text='Select the product/material classification used for this product.',
+    )
     brand_name = models.CharField(max_length=100, default='Generic')
     age_groups = models.ManyToManyField('AgeGroup', related_name='products', blank=True)
     tags = models.ManyToManyField('Tag', related_name='products', blank=True)
     price = models.IntegerField()
     marked_price = models.IntegerField(default=0, help_text='Original price before discount')
+    hsn_code = models.CharField(
+        max_length=32,
+        help_text='Copied from the selected product/material classification when saved.',
+    )
+    gst_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text='Copied from the selected product/material classification when saved.',
+    )
     product_desription = models.TextField()
     color_variant = models.ManyToManyField(ColorVariant, blank=True)
     size_variant = models.ManyToManyField(SizeVariant, blank=True)
@@ -189,6 +232,24 @@ class Product(BaseModel):
         raise ValidationError('Could not generate a unique SKU for this product.')
 
     def save(self, *args, **kwargs):
+        if self.hsn_reference_id:
+            current_reference_id = None
+            if self.pk and not self._state.adding:
+                current_reference_id = (
+                    type(self).objects.filter(pk=self.pk)
+                    .values_list('hsn_reference_id', flat=True)
+                    .first()
+                )
+            if self._state.adding or current_reference_id != self.hsn_reference_id:
+                reference = self.hsn_reference
+                self.hsn_code = reference.hsn_code
+                self.gst_rate = reference.gst_rate
+                if kwargs.get('update_fields') is not None:
+                    kwargs['update_fields'] = (
+                        set(kwargs['update_fields'])
+                        | {'hsn_reference', 'hsn_code', 'gst_rate'}
+                    )
+
         generated_sku = not self.sku
         if generated_sku:
             self.sku = self._generate_sku()
@@ -303,7 +364,16 @@ class Coupon(BaseModel):
         null=True,
         help_text='Required to make the coupon available; valid through this date.',
     )
-    discount_amount = models.IntegerField(default=100)
+    discount_percentage = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text='Percentage discount applied to the qualifying order subtotal.',
+    )
+    discount_amount = models.PositiveIntegerField(
+        default=100,
+        verbose_name='Maximum discount amount',
+        help_text='The percentage discount cannot exceed this amount.',
+    )
     minimum_amount = models.IntegerField(default=500)
 
     @property
@@ -313,6 +383,19 @@ class Coupon(BaseModel):
             and not self.is_expired
             and self.expiry_date is not None
             and self.expiry_date >= timezone.localdate()
+        )
+
+    def calculate_discount(self, subtotal):
+        subtotal = Decimal(subtotal or 0)
+        if subtotal < Decimal(self.minimum_amount) or subtotal <= 0:
+            return Decimal('0.00')
+        percentage_discount = (
+            subtotal * Decimal(self.discount_percentage) / Decimal('100')
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        return min(
+            percentage_discount,
+            Decimal(self.discount_amount),
+            subtotal,
         )
 
     def __str__(self):
@@ -337,6 +420,43 @@ class BundleConfiguration(models.Model):
 
     def __str__(self):
         return f'Bundle settings (up to {self.max_products} products)'
+
+
+class GSTConfiguration(models.Model):
+    seller_name = models.CharField(max_length=150, default='Bundle of Gifts')
+    seller_address = models.TextField(blank=True)
+    seller_gstin = models.CharField(max_length=15, blank=True)
+    seller_email = models.EmailField(blank=True)
+    seller_state = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='State from which orders are supplied; used to split CGST/SGST and IGST.',
+    )
+    seller_state_code = models.CharField(max_length=2, blank=True)
+    prices_include_tax = models.BooleanField(
+        default=True,
+        verbose_name='Product prices include GST',
+        help_text=(
+            'When enabled, GST is extracted from the listed price. When disabled, '
+            'GST is added to the product price at checkout.'
+        ),
+    )
+
+    class Meta:
+        verbose_name = 'GST and invoice setting'
+        verbose_name_plural = 'GST and invoice settings'
+
+    @classmethod
+    def get_solo(cls):
+        configuration, _ = cls.objects.get_or_create(pk=1)
+        return configuration
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return 'GST and invoice settings'
 
 
 class BundlePackagingOption(BaseModel):

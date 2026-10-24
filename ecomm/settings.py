@@ -57,7 +57,7 @@ BASE_URL = PUBLIC_BASE_URL
 
 # Application definition
 
-SITE_ID = 3
+SITE_ID = 4
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -70,7 +70,7 @@ INSTALLED_APPS = [
 
     # Apps
     'products',
-    'accounts',
+    'accounts.apps.AccountsConfig',
     'home',
 
     # Django Social Auth Configurations
@@ -189,7 +189,9 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'django.template.context_processors.request',
+                'accounts.context_processors.cart_count',
                 'home.context_processors.delivery_guideline',
+                'products.context_processors.gst_price_label',
             ],
         },
     },
@@ -274,7 +276,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 

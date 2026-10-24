@@ -147,7 +147,7 @@
             <div class="alert alert-success cart-coupon-applied">
               <span>
                 Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied
-                (₹{{ cart.coupon.discount_amount }} off).
+                ({{ cart.coupon.discount_percentage }}% off, up to ₹{{ cart.coupon.discount_amount }}).
               </span>
               <form method="post" action="{% url 'remove_coupon' cart.uid %}">
                 {% csrf_token %}
@@ -176,7 +176,7 @@
                 <div class="cart-available-coupon-details">
                   <strong>{{ coupon.coupon_code }}</strong>
                   <p class="small text-muted mb-0">
-                    ₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.
+                    {{ coupon.discount_percentage }}% off up to ₹{{ coupon.discount_amount }} on orders of ₹{{ coupon.minimum_amount }} or more.
                   </p>
                 </div>
                 {% if cart.coupon_id == coupon.uid %}

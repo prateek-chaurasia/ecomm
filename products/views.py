@@ -307,7 +307,12 @@ def category_products(request, slug):
 
 def get_product(request, slug):
     product = get_object_or_404(
-        Product.objects.prefetch_related('reviews__photos'), slug=slug)
+        Product.objects.prefetch_related(
+            'reviews__photos', 'product_images',
+        ),
+        slug=slug,
+    )
+    product_images = list(product.product_images.all())
     sorted_size_variants = product.size_variant.all().order_by('size_name')
     selected_size = request.GET.get('size') or None
     selected_size_variant = (
@@ -368,6 +373,7 @@ def get_product(request, slug):
         size_variant=selected_size_variant,
         color_variant__isnull=True,
         cart__is_paid=False,
+        cart__is_buy_now=False,
     )
     if request.user.is_authenticated:
         cart_items = cart_items.filter(cart__user=request.user)
@@ -380,6 +386,7 @@ def get_product(request, slug):
 
     context = {
         'product': product,
+        'product_images': product_images,
         'sorted_size_variants': sorted_size_variants,
         'related_products': related_products,
         'review_form': review_form,

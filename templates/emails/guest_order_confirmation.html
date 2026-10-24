@@ -35,10 +35,22 @@
 </table>
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="4" border="0" style="margin:16px 0 22px; font-size:14px;">
+  {% if order.coupon_id %}
+  <tr>
+    <td>Coupon applied: <strong>{{ order.coupon.coupon_code }}</strong> ({{ order.coupon.discount_percentage }}% off, maximum INR {{ order.coupon.discount_amount }})</td>
+    <td align="right">−INR {{ coupon_discount_total }}</td>
+  </tr>
+  {% endif %}
   <tr>
     <td>Delivery charges</td>
     <td align="right">{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</td>
   </tr>
+  {% if order.priority_delivery_fee %}
+  <tr>
+    <td>Next-day priority delivery</td>
+    <td align="right">INR {{ order.priority_delivery_fee }}</td>
+  </tr>
+  {% endif %}
   {% if order.outside_service_area %}
   <tr><td colspan="2" style="color:#667085;">Outside Standard Service Area (estimated 3–4 days)</td></tr>
   {% endif %}
@@ -50,7 +62,7 @@
 
 <table role="presentation" width="100%" cellspacing="0" cellpadding="9" border="0" style="margin:0 0 22px; border-collapse:collapse; font-size:14px;">
   <tr><td width="38%" style="border-bottom:1px solid #e2e8f0; color:#667085;">Payment mode</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.payment_mode }}</td></tr>
-  {% if order.delivery_option %}<tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery option</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}</td></tr>{% endif %}
+  {% if order.delivery_option %}<tr><td style="border-bottom:1px solid #e2e8f0; color:#667085;">Delivery option</td><td style="border-bottom:1px solid #e2e8f0;">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}{% if order.delivery_promise %}<br>{{ order.delivery_promise }}{% endif %}</td></tr>{% endif %}
   <tr><td style="color:#667085;">Shipping address</td><td style="overflow-wrap:anywhere;">{{ order.shipping_address|linebreaksbr }}</td></tr>
 </table>
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 18px;">

@@ -64,6 +64,46 @@
     position: relative;
   }
 
+  .product-detail-card .carousel-inner {
+    position: relative;
+  }
+
+  .product-detail-card .img-big-wrap {
+    touch-action: pan-y;
+  }
+
+  .product-gallery-nav {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    transform: translateY(-50%);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1e293b;
+    font-size: 1.75rem;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  }
+
+  .product-gallery-nav:hover {
+    background: #fff;
+    color: #1b6a50;
+  }
+
+  .product-gallery-prev {
+    left: 0.5rem;
+  }
+
+  .product-gallery-next {
+    right: 0.5rem;
+  }
+
   .stock-status-overlay {
     position: absolute;
     top: 0;
@@ -577,8 +617,8 @@
           <article class="gallery-wrap">
             <div class="text-center mt-5 ml-3 mr-3 img-big-wrap">
               <div class="carousel-inner">
-                {% for image in product.product_images.all %}
-                <div class="carousel-item {% if forloop.first %}active{% endif %}">
+                {% for image in product_images %}
+                <div class="carousel-item {% if forloop.first %}active{% endif %}" data-gallery-slide>
                   <img class="product-main-image" src="{{ image.image_url.url }}" alt="{{ product.product_name }}"
                     role="button" tabindex="0" aria-label="Open larger image of {{ product.product_name }}"
                     loading="{% if forloop.first %}eager{% else %}lazy{% endif %}" decoding="async"
@@ -588,13 +628,20 @@
                   {% endif %}
                 </div>
                 {% endfor %}
+                {% if product_images|length > 1 %}
+                <button class="product-gallery-nav product-gallery-prev" type="button"
+                  aria-label="Show previous product image">&lsaquo;</button>
+                <button class="product-gallery-nav product-gallery-next" type="button"
+                  aria-label="Show next product image">&rsaquo;</button>
+                {% endif %}
               </div>
 
               <!-- Thumnbs-Wrap -->
               <div class="form-row thumbs-wrap mt-5 d-flex justify-content-center">
-                {% for image in product.product_images.all %}
+                {% for image in product_images %}
                 <p class="item-thumb mx-2">
-                  <img src="{{image.image_url.url}}" class="img-thumbnail" loading="lazy" decoding="async" onclick="updateMainImage(this.src)" />
+                  <img src="{{image.image_url.url}}" class="img-thumbnail" alt="View image {{ forloop.counter }} of {{ product.product_name }}"
+                    data-gallery-thumbnail="{{ forloop.counter0 }}" loading="lazy" decoding="async" />
                 </p>
                 {% endfor %}
               </div>
@@ -650,6 +697,7 @@
               <var class="price h3 mb-0" style="font-size: 2rem; font-weight: 800;">₹{{ current_price }}.00</var>
               {% endif %}
               {% endwith %}
+              <small class="d-block text-muted">{{ gst_price_label }}</small>
             </div>
             <!-- price-detail-wrap .// -->
 
@@ -1837,9 +1885,30 @@
     window.location.search = urlParams.toString();
   }
 
-  function updateMainImage(src) {
-    const mainImage = document.querySelector(".product-main-image");
-    if (mainImage) mainImage.src = src;
+  function updateMainImage(index) {
+    const slides = Array.from(document.querySelectorAll("[data-gallery-slide]"));
+    if (!slides.length) return;
+
+    const selectedIndex = Number(index);
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= slides.length) {
+      return;
+    }
+
+    slides.forEach((slide, slideIndex) => {
+      slide.classList.toggle("active", slideIndex === selectedIndex);
+    });
+    document.querySelectorAll("[data-gallery-thumbnail]").forEach((thumbnail) => {
+      const isSelected = Number(thumbnail.dataset.galleryThumbnail) === selectedIndex;
+      thumbnail.setAttribute("aria-current", isSelected ? "true" : "false");
+    });
+  }
+
+  function moveProductGallery(direction) {
+    const slides = Array.from(document.querySelectorAll("[data-gallery-slide]"));
+    if (slides.length < 2) return;
+
+    const activeIndex = Math.max(0, slides.findIndex((slide) => slide.classList.contains("active")));
+    updateMainImage((activeIndex + direction + slides.length) % slides.length);
   }
 
   function setDeleteAction(actionUrl) {
@@ -1926,30 +1995,90 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    const mainImage = document.querySelector(".product-main-image");
+    const gallery = document.querySelector(".product-detail-card .img-big-wrap");
+    const imageTrack = gallery?.querySelector(".carousel-inner");
+    const mainImages = document.querySelectorAll(".product-main-image");
+    const previousButton = document.querySelector(".product-gallery-prev");
+    const nextButton = document.querySelector(".product-gallery-next");
     const imageViewer = document.getElementById("productImageViewer");
     const viewerImage = document.getElementById("productImageViewerImage");
     const closeViewerButton = imageViewer?.querySelector(".product-image-viewer-close");
-    if (!mainImage || !imageViewer || !viewerImage || !closeViewerButton) return;
+    if (!gallery || !imageTrack || !mainImages.length) return;
 
-    function openImageViewer() {
-      viewerImage.src = mainImage.currentSrc || mainImage.src;
-      viewerImage.alt = mainImage.alt;
-      imageViewer.showModal();
+    if (previousButton) {
+      previousButton.addEventListener("click", () => moveProductGallery(-1));
+    }
+    if (nextButton) {
+      nextButton.addEventListener("click", () => moveProductGallery(1));
     }
 
-    mainImage.addEventListener("click", openImageViewer);
-    mainImage.addEventListener("keydown", function (event) {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openImageViewer();
+    gallery.querySelectorAll("[data-gallery-thumbnail]").forEach((thumbnail) => {
+      thumbnail.addEventListener("click", () => {
+        updateMainImage(thumbnail.dataset.galleryThumbnail);
+      });
+    });
+
+    let touchStartX = null;
+    let touchStartY = null;
+    let suppressImageClick = false;
+    imageTrack.addEventListener("touchstart", (event) => {
+      const touch = event.changedTouches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+    }, { passive: true });
+    imageTrack.addEventListener("touchend", (event) => {
+      if (touchStartX === null || touchStartY === null) return;
+
+      const touch = event.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
+      touchStartX = null;
+      touchStartY = null;
+      if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        suppressImageClick = true;
+        moveProductGallery(deltaX < 0 ? 1 : -1);
+        window.setTimeout(() => {
+          suppressImageClick = false;
+        }, 400);
       }
+    }, { passive: true });
+
+    mainImages.forEach((mainImage) => {
+      function openImageViewer() {
+        if (!imageViewer || !viewerImage || typeof imageViewer.showModal !== "function") return;
+        viewerImage.src = mainImage.currentSrc || mainImage.src;
+        viewerImage.alt = mainImage.alt;
+        imageViewer.showModal();
+      }
+
+      mainImage.addEventListener("click", function (event) {
+        if (suppressImageClick) {
+          event.preventDefault();
+          suppressImageClick = false;
+          return;
+        }
+        openImageViewer();
+      });
+      mainImage.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openImageViewer();
+        }
+      });
     });
-    closeViewerButton.addEventListener("click", function () {
-      imageViewer.close();
-    });
-    imageViewer.addEventListener("click", function (event) {
-      if (event.target === imageViewer) imageViewer.close();
+
+    if (imageViewer && closeViewerButton) {
+      closeViewerButton.addEventListener("click", function () {
+        imageViewer.close();
+      });
+      imageViewer.addEventListener("click", function (event) {
+        if (event.target === imageViewer) imageViewer.close();
+      });
+    }
+
+    gallery.addEventListener("keydown", function (event) {
+      if (event.key === "ArrowLeft") moveProductGallery(-1);
+      if (event.key === "ArrowRight") moveProductGallery(1);
     });
   });
 

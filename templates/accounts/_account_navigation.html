@@ -1,0 +1,58 @@
+<nav class="nav nav-borders account-settings-tabs" aria-label="Account navigation">
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'profile' %}active{% endif %}"
+    href="{% url 'profile' username=user.username %}"
+    {% if request.resolver_match.url_name == 'profile' %}aria-current="page"{% endif %}>
+    Profile
+  </a>
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'shipping-address' %}active{% endif %}"
+    href="{% url 'shipping-address' %}"
+    {% if request.resolver_match.url_name == 'shipping-address' %}aria-current="page"{% endif %}>
+    Address
+  </a>
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'change_password' %}active{% endif %}"
+    href="{% url 'change_password' %}"
+    {% if request.resolver_match.url_name == 'change_password' %}aria-current="page"{% endif %}>
+    Security
+  </a>
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'product_reviews' %}active{% endif %}"
+    href="{% url 'product_reviews' %}"
+    {% if request.resolver_match.url_name == 'product_reviews' %}aria-current="page"{% endif %}>
+    My Reviews
+  </a>
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'order_history' %}active{% endif %}"
+    href="{% url 'order_history' %}"
+    {% if request.resolver_match.url_name == 'order_history' %}aria-current="page"{% endif %}>
+    My Orders
+  </a>
+  <a class="nav-link ms-0 {% if request.resolver_match.url_name == 'wishlist' %}active{% endif %}"
+    href="{% url 'wishlist' %}"
+    {% if request.resolver_match.url_name == 'wishlist' %}aria-current="page"{% endif %}>
+    Wishlist ({{ request.user.wishlist.count }})
+  </a>
+</nav>
+<style>
+  .account-settings-tabs.nav-borders {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+  }
+
+  .account-settings-tabs.nav-borders .nav-link {
+    color: #69707a;
+    border-bottom: 0.125rem solid transparent;
+    padding: 0.5rem 0;
+    margin: 0;
+    transition: color 0.3s ease, border-color 0.3s ease;
+  }
+
+  .account-settings-tabs.nav-borders .nav-link.active {
+    color: #6366f1;
+    border-bottom-color: #6366f1;
+  }
+
+  .account-settings-tabs.nav-borders .nav-link:hover {
+    color: #fbbf24;
+    border-bottom-color: #fbbf24;
+  }
+</style>

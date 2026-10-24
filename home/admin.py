@@ -35,6 +35,8 @@ class DeliveryGuidelineAdmin(FilterCollapsibleModelAdmin):
         'free_delivery_radius_km',
         'delivery_charge_threshold',
         'delivery_fee',
+        'local_delivery_cutoff_time',
+        'priority_delivery_fee',
         'express_delivery_enabled',
         'express_delivery_min_hours',
         'express_delivery_max_hours',

@@ -70,6 +70,26 @@ class ProductImageAdmin(admin.StackedInline):
 
 
 class ProductAdminForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ('hsn_code', 'gst_rate'):
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
+        if self.instance.pk and not self.instance.hsn_reference_id:
+            matches = HSNCode.objects.filter(
+                hsn_code=self.instance.hsn_code,
+                gst_rate=self.instance.gst_rate,
+            )
+            if matches.count() == 1:
+                self.initial['hsn_reference'] = matches.first().pk
+
+        self.fields['hsn_reference'].required = (
+            not self.instance.pk
+            or bool(self.instance.hsn_reference_id)
+            or 'hsn_reference' in self.initial
+        )
+
     class Meta:
         model = Product
         fields = '__all__'
@@ -82,6 +102,17 @@ class ProductAdminForm(forms.ModelForm):
 
     def clean_sku(self):
         return self.cleaned_data['sku'].strip().upper()
+
+    def save(self, commit=True):
+        product = super().save(commit=False)
+        reference = self.cleaned_data.get('hsn_reference')
+        if reference:
+            product.hsn_code = reference.hsn_code
+            product.gst_rate = reference.gst_rate
+        if commit:
+            product.save()
+            self.save_m2m()
+        return product
 
 
 class ReturnDetailsInlineForm(forms.ModelForm):
@@ -139,11 +170,13 @@ restock_selected.short_description = 'Restock selected products'
 
 class ProductAdmin(PaginatedModelAdmin):
     form = ProductAdminForm
-    list_display = ['product_name', 'image_thumbnail', 'sku', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
+    list_display = ['product_name', 'image_thumbnail', 'sku', 'hsn_reference', 'hsn_code', 'gst_rate', 'brand_name', 'display_age_groups', 'display_tags', 'price', 'marked_price', 'discount_percentage', 'stock_quantity', 'low_stock_threshold', 'stock_status', 'bundle_eligible', 'show_in_catalog']
     list_filter = ['category', 'brand_name', 'newest_product', 'tags', 'bundle_eligible', 'show_in_catalog']
-    search_fields = ['product_name', 'sku', 'brand_name', 'tags__name']
+    search_fields = ['product_name', 'sku', 'brand_name', 'tags__name', 'hsn_reference__product_material', 'hsn_reference__hsn_code']
     inlines = [ProductImageAdmin, ReturnDetailsInline]
     actions = [restock_selected]
+    autocomplete_fields = ['hsn_reference', 'color_variant', 'age_groups', 'tags']
+    readonly_fields = ['hsn_code', 'gst_rate']
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related('product_images')
@@ -165,6 +198,24 @@ class ProductAdmin(PaginatedModelAdmin):
     def display_tags(self, obj):
         return ', '.join(tag.name for tag in obj.tags.all()) or 'No campaign tag'
     display_tags.short_description = 'Campaign tags'
+
+
+@admin.register(GSTConfiguration)
+class GSTConfigurationAdmin(FilterCollapsibleModelAdmin):
+    fieldsets = [
+        ('Seller details', {
+            'fields': [
+                'seller_name', 'seller_address', 'seller_gstin', 'seller_email',
+                'seller_state', 'seller_state_code',
+            ],
+        }),
+        ('Product pricing', {
+            'fields': ['prices_include_tax'],
+        }),
+    ]
+
+    def has_add_permission(self, request):
+        return not GSTConfiguration.objects.exists()
 
 
 class BundleOfferAdminForm(forms.ModelForm):
@@ -251,7 +302,15 @@ class TagAdmin(FilterCollapsibleModelAdmin):
 @admin.register(ColorVariant)
 class ColorVariantAdmin(FilterCollapsibleModelAdmin):
     list_display = ['color_name', 'price']
+    search_fields = ['color_name']
     model = ColorVariant
+
+
+@admin.register(HSNCode)
+class HSNCodeAdmin(FilterCollapsibleModelAdmin):
+    list_display = ['product_material', 'category', 'hsn_code', 'gst_rate']
+    list_filter = ['category', 'gst_rate']
+    search_fields = ['product_material', 'category', 'hsn_code', 'details']
 
 
 @admin.register(SizeVariant)
@@ -268,6 +327,8 @@ class CouponAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['expiry_date'].required = True
+        self.fields['discount_percentage'].required = True
+        self.fields['discount_amount'].label = 'Maximum discount amount'
 
 
 @admin.register(Coupon)
@@ -275,10 +336,16 @@ class CouponAdmin(FilterCollapsibleModelAdmin):
     form = CouponAdminForm
     list_display = (
         'coupon_code', 'is_active', 'is_expired', 'expiry_date',
-        'discount_amount', 'minimum_amount',
+        'discount_percentage', 'discount_amount', 'minimum_amount',
     )
     list_filter = ('is_active', 'is_expired', 'expiry_date')
     search_fields = ('coupon_code',)
+    fieldsets = [
+        (None, {'fields': ['coupon_code', 'is_active', 'is_expired', 'expiry_date']}),
+        ('Discount', {
+            'fields': ['discount_percentage', 'discount_amount', 'minimum_amount'],
+        }),
+    ]
 
 
 admin.site.register(Category, CategoryAdmin)

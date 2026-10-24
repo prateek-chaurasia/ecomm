@@ -56,7 +56,9 @@
               {% endif %}
               <div class="order-delivery-fact">
                 <span class="order-delivery-label">Delivery charges</span>
-                <p>{% if order.additional_delivery_fee %}INR {{ order.additional_delivery_fee }}{% else %}Free{% endif %}</p>
+                {% if order.delivery_promise %}<p>{{ order.delivery_promise }}</p>{% endif %}
+                <p>{% if order.additional_delivery_fee %}Delivery: INR {{ order.additional_delivery_fee }}{% else %}Delivery: Free{% endif %}</p>
+                {% if order.priority_delivery_fee %}<p>Next-day priority: INR {{ order.priority_delivery_fee }}</p>{% endif %}
               </div>
               <div class="order-delivery-fact">
                 <span class="order-delivery-label">Order total</span>

@@ -1,15 +1,18 @@
 import os
 import json
+import base64
 import uuid
 import hmac
 import logging
 from collections import Counter
+from decimal import Decimal
 from urllib.parse import urlencode
 import razorpay
-from weasyprint import CSS, HTML
+from weasyprint import HTML
 from products.models import *
 from django.urls import reverse
 from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.contrib import messages
 from django.forms import ImageField
 from django.http import JsonResponse
@@ -18,6 +21,7 @@ from django.http import Http404
 from home.models import City, DeliveryGuideline, ShippingAddress, State
 from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
+    is_before_local_delivery_cutoff,
 )
 from django.contrib.auth.models import User
 from django.template.loader import get_template
@@ -26,6 +30,8 @@ from accounts.models import (
     BundleOrderItem, BundleOrderProduct, ServiceablePincode, ReturnRequest,
     ReturnShipmentImage, ReturnRequestImage,
 )
+from accounts.invoices import build_invoice_context
+from accounts.order_linking import attach_verified_guest_orders
 from base.emails import (
     send_account_activation_email,
     send_admin_new_order_email,
@@ -101,6 +107,21 @@ def _cart_delivery_fee(cart):
     )
 
 
+def _priority_delivery_fee(delivery_option, requested, order_total, fee=None):
+    guideline = DeliveryGuideline.get_solo()
+    threshold = guideline.delivery_charge_threshold
+    if (
+        not requested
+        or delivery_option != Order.DeliveryOption.STANDARD
+        or threshold is None
+        or Decimal(str(order_total)) < threshold
+    ):
+        return False, Decimal('0.00')
+    if fee is None:
+        fee = guideline.priority_delivery_fee
+    return True, Decimal(fee)
+
+
 def _cart_pricing_context(cart):
     delivery_guideline = DeliveryGuideline.get_solo()
     cart_total_after_coupon = cart.get_cart_total_price_after_coupon()
@@ -141,13 +162,54 @@ def generate_order_id():
 def login_page(request):
     next_url = request.GET.get('next')
     if request.method == 'POST':
-        username = (request.POST.get('username') or '').strip()
+        identifier = (request.POST.get('username') or '').strip()
         password = request.POST.get('password')
 
-        user_obj = authenticate(request, username=username, password=password)
+        user = User.objects.filter(username=identifier).first()
+        if user is None:
+            matching_email_users = list(
+                User.objects.filter(email__iexact=identifier)[:2]
+            )
+            if len(matching_email_users) == 1:
+                user = matching_email_users[0]
+        if user is None:
+            mobile_number = ''.join(
+                character for character in identifier
+                if character.isascii() and character.isdigit()
+            )
+            if len(mobile_number) == 12 and mobile_number.startswith('91'):
+                mobile_number = mobile_number[2:]
+            elif len(mobile_number) == 11 and mobile_number.startswith('0'):
+                mobile_number = mobile_number[1:]
+            if len(mobile_number) == 10:
+                matching_user_ids = list(
+                    ShippingAddress.objects.filter(phone=mobile_number)
+                    .values_list('user_id', flat=True)
+                    .distinct()[:2]
+                )
+                if len(matching_user_ids) == 1:
+                    user = User.objects.filter(pk=matching_user_ids[0]).first()
+
+        credentials_match_unverified_user = (
+            user is not None
+            and password
+            and not getattr(user.profile, 'is_email_verified', False)
+        )
+        if credentials_match_unverified_user:
+            messages.error(
+                request,
+                'Your email address is not yet verified. Please activate your email first.',
+            )
+            return HttpResponseRedirect(request.path_info)
+
+        user_obj = authenticate(
+            request,
+            username=user.get_username() if user else identifier,
+            password=password,
+        )
         if user_obj and getattr(user_obj.profile, 'is_email_verified', False):
             login(request, user_obj)
-            messages.success(request, 'Login Successfull.')
+            messages.success(request, 'Login successful.')
 
             if url_has_allowed_host_and_scheme(
                 url=next_url,
@@ -158,7 +220,13 @@ def login_page(request):
             else:
                 return redirect('index')
 
-        messages.error(request, 'Invalid username or password.')
+        if user_obj:
+            messages.error(
+                request,
+                'Your email address is not yet verified. Please activate your email first.',
+            )
+        else:
+            messages.error(request, 'Invalid username or password.')
         return HttpResponseRedirect(request.path_info)
 
     return render(request, 'accounts/login.html')
@@ -236,8 +304,32 @@ def _clear_coupon_if_cart_empty(cart):
 
 
 def get_active_cart(request, create=False):
+    buy_now_cart_uid = request.session.get('buy_now_checkout_cart_uid')
+    if buy_now_cart_uid:
+        buy_now_carts = Cart.objects.filter(
+            uid=buy_now_cart_uid,
+            is_paid=False,
+            is_buy_now=True,
+        )
+        if request.user.is_authenticated:
+            buy_now_carts = buy_now_carts.filter(user=request.user)
+        else:
+            buy_now_carts = buy_now_carts.filter(
+                user__isnull=True,
+            ).filter(
+                Q(session_key__isnull=True)
+                | Q(session_key=request.session.session_key)
+            )
+        cart = buy_now_carts.first()
+        if cart:
+            _clear_unavailable_cart_coupon(cart)
+            _clear_coupon_if_cart_empty(cart)
+            return cart
+
     if request.user.is_authenticated:
-        cart = Cart.objects.filter(user=request.user, is_paid=False).first()
+        cart = Cart.objects.filter(
+            user=request.user, is_paid=False, is_buy_now=False,
+        ).first()
         if not cart and create:
             cart = Cart.objects.create(user=request.user)
         _clear_unavailable_cart_coupon(cart)
@@ -249,7 +341,10 @@ def get_active_cart(request, create=False):
             return None
         request.session.create()
     cart = Cart.objects.filter(
-        session_key=request.session.session_key, is_paid=False).first()
+        session_key=request.session.session_key,
+        is_paid=False,
+        is_buy_now=False,
+    ).first()
     if not cart and create:
         Cart.objects.filter(
             session_key=request.session.session_key, is_paid=True
@@ -319,9 +414,10 @@ def _apply_coupon(request, cart_obj):
 @require_POST
 def add_to_cart(request, uid):
     buy_now = request.POST.get('buy_now') == '1'
-    buy_now_added = False
+    request.session.pop('buy_now_checkout_cart_uid', None)
     if buy_now:
-        request.session.pop('buy_now_checkout_cart_uid', None)
+        request.session.pop('guest_checkout_quote', None)
+        request.session.pop('guest_checkout_pending_address', None)
     try:
         variant = request.POST.get('size') or request.GET.get('size')
         product = get_object_or_404(Product, uid=uid)
@@ -333,29 +429,33 @@ def add_to_cart(request, uid):
         gift_wrap = (request.POST.get('gift_wrap') or request.GET.get('gift_wrap')) == '1' and product.gift_wrap_available
         size_variant = get_object_or_404(
             SizeVariant, size_name=variant) if variant else None
-        if buy_now:
-            existing_cart = get_active_cart(request)
-            existing_item = (
-                CartItem.objects.filter(
-                    cart=existing_cart,
-                    product=product,
-                    size_variant=size_variant,
-                    color_variant=None,
-                ).first()
-                if existing_cart else None
-            )
-            if existing_item:
-                if existing_item.gift_wrap != gift_wrap:
-                    existing_item.gift_wrap = gift_wrap
-                    existing_item.save(update_fields=['gift_wrap', 'updated_at'])
-                request.session['buy_now_checkout_cart_uid'] = str(
-                    existing_item.cart_id)
-                return redirect(
-                    'checkout' if request.user.is_authenticated else 'guest-checkout')
-
         if product.stock_quantity < 1:
             messages.warning(request, 'This product is out of stock.')
             return redirect(reverse('get_product', kwargs={'slug': product.slug}))
+
+        if buy_now:
+            if quantity > product.stock_quantity:
+                messages.error(
+                    request,
+                    f'Only {product.stock_quantity} items are available.',
+                )
+                return redirect(reverse('get_product', kwargs={'slug': product.slug}))
+            cart = Cart.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                is_buy_now=True,
+            )
+            CartItem.objects.create(
+                cart=cart,
+                product=product,
+                size_variant=size_variant,
+                color_variant=None,
+                quantity=quantity,
+                gift_wrap=gift_wrap,
+            )
+            request.session['buy_now_checkout_cart_uid'] = str(cart.uid)
+            messages.success(request, 'Item added to cart successfully.')
+            return redirect(
+                'checkout' if request.user.is_authenticated else 'guest-checkout')
 
         cart = get_active_cart(request, create=True)
 
@@ -384,7 +484,6 @@ def add_to_cart(request, uid):
                 defaults={'quantity': quantity, 'gift_wrap': gift_wrap},
             )
             if created:
-                buy_now_added = True
                 messages.success(request, 'Item added to cart successfully.')
             else:
                 quantity_after_add = cart_item.quantity + quantity
@@ -402,17 +501,11 @@ def add_to_cart(request, uid):
                     cart_item.quantity = quantity_after_add
                     cart_item.gift_wrap = gift_wrap
                     cart_item.save()
-                    buy_now_added = True
                     messages.success(request, 'Item added to cart successfully.')
 
     except Exception as e:
         logger.exception("Add to cart failed for product %s", uid)
         messages.error(request, 'Error adding item to cart.')
-
-    if buy_now and buy_now_added:
-        request.session['buy_now_checkout_cart_uid'] = str(cart.uid)
-        return redirect(
-            'checkout' if request.user.is_authenticated else 'guest-checkout')
 
     next_url = request.POST.get('next')
     if next_url and url_has_allowed_host_and_scheme(
@@ -512,7 +605,6 @@ def checkout(request):
                 'One or more products are no longer available in the requested quantity.',
             )
         else:
-            request.session.pop('buy_now_checkout_cart_uid', None)
             return redirect(f'{reverse("payment")}?address={selected_address.uid}')
 
     if selected_address is None and addresses:
@@ -565,10 +657,21 @@ def payment(request):
         )
         return redirect('cart')
 
+    delivery_guideline = DeliveryGuideline.get_solo()
     context = {
         'cart': cart_obj,
         'current_step': 'payment',
         'selected_address': selected_address,
+        'priority_fee': delivery_guideline.priority_delivery_fee,
+        'priority_delivery_enabled': delivery_guideline.next_day_delivery_enabled,
+        'local_delivery_cutoff_time': delivery_guideline.local_delivery_cutoff_time,
+        'local_delivery_radius_km': delivery_guideline.free_delivery_radius_km,
+        'priority_delivery_eligible': (
+            delivery_guideline.next_day_delivery_enabled
+            and delivery_guideline.delivery_charge_threshold is not None
+            and cart_obj.get_cart_total_price_after_coupon()
+            >= delivery_guideline.delivery_charge_threshold
+        ),
         'razorpay_key_id': settings.RAZORPAY_KEY_ID,
         'online_payment_enabled': settings.ONLINE_PAYMENT_ENABLED,
         **_cart_pricing_context(cart_obj),
@@ -591,8 +694,10 @@ def delivery_options(request):
         if not selected_address:
             return JsonResponse({'error': 'Choose a saved delivery address first.'}, status=400)
         city = selected_address.city.name
+        pincode = selected_address.zip_code
     else:
         city = (payload.get('city') or '').strip()
+        pincode = (payload.get('pincode') or '').strip()
 
     service_area_error = _service_area_error(city)
     if service_area_error:
@@ -602,9 +707,10 @@ def delivery_options(request):
     if not cart_obj:
         return JsonResponse({'error': 'Your cart is empty.'}, status=400)
 
+    guideline = DeliveryGuideline.get_solo()
     try:
         options = get_delivery_options(
-            DeliveryGuideline.get_solo(),
+            guideline,
             city,
             payload.get('latitude'),
             payload.get('longitude'),
@@ -613,6 +719,16 @@ def delivery_options(request):
         )
     except ValueError as error:
         return JsonResponse({'error': str(error)}, status=400)
+    automatic_option, _ = _automatic_delivery_selection(
+        city,
+        pincode,
+        payload.get('latitude'),
+        payload.get('longitude'),
+        payload.get('accuracy_meters'),
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
+    options['automatic_delivery_option'] = automatic_option
+    options['priority_delivery_fee'] = str(guideline.priority_delivery_fee)
     return JsonResponse(options)
 
 
@@ -632,12 +748,19 @@ def cities_for_state(request):
 @require_POST
 @login_required
 def create_payment_order(request):
-    selected_address_id = request.POST.get('selected_address_id') or request.GET.get('selected_address_id')
-    if not selected_address_id and request.content_type == 'application/json':
+    payload = {}
+    if request.content_type == 'application/json':
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
             payload = {}
+    selected_address_id = (
+        request.POST.get('selected_address_id')
+        or request.GET.get('selected_address_id')
+        or payload.get('selected_address_id')
+    )
+    selected_address = None
+    if not selected_address_id and request.content_type == 'application/json':
         selected_address_id = payload.get('selected_address_id')
 
     if selected_address_id:
@@ -656,10 +779,39 @@ def create_payment_order(request):
     if not settings.ONLINE_PAYMENT_ENABLED:
         return JsonResponse({'error': 'Online payments are coming soon.'}, status=503)
 
-    cart_obj = get_object_or_404(Cart, user=request.user, is_paid=False)
+    cart_obj = get_active_cart(request)
+    if not cart_obj:
+        return JsonResponse({'error': 'Your cart is empty.'}, status=400)
     if not _cart_has_available_stock(cart_obj):
         return JsonResponse({'error': 'One or more products are no longer available in the requested quantity.'}, status=409)
-    amount = int((cart_obj.get_cart_total_price_after_coupon() + _cart_delivery_fee(cart_obj)) * 100)
+    delivery_option, _ = _automatic_delivery_selection(
+        selected_address.city.name if selected_address else '',
+        selected_address.zip_code if selected_address else '',
+        payload.get('delivery_latitude'),
+        payload.get('delivery_longitude'),
+        payload.get('delivery_accuracy_meters'),
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
+    priority_requested = payload.get('priority_delivery') in (True, 1, '1', 'true')
+    is_priority_delivery, priority_fee = _priority_delivery_fee(
+        delivery_option,
+        priority_requested,
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
+    cart_obj.razorpay_delivery_option = delivery_option
+    cart_obj.razorpay_priority_delivery = is_priority_delivery
+    cart_obj.razorpay_priority_delivery_fee = priority_fee
+    cart_obj.save(update_fields=[
+        'razorpay_delivery_option',
+        'razorpay_priority_delivery',
+        'razorpay_priority_delivery_fee',
+        'updated_at',
+    ])
+    amount = int((
+        cart_obj.get_cart_total_price_after_coupon()
+        + _cart_delivery_fee(cart_obj)
+        + priority_fee
+    ) * 100)
 
     if amount < 100:
         return JsonResponse(
@@ -741,7 +893,11 @@ def verify_payment(request):
         logger.exception("Unable to fetch Razorpay payment %s", payment_id)
         return JsonResponse({'error': 'Unable to validate the payment.'}, status=502)
 
-    expected_amount = int((cart_obj.get_cart_total_price_after_coupon() + _cart_delivery_fee(cart_obj)) * 100)
+    expected_amount = int((
+        cart_obj.get_cart_total_price_after_coupon()
+        + _cart_delivery_fee(cart_obj)
+        + cart_obj.razorpay_priority_delivery_fee
+    ) * 100)
     if (
         payment.get('order_id') != order_id or
         payment.get('amount') != expected_amount or
@@ -769,6 +925,22 @@ def verify_payment(request):
         delivery_accuracy,
         cart_obj.get_cart_total_price_after_coupon(),
     )
+    if delivery_option != cart_obj.razorpay_delivery_option:
+        try:
+            client.payment.refund(payment_id, {})
+        except Exception:
+            logger.exception('Unable to refund payment %s after delivery option changed', payment_id)
+        return JsonResponse({
+            'error': 'The available delivery option changed. Your payment will be refunded; please try again.',
+        }, status=409)
+    if cart_obj.razorpay_priority_delivery and delivery_option != Order.DeliveryOption.STANDARD:
+        try:
+            client.payment.refund(payment_id, {})
+        except Exception:
+            logger.exception('Unable to refund payment %s after priority eligibility changed', payment_id)
+        return JsonResponse({
+            'error': 'Next-day priority is no longer available. Your payment will be refunded; please try again.',
+        }, status=409)
 
     profile, _ = Profile.objects.get_or_create(user=request.user)
     profile.shipping_address = selected_address
@@ -781,6 +953,8 @@ def verify_payment(request):
             delivery_option=delivery_option,
             delivery_distance_km=delivery_distance,
             razorpay_payment_id=payment_id,
+            priority_delivery_requested=cart_obj.razorpay_priority_delivery,
+            priority_delivery_fee=cart_obj.razorpay_priority_delivery_fee,
         )
     except ValueError as error:
         logger.warning("Payment %s could not reserve inventory: %s", payment_id, error)
@@ -795,6 +969,8 @@ def verify_payment(request):
     cart_obj.is_paid = True
     cart_obj.save(update_fields=[
         'razorpay_payment_id', 'razorpay_payment_signature', 'is_paid', 'updated_at'])
+    if request.session.get('buy_now_checkout_cart_uid') == str(cart_obj.uid):
+        request.session.pop('buy_now_checkout_cart_uid', None)
     try:
         send_order_confirmation_email(order)
     except Exception as error:
@@ -811,7 +987,9 @@ def verify_payment(request):
 
 @require_POST
 def place_cod_order(request):
-    cart_obj = get_object_or_404(Cart, **cart_owner_filter(request), is_paid=False)
+    cart_obj = get_active_cart(request)
+    if not cart_obj:
+        return JsonResponse({'error': 'Your cart is empty.'}, status=400)
 
     if not cart_obj.cart_items.exists() and not cart_obj.bundle_items.exists():
         return JsonResponse({'error': 'Your cart is empty.'}, status=400)
@@ -879,6 +1057,12 @@ def place_cod_order(request):
         delivery_accuracy,
         cart_obj.get_cart_total_price_after_coupon(),
     )
+    priority_requested = payload.get('priority_delivery') in (True, 1, '1', 'true')
+    is_priority_delivery, priority_fee = _priority_delivery_fee(
+        delivery_option,
+        priority_requested,
+        cart_obj.get_cart_total_price_after_coupon(),
+    )
 
     try:
         order = create_order(
@@ -889,11 +1073,15 @@ def place_cod_order(request):
             shipping_address=shipping_address,
             delivery_option=delivery_option,
             delivery_distance_km=delivery_distance,
+            priority_delivery_requested=is_priority_delivery,
+            priority_delivery_fee=priority_fee,
         )
     except ValueError as error:
         return JsonResponse({'error': str(error)}, status=409)
     cart_obj.is_paid = True
     cart_obj.save(update_fields=['is_paid', 'updated_at'])
+    if request.session.get('buy_now_checkout_cart_uid') == str(cart_obj.uid):
+        request.session.pop('buy_now_checkout_cart_uid', None)
     try:
         send_order_confirmation_email(order)
     except Exception as error:
@@ -919,12 +1107,24 @@ def guest_checkout(request):
     coupon_enabled = (
         request.session.get('buy_now_checkout_cart_uid') == str(cart_obj.uid)
     )
+    address_fields = (
+        'first_name', 'last_name', 'street', 'street_number', 'zip_code',
+        'city', 'country', 'state', 'phone', 'email',
+    )
+    pending_address_key = 'guest_checkout_pending_address'
     if request.method == 'POST' and (
         'apply_coupon' in request.POST or 'remove_checkout_coupon' in request.POST
     ):
         if not coupon_enabled:
             messages.error(request, 'Coupons can only be changed from the cart.')
             return redirect('guest-checkout')
+        submitted_address = {
+            field: request.POST.get(field, '')
+            for field in address_fields
+            if field in request.POST
+        }
+        if submitted_address:
+            request.session[pending_address_key] = submitted_address
         if 'remove_checkout_coupon' in request.POST:
             cart_obj.coupon = None
             cart_obj.save(update_fields=['coupon', 'updated_at'])
@@ -944,6 +1144,10 @@ def guest_checkout(request):
     editing_address = request.GET.get('edit') == '1'
     quote_message = ''
     delivery_fee = None
+    priority_fee = DeliveryGuideline.get_solo().priority_delivery_fee
+    priority_delivery_eligible = False
+    priority_delivery_selected = False
+    delivery_promise = ''
     cart_total_after_delivery = None
     shipping_address_summary = ''
 
@@ -961,7 +1165,25 @@ def guest_checkout(request):
             if form.is_valid():
                 current_cart_total = cart_obj.get_cart_total_price_after_coupon()
                 delivery_fee = _cart_delivery_fee(cart_obj)
-                cart_total_after_delivery = current_cart_total + delivery_fee
+                delivery_option, delivery_distance = _automatic_delivery_selection(
+                    form.cleaned_data['city'].name,
+                    form.cleaned_data['zip_code'],
+                    quote.get('delivery_latitude'),
+                    quote.get('delivery_longitude'),
+                    quote.get('delivery_accuracy_meters'),
+                    current_cart_total,
+                )
+                priority_delivery_selected = (
+                    request.POST.get('priority_delivery') == 'on'
+                )
+                is_priority_delivery, priority_fee = _priority_delivery_fee(
+                    delivery_option,
+                    priority_delivery_selected,
+                    current_cart_total,
+                )
+                cart_total_after_delivery = (
+                    current_cart_total + delivery_fee + priority_fee
+                )
                 if (
                     str(current_cart_total) != quote['cart_total'] or
                     str(delivery_fee) != quote['delivery_fee']
@@ -971,14 +1193,6 @@ def guest_checkout(request):
                     quote_ready = True
                     quote_message = 'Your cart or delivery charge changed. Review the updated total before placing your order.'
                 else:
-                    delivery_option, delivery_distance = _automatic_delivery_selection(
-                        form.cleaned_data['city'].name,
-                        form.cleaned_data['zip_code'],
-                        quote.get('delivery_latitude'),
-                        quote.get('delivery_longitude'),
-                        quote.get('delivery_accuracy_meters'),
-                        current_cart_total,
-                    )
                     try:
                         guest_address = form.save(commit=False)
                         order = create_order(
@@ -996,6 +1210,8 @@ def guest_checkout(request):
                             guest_email=form.cleaned_data['email'],
                             delivery_option=delivery_option,
                             delivery_distance_km=delivery_distance,
+                            priority_delivery_requested=is_priority_delivery,
+                            priority_delivery_fee=priority_fee,
                         )
                     except ValueError as error:
                         form.add_error(None, str(error))
@@ -1004,6 +1220,14 @@ def guest_checkout(request):
                         cart_obj.is_paid = True
                         cart_obj.session_key = None
                         cart_obj.save(update_fields=['is_paid', 'session_key', 'updated_at'])
+                        is_buy_now_checkout = (
+                            request.session.get('buy_now_checkout_cart_uid')
+                            == str(cart_obj.uid)
+                        )
+                        if is_buy_now_checkout:
+                            request.session.pop('buy_now_checkout_cart_uid', None)
+                            request.session.pop(quote_key, None)
+                            request.session.pop(pending_address_key, None)
                         try:
                             send_order_confirmation_email(order)
                         except Exception:
@@ -1012,7 +1236,8 @@ def guest_checkout(request):
                             send_admin_new_order_email(order)
                         except Exception:
                             logger.exception("Seller order notification failed for order %s", order.order_id)
-                        request.session.flush()
+                        if not is_buy_now_checkout:
+                            request.session.flush()
                         return redirect(
                             f'{reverse("success")}?order_id={order.order_id}'
                             f'&guest_token={order.guest_access_token}'
@@ -1055,8 +1280,12 @@ def guest_checkout(request):
                 form.cleaned_data['city'], form.cleaned_data['country'],
             ))
     else:
+        pending_address = request.session.pop(pending_address_key, None)
         quote = request.session.get(quote_key)
-        if quote and quote.get('cart_uid') == str(cart_obj.uid):
+        if pending_address:
+            form = GuestShippingAddressForm(pending_address)
+            editing_address = True
+        elif quote and quote.get('cart_uid') == str(cart_obj.uid):
             form = GuestShippingAddressForm(quote['address'])
             if form.is_valid() and not editing_address:
                 delivery_fee = _cart_delivery_fee(cart_obj)
@@ -1069,6 +1298,47 @@ def guest_checkout(request):
             form = GuestShippingAddressForm()
 
     if quote_ready:
+        quote = request.session.get(quote_key, {})
+        address = form.cleaned_data
+        delivery_option, _ = _automatic_delivery_selection(
+            address['city'].name,
+            address['zip_code'],
+            quote.get('delivery_latitude'),
+            quote.get('delivery_longitude'),
+            quote.get('delivery_accuracy_meters'),
+            cart_obj.get_cart_total_price_after_coupon(),
+        )
+        priority_delivery_eligible = (
+            delivery_option == Order.DeliveryOption.STANDARD
+            and DeliveryGuideline.get_solo().delivery_charge_threshold is not None
+            and cart_obj.get_cart_total_price_after_coupon()
+            >= DeliveryGuideline.get_solo().delivery_charge_threshold
+        )
+        if request.method != 'POST' or request.POST.get('confirm_order') != '1':
+            priority_delivery_selected = (
+                quote.get('priority_delivery_selected') == '1'
+            )
+        is_priority_delivery, priority_fee = _priority_delivery_fee(
+            delivery_option,
+            priority_delivery_selected and priority_delivery_eligible,
+            cart_obj.get_cart_total_price_after_coupon(),
+        )
+        delivery_fee = _cart_delivery_fee(cart_obj)
+        cart_total_after_delivery = (
+            cart_obj.get_cart_total_price_after_coupon()
+            + delivery_fee
+            + priority_fee
+        )
+        if is_priority_delivery:
+            delivery_promise = 'Order will be delivered next day.'
+        elif delivery_option == Order.DeliveryOption.STANDARD:
+            delivery_promise = 'Most orders will arrive in 2–3 business days.'
+        elif delivery_option == Order.DeliveryOption.LOCAL_FREE:
+            delivery_promise = (
+                'Order will be delivered within 4–5 hours.'
+                if is_before_local_delivery_cutoff(DeliveryGuideline.get_solo())
+                else 'Delivery timing will be confirmed after order placement.'
+            )
         address = form.cleaned_data
         country_name = dict(form.fields['country'].choices).get(
             address['country'], address['country'],
@@ -1088,9 +1358,17 @@ def guest_checkout(request):
         'form': form,
         'next_url': next_url,
         'quote_ready': quote_ready,
+        'current_step': 'payment' if quote_ready else 'checkout',
         'editing_address': editing_address,
         'quote_message': quote_message,
         'delivery_fee': delivery_fee,
+        'priority_fee': priority_fee,
+        'priority_delivery_eligible': priority_delivery_eligible,
+        'priority_delivery_selected': priority_delivery_selected,
+        'delivery_promise': delivery_promise,
+        'standard_delivery_enabled': DeliveryGuideline.get_solo().next_day_delivery_enabled,
+        'local_delivery_cutoff_time': DeliveryGuideline.get_solo().local_delivery_cutoff_time,
+        'local_delivery_radius_km': DeliveryGuideline.get_solo().free_delivery_radius_km,
         'cart_total_after_delivery': cart_total_after_delivery,
         'shipping_address_summary': shipping_address_summary,
         'cart': cart_obj,
@@ -1206,16 +1484,18 @@ def success(request):
 # HTML to PDF Conversion
 def render_to_pdf(template_src, context_dict={}):
     template = get_template(template_src)
-    html = template.render(context_dict)
+    context = dict(context_dict)
+    brand_icon_path = finders.find('images/bundleofgifts-icon.png')
+    if not brand_icon_path:
+        raise FileNotFoundError('Invoice brand icon PNG could not be found.')
+    with open(brand_icon_path, 'rb') as brand_icon:
+        context['brand_icon_data'] = (
+            'data:image/png;base64,'
+            + base64.b64encode(brand_icon.read()).decode('ascii')
+        )
+    html = template.render(context)
 
-    static_root = settings.STATIC_ROOT
-    css_files = [
-        os.path.join(static_root, 'css', 'bootstrap.css'),
-        os.path.join(static_root, 'css', 'responsive.css'),
-        os.path.join(static_root, 'css', 'ui.css'),
-    ]
-    css_objects = [CSS(filename=css_file) for css_file in css_files]
-    pdf_file = HTML(string=html).write_pdf(stylesheets=css_objects)
+    pdf_file = HTML(string=html).write_pdf()
 
     response = HttpResponse(pdf_file, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="invoice_{context_dict["order"].order_id}.pdf"'
@@ -1225,13 +1505,7 @@ def render_to_pdf(template_src, context_dict={}):
 @login_required
 def download_invoice(request, order_id):
     order = get_object_or_404(Order, order_id=order_id, user=request.user)
-    order_items = order.order_items.all()
-
-    context = {
-        'order': order,
-        'order_items': order_items,
-    }
-
+    context = build_invoice_context(order)
     pdf = render_to_pdf('accounts/order_pdf_generate.html', context)
     if pdf:
         return pdf
@@ -1357,6 +1631,7 @@ def delete_shipping_address(request, address_uid):
 # Order history view
 @login_required
 def order_history(request):
+    attach_verified_guest_orders(request.user)
     orders = Order.objects.filter(user=request.user).order_by('-order_date')
     return render(request, 'accounts/order_history.html', {'orders': orders})
 
@@ -1626,7 +1901,8 @@ def create_order(
     cart, order_id=None, payment_status='Paid', payment_mode='Razorpay',
     shipping_address=None, delivery_pincode='', guest_access_token=None,
     guest_name='', guest_email='', delivery_option='', delivery_distance_km=None,
-    razorpay_payment_id='',
+    razorpay_payment_id='', priority_delivery_requested=False,
+    priority_delivery_fee=None,
 ):
     with transaction.atomic():
         cart_items = list(CartItem.objects.select_related(
@@ -1667,7 +1943,18 @@ def create_order(
         is_serviceable = ServiceablePincode.objects.filter(
             pincode=delivery_pincode, is_active=True).exists()
         delivery_fee = _cart_delivery_fee(cart)
+        is_priority_delivery, priority_fee = _priority_delivery_fee(
+            delivery_option,
+            priority_delivery_requested,
+            cart.get_cart_total_price_after_coupon(),
+            priority_delivery_fee,
+        )
+        local_delivery_window_promised = (
+            delivery_option == Order.DeliveryOption.LOCAL_FREE
+            and is_before_local_delivery_cutoff(DeliveryGuideline.get_solo())
+        )
         order_coupon = cart.coupon
+        gst_configuration = GSTConfiguration.get_solo()
         if (
             order_coupon
             and (
@@ -1688,13 +1975,30 @@ def create_order(
             delivery_option=delivery_option,
             delivery_distance_km=delivery_distance_km,
             additional_delivery_fee=delivery_fee or None,
+            is_priority_delivery=is_priority_delivery,
+            priority_delivery_fee=priority_fee,
+            local_delivery_window_promised=local_delivery_window_promised,
             payment_status=payment_status,
             razorpay_payment_id=razorpay_payment_id,
             shipping_address=str(selected_address) if selected_address else '',
             payment_mode=payment_mode,
             order_total_price=cart.get_cart_total(),
             coupon=order_coupon,
-            grand_total=cart.get_cart_total_price_after_coupon() + delivery_fee,
+            grand_total=(
+                cart.get_cart_total_price_after_coupon()
+                + delivery_fee
+                + priority_fee
+            ),
+            prices_include_tax=gst_configuration.prices_include_tax,
+            seller_name=gst_configuration.seller_name,
+            seller_address=gst_configuration.seller_address,
+            seller_gstin=gst_configuration.seller_gstin,
+            seller_email=gst_configuration.seller_email,
+            seller_state=gst_configuration.seller_state,
+            seller_state_code=gst_configuration.seller_state_code,
+            place_of_supply_state=getattr(
+                getattr(selected_address, 'state', None), 'name', '',
+            ),
         )
 
         if created:
@@ -1707,6 +2011,9 @@ def create_order(
                     color_variant=cart_item.color_variant,
                     quantity=cart_item.quantity,
                     product_price=cart_item.get_product_price(),
+                    original_product_price=cart_item.get_original_product_price(),
+                    hsn_code=product.hsn_code,
+                    gst_rate=product.gst_rate,
                     gift_wrap=cart_item.gift_wrap,
                 )
             for bundle_item in bundle_items:
@@ -1721,9 +2028,31 @@ def create_order(
                     packaging_name=bundle_item.packaging_option.name if bundle_item.packaging_option else '',
                     packaging_price=bundle_item.packaging_price,
                 )
+                selected_products = list(bundle_item.selected_products.all())
+                bundle_prices = Cart._allocate_amount(
+                    Decimal(bundle_item.unit_price),
+                    [Decimal(selected.product.price) for selected in selected_products],
+                )
+                original_bundle_total = Decimal(sum(
+                        max(selected.product.marked_price, selected.product.price)
+                        for selected in selected_products
+                    ))
+                bundle_original_prices = Cart._allocate_amount(
+                    max(original_bundle_total, Decimal(bundle_item.unit_price)),
+                    [Decimal(selected.product.price) for selected in selected_products],
+                )
                 BundleOrderProduct.objects.bulk_create([
-                    BundleOrderProduct(bundle_item=order_bundle, product=selected.product)
-                    for selected in bundle_item.selected_products.all()
+                    BundleOrderProduct(
+                        bundle_item=order_bundle,
+                        product=selected.product,
+                        product_price=product_price,
+                        original_product_price=original_product_price,
+                        hsn_code=selected.product.hsn_code,
+                        gst_rate=selected.product.gst_rate,
+                    )
+                    for selected, product_price, original_product_price in zip(
+                        selected_products, bundle_prices, bundle_original_prices,
+                    )
                 ])
 
             for product_id, quantity in quantities.items():
@@ -1798,7 +2127,10 @@ def order_details(request, order_id):
         'replacement_eligibility_error': return_eligibility_error(
             order, ReturnRequest.RequestType.REPLACEMENT),
         'order_total_price': sum(item.get_total_price() for item in order_items),
-        'coupon_discount': order.coupon.discount_amount if order.coupon else 0,
+        'coupon_discount': (
+            order.coupon.calculate_discount(order.order_total_price)
+            if order.coupon else 0
+        ),
         'grand_total': order.get_order_total_price()
     }
     return render(request, 'accounts/order_details.html', context)

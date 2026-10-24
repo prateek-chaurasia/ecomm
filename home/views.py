@@ -2,7 +2,7 @@ import json
 import logging
 from decouple import config
 
-from django.db.models import Q, Avg
+from django.db.models import Q, Avg, Case, When, Value, IntegerField
 from django.db.models.functions import Coalesce
 from django.core.mail import EmailMessage
 from django.http import HttpResponse, JsonResponse
@@ -69,17 +69,35 @@ def index(request):
     if selected_tag:
         query = query.filter(tags__name=selected_tag).distinct()
 
+    query = query.annotate(
+        stock_priority=Case(
+            When(stock_quantity__gt=0, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        )
+    )
+
     if selected_sort:
         if selected_sort == 'newest':
-            query = query.filter(newest_product=True).order_by('category_id', 'uid')
+            query = query.filter(newest_product=True).order_by(
+                'stock_priority', 'category_id', 'uid',
+            )
         elif selected_sort == 'priceAsc':
-            query = query.order_by('price', 'uid')
+            query = query.order_by('stock_priority', 'price', 'uid')
         elif selected_sort == 'priceDesc':
-            query = query.order_by('-price', 'uid')
+            query = query.order_by('stock_priority', '-price', 'uid')
         elif selected_sort == 'ratingAsc':
-            query = query.annotate(avg_rating=Coalesce(Avg('reviews__stars'), 0.0)).order_by('avg_rating', 'product_name', 'uid')
+            query = query.annotate(
+                avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+            ).order_by('stock_priority', 'avg_rating', 'product_name', 'uid')
         elif selected_sort == 'ratingDesc':
-            query = query.annotate(avg_rating=Coalesce(Avg('reviews__stars'), 0.0)).order_by('-avg_rating', 'product_name', 'uid')
+            query = query.annotate(
+                avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+            ).order_by('stock_priority', '-avg_rating', 'product_name', 'uid')
+        else:
+            query = query.order_by('stock_priority', 'product_name', 'uid')
+    else:
+        query = query.order_by('stock_priority', 'product_name', 'uid')
 
     page = request.GET.get('page', 1)
     paginator = Paginator(query, 8)

@@ -1,5 +1,6 @@
 from io import BytesIO
 from datetime import timedelta
+from decimal import Decimal
 import json
 import tempfile
 
@@ -24,7 +25,7 @@ from products.admin import (
 from products.models import (
     Category, Coupon, Product, ProductImage, AgeGroup, Tag, SizeVariant,
     ColorVariant, ReturnDetails, ProductReview,
-    BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist,
+    BundleConfiguration, BundleOffer, BundlePackagingOption, Wishlist, HSNCode,
 )
 from products.image_utils import product_thumbnail_name
 
@@ -34,6 +35,47 @@ class CouponAdminTests(TestCase):
         form = CouponAdminForm()
 
         self.assertTrue(form.fields['expiry_date'].required)
+        self.assertTrue(form.fields['discount_percentage'].required)
+        self.assertEqual(form.fields['discount_amount'].label, 'Maximum discount amount')
+
+    def test_coupon_discount_percentage_is_capped_and_respects_minimum_spend(self):
+        coupon = Coupon.objects.create(
+            coupon_code='PERCENT',
+            discount_percentage=15,
+            discount_amount=100,
+            minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=1),
+        )
+
+        self.assertEqual(coupon.calculate_discount(Decimal('400.00')), Decimal('0.00'))
+        self.assertEqual(coupon.calculate_discount(Decimal('600.00')), Decimal('90.00'))
+        self.assertEqual(coupon.calculate_discount(Decimal('1000.00')), Decimal('100.00'))
+
+    def test_cart_uses_percentage_discount_with_maximum_cap(self):
+        category = Category.objects.create(category_name='Coupon test products')
+        product = Product.objects.create(
+            product_name='Coupon test product',
+            category=category,
+            price=1000,
+            product_desription='Coupon test product',
+        )
+        cart = Cart.objects.create()
+        CartItem.objects.create(cart=cart, product=product, quantity=1)
+        coupon = Coupon.objects.create(
+            coupon_code='CARTPCT',
+            discount_percentage=20,
+            discount_amount=100,
+            minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=1),
+        )
+        cart.coupon = coupon
+        cart.save(update_fields=['coupon', 'updated_at'])
+
+        self.assertEqual(cart.get_cart_total(), Decimal('1000.00'))
+        self.assertEqual(
+            cart.get_cart_total_price_after_coupon(),
+            Decimal('900.00'),
+        )
 
 
 class CategoryAdminThumbnailTests(TestCase):
@@ -100,6 +142,90 @@ class ProductSKUTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 self.create_product(product_name='Different Statue', sku=existing.sku)
+
+
+class HSNCodeAdminTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(category_name='Decorative Items')
+
+    def test_csv_reference_rows_are_loaded(self):
+        self.assertEqual(HSNCode.objects.count(), 13)
+        clay_idols = HSNCode.objects.get(product_material='Pure Clay Idols')
+        self.assertEqual(clay_idols.hsn_code, '6913')
+        self.assertEqual(clay_idols.gst_rate, 0)
+        self.assertIn('Terracotta statues', clay_idols.details)
+
+    def test_product_admin_form_copies_selected_reference_into_snapshots(self):
+        reference = HSNCode.objects.get(product_material='Wood, Stone & Marble Items')
+        form = ProductAdminForm(data={
+            'product_name': 'Marble Statue',
+            'category': self.category.pk,
+            'brand_name': 'Generic',
+            'price': 500,
+            'marked_price': 0,
+            'product_desription': 'Hand carved statue',
+            'hsn_reference': reference.pk,
+            'sku': 'MARBLE-001',
+            'stock_quantity': 0,
+            'low_stock_threshold': 5,
+            'gift_wrap_price': 0,
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        product = form.save()
+
+        self.assertEqual(product.hsn_code, 'Chapter 68')
+        self.assertEqual(product.gst_rate, reference.gst_rate)
+        self.assertEqual(product.hsn_reference, reference)
+
+    def test_reference_changes_copy_snapshots_but_later_reference_edits_do_not(self):
+        reference = HSNCode.objects.get(product_material='Stainless Steel Utensils')
+        product = Product.objects.create(
+            product_name='Steel Bowl',
+            category=self.category,
+            price=100,
+            product_desription='Steel bowl',
+            hsn_reference=reference,
+        )
+        self.assertEqual(product.hsn_code, '7323')
+        self.assertEqual(product.gst_rate, 5)
+
+        reference.gst_rate = 12
+        reference.save()
+        product.stock_quantity = 10
+        product.save(update_fields=['stock_quantity'])
+        product.refresh_from_db()
+        self.assertEqual(product.gst_rate, 5)
+
+        new_reference = HSNCode.objects.get(product_material='Plastic Kitchenware')
+        product.hsn_reference = new_reference
+        product.save(update_fields=['hsn_reference'])
+        product.refresh_from_db()
+        self.assertEqual(product.hsn_code, '3924')
+        self.assertEqual(product.gst_rate, 18)
+
+    def test_product_admin_uses_searchable_reference_and_option_selectors(self):
+        product_admin = ProductAdmin(Product, admin.site)
+
+        self.assertEqual(
+            product_admin.autocomplete_fields,
+            ['hsn_reference', 'color_variant', 'age_groups', 'tags'],
+        )
+
+    def test_product_entry_page_renders_searchable_reference_and_variant_fields(self):
+        admin_user = User.objects.create_superuser(
+            username='hsn-product-admin',
+            email='hsn-admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('admin:products_product_add'))
+
+        self.assertEqual(response.status_code, 200)
+        for field_name in ('hsn_reference', 'color_variant', 'age_groups', 'tags'):
+            self.assertContains(response, f'name="{field_name}"')
+        self.assertContains(response, 'admin-autocomplete')
 
 
 class ProductInventoryAdminTests(TestCase):
@@ -1012,14 +1138,18 @@ class ProductCartStateTests(TestCase):
         )
 
     def test_cart_visit_clears_buy_now_coupon_checkout_state(self):
+        cart = Cart.objects.create(user=self.user)
+        CartItem.objects.create(cart=cart, product=self.product)
         self.client.post(
             reverse('add_to_cart', args=[self.product.uid]),
             {'quantity': 1, 'buy_now': '1'},
         )
 
-        self.client.get(reverse('cart'))
+        cart_response = self.client.get(reverse('cart'))
+        self.assertEqual(cart_response.status_code, 200)
         response = self.client.get(reverse('checkout'))
 
+        self.assertEqual(response.context['cart'], cart)
         self.assertNotContains(response, 'Apply Coupon')
 
     def test_product_quantity_is_capped_at_available_inventory(self):
@@ -1071,6 +1201,27 @@ class ProductCartStateTests(TestCase):
         self.assertContains(response, 'imageViewer.showModal()')
         self.assertContains(response, 'imageViewer.close()')
         self.assertNotContains(response, 'zoomed-in')
+
+    def test_product_gallery_supports_multiple_images_and_navigation(self):
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='products/toy-robot-front.jpg',
+        )
+        ProductImage.objects.create(
+            product=self.product,
+            image_url='products/toy-robot-back.jpg',
+        )
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertEqual(len(response.context['product_images']), 2)
+        self.assertEqual(response.content.count(b'data-gallery-slide>'), 2)
+        self.assertContains(response, 'aria-label="Show previous product image"')
+        self.assertContains(response, 'aria-label="Show next product image"')
+        self.assertContains(response, 'data-gallery-thumbnail="1"')
+        self.assertContains(response, 'imageTrack.addEventListener("touchstart"')
+        self.assertContains(response, 'imageTrack.addEventListener("touchend"')
+        self.assertContains(response, 'moveProductGallery(deltaX < 0 ? 1 : -1)')
 
     def test_default_size_does_not_change_product_or_cart_price(self):
         default_size = SizeVariant.objects.create(
@@ -1572,17 +1723,20 @@ class ProductQuantityTests(TestCase):
         )
         self.assertEqual(cart_items.count(), 1)
         self.assertEqual(cart_items.get().quantity, 1)
+        buy_now_cart = Cart.objects.get(is_buy_now=True)
+        self.assertEqual(
+            CartItem.objects.get(cart=buy_now_cart, product=product).quantity,
+            1,
+        )
         self.assertContains(self.client.get(reverse('guest-checkout')), coupon.coupon_code)
         self.client.post(
             reverse('guest-checkout'),
             {'coupon': coupon.coupon_code, 'apply_coupon': '1'},
         )
-        self.assertEqual(
-            Cart.objects.get(session_key=self.client.session.session_key).coupon,
-            coupon,
-        )
+        buy_now_cart.refresh_from_db()
+        self.assertEqual(buy_now_cart.coupon, coupon)
 
-    def test_buy_now_updates_gift_wrap_for_existing_cart_item(self):
+    def test_buy_now_keeps_existing_cart_item_and_applies_gift_wrap_to_purchase(self):
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(
             product_name='Wooden Puzzle',
@@ -1609,11 +1763,19 @@ class ProductQuantityTests(TestCase):
             product=product,
         )
         self.assertEqual(cart_item.quantity, 1)
-        self.assertTrue(cart_item.gift_wrap)
-        self.assertEqual(cart_item.get_product_price(), 630)
+        self.assertFalse(cart_item.gift_wrap)
+        buy_now_cart_item = CartItem.objects.get(
+            cart__is_buy_now=True,
+            product=product,
+        )
+        self.assertTrue(buy_now_cart_item.gift_wrap)
+        self.assertEqual(buy_now_cart_item.get_product_price(), 630)
+        checkout_response = self.client.get(reverse('guest-checkout'))
+        self.assertContains(checkout_response, '₹630')
+        self.assertNotContains(checkout_response, 'Gift wrapped (+₹30 per item)')
         cart_response = self.client.get(reverse('cart'))
-        self.assertContains(cart_response, 'Gift wrapped (+₹30 per item)')
-        self.assertContains(cart_response, '₹630')
+        self.assertNotContains(cart_response, 'Gift wrapped (+₹30 per item)')
+        self.assertContains(cart_response, '₹600')
 
     def test_buy_now_adds_product_when_it_is_not_already_in_cart(self):
         category = Category.objects.create(category_name='Toys')
@@ -1632,7 +1794,7 @@ class ProductQuantityTests(TestCase):
 
         self.assertRedirects(response, reverse('guest-checkout'))
         cart_item = CartItem.objects.get(
-            cart__session_key=self.client.session.session_key,
+            cart__is_buy_now=True,
             product=product,
         )
         self.assertEqual(cart_item.quantity, 2)

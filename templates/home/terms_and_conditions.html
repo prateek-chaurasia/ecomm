@@ -1,4 +1,5 @@
 {% extends "base/base.html" %}
+{% load product_description %}
 {% block title %}Terms & Conditions - BundleofGifts.com{% endblock %}
 {% load static %}
 {% block start %}
@@ -197,7 +198,6 @@
                             <div class="order-info-item">
                                 <i class="fas fa-undo"></i>
                                 <h3 class="h6">Order Cancellation</h3>
-                                <p>Orders may be cancelled at any time before they are dispatched.</p>
                                 <p>{{ return_refund_policy.cancellation_policy|linebreaksbr }}</p>
                             </div>
                             <div class="order-info-item">
@@ -208,12 +208,17 @@
                             <div class="order-info-item">
                                 <i class="fas fa-exchange-alt"></i>
                                 <h3 class="h6">{{ return_refund_policy.return_title }}</h3>
-                                <p>{{ return_refund_policy.return_details|linebreaksbr }}</p>
+                                <div>Return Shipping at Customer's Cost | Open Box Delivery if applicable</div>
                             </div>
                             <div class="order-info-item">
                                 <i class="fas fa-money-bill-wave"></i>
                                 <h3 class="h6">{{ return_refund_policy.refund_title }}</h3>
-                                <p>{{ return_refund_policy.refund_details|linebreaksbr }}</p>
+                                <div>Approved refunds are issued to the original payment method where possible.</div>
+                            </div>
+                            <div class="order-info-item">
+                                <i class="fas fa-sync-alt"></i>
+                                <h3 class="h6">Replace Policy</h3>
+                                <div>Eligible for replacement if the product is received damaged, defective, or incorrect.</div>
                             </div>
                         </div>
                     </div>
@@ -462,7 +467,7 @@
     }
 
     .terms-list li::before {
-        content: '→';
+        content: '-';
         position: absolute;
         left: 0;
         color: var(--primary-color);

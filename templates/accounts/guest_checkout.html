@@ -7,6 +7,7 @@
 <section class="section-content padding-y">
   <div class="container">
     {% include 'base/alert.html' %}
+    {% include 'accounts/_checkout_steps.html' %}
     <div class="row justify-content-center">
       <div class="{% if coupon_enabled %}col-lg-7{% else %}col-md-8 col-lg-6{% endif %}">
         <div class="card">
@@ -21,13 +22,16 @@
               <input type="hidden" name="delivery_accuracy_meters" value="">
               {{ form|crispy }}
               <div class="guest-checkout-actions mt-3">
+                {% if cart.is_buy_now %}
+                <span class="btn btn-sm btn-outline-primary disabled" aria-disabled="true">Back to Cart</span>
+                {% else %}
                 <a class="btn btn-sm btn-outline-primary" href="{% url 'cart' %}">Back to Cart</a>
-                <button class="btn btn-sm btn-primary" type="submit">Check delivery charges</button>
+                {% endif %}
+                <button class="btn btn-sm btn-primary" type="submit">Continue to payment</button>
               </div>
             </form>
             {% else %}
-            <div class="card guest-delivery-address mt-3" aria-label="Delivery address">
-              <div class="card-header py-2 font-weight-bold">Delivery address</div>
+            <div class="card guest-delivery-address mt-3">
               <div class="card-body py-3">
                 <p class="guest-delivery-address-name mb-1">{{ shipping_address_summary.name }}</p>
                 <p class="guest-delivery-address-line mb-1">{{ shipping_address_summary.street }}</p>
@@ -45,6 +49,18 @@
             {% if quote_ready %}
             <div class="alert alert-info mt-4 mb-0" role="status" aria-live="polite">
               {% if quote_message %}<p class="font-weight-bold">{{ quote_message }}</p>{% endif %}
+              {% if delivery_promise %}<p class="mb-2">{{ delivery_promise }}</p>{% endif %}
+              <div class="small text-muted mb-2">
+                <p class="mb-1">
+                  <strong>Free Local Delivery:</strong>
+                  If your address is within {{ local_delivery_radius_km|floatformat:"-2" }} km from our base location, orders placed before {{ local_delivery_cutoff_time|time:"g:i A" }} IST may arrive within 4–5 hours. Orders placed later will still enjoy Free Local Delivery, although delivery times may vary.
+                </p>
+                {% if standard_delivery_enabled %}
+                <p class="mb-0">
+                  <strong>Standard Delivery:</strong> Most orders will arrive in 2–3 business days.
+                </p>
+                {% endif %}
+              </div>
               <div class="d-flex justify-content-between">
                 <span>Delivery charges</span>
                 <strong>{% if delivery_fee %}₹{{ delivery_fee }}{% else %}Free{% endif %}</strong>
@@ -57,14 +73,26 @@
               {% endif %}
               <div class="d-flex justify-content-between mt-2">
                 <span>Total to pay</span>
-                <strong>₹{{ cart_total_after_delivery|floatformat:2 }}</strong>
+                <strong id="guest-checkout-total"
+                        data-base-total="{{ cart_total_after_delivery|floatformat:2 }}">₹{{ cart_total_after_delivery|floatformat:2 }}</strong>
               </div>
             </div>
-            <form method="post" class="mt-3">
+            <form method="post" class="mt-3" id="guest-confirm-order-form">
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ next_url }}">
               <input type="hidden" name="confirm_order" value="1">
-              <button class="btn btn-success btn-block" type="submit">Confirm and place COD order</button>
+              {% if priority_delivery_eligible %}
+              <div class="custom-control custom-checkbox mb-3">
+                <input class="custom-control-input" type="checkbox" id="guest-priority-delivery"
+                       name="priority_delivery" {% if priority_delivery_selected %}checked{% endif %}>
+                <label class="custom-control-label" for="guest-priority-delivery">
+                  Prioritize my order for next-day delivery (additional ₹{{ priority_fee }}).
+                </label>
+              </div>
+              {% endif %}
+              <button class="btn btn-success btn-block" type="submit" id="guest-confirm-order-button">
+                Confirm and place COD order
+              </button>
             </form>
             {% endif %}
           </div>
@@ -89,7 +117,7 @@
           <div class="card-body">
             {% if cart.coupon %}
             <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap">
-              <span>Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied (₹{{ cart.coupon.discount_amount }} off).</span>
+              <span>Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied ({{ cart.coupon.discount_percentage }}% off, up to ₹{{ cart.coupon.discount_amount }}).</span>
               <form method="post">
                 {% csrf_token %}
                 <button type="submit" name="remove_checkout_coupon" class="btn btn-sm btn-outline-danger">Remove</button>
@@ -113,7 +141,7 @@
             <div class="guest-available-coupon border rounded p-2 mb-2 d-flex justify-content-between align-items-start">
               <div>
                 <strong>{{ coupon.coupon_code }}</strong>
-                <p class="small text-muted mb-0">₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.</p>
+                <p class="small text-muted mb-0">{{ coupon.discount_percentage }}% off up to ₹{{ coupon.discount_amount }} on orders of ₹{{ coupon.minimum_amount }} or more.</p>
               </div>
               {% if cart.coupon_id == coupon.uid %}
               <span class="badge badge-success">Applied</span>
@@ -137,6 +165,9 @@
     </div>
   </div>
 </section>
+{% if quote_ready %}
+{% include 'accounts/_payment_processing_overlay.html' %}
+{% endif %}
 <style>
   .guest-checkout-actions {
     display: flex;
@@ -370,7 +401,59 @@
 </style>
 <script>
   (function () {
+    var confirmOrderForm = document.getElementById('guest-confirm-order-form');
+    var processingOverlay = document.getElementById('payment-processing-overlay');
+    if (confirmOrderForm && processingOverlay) {
+      confirmOrderForm.addEventListener('submit', function () {
+        var button = document.getElementById('guest-confirm-order-button');
+        if (button) {
+          button.disabled = true;
+          button.setAttribute('aria-busy', 'true');
+        }
+        document.body.classList.add('payment-processing-active');
+        processingOverlay.showModal();
+      });
+    }
+
     var form = document.getElementById('guest-checkout-form');
+    var priorityCheckbox = document.getElementById('guest-priority-delivery');
+    var checkoutTotal = document.getElementById('guest-checkout-total');
+    if (priorityCheckbox && checkoutTotal) {
+      var priorityFee = Number("{{ priority_fee|default:'0'|escapejs }}");
+      var baseTotal = Number(checkoutTotal.dataset.baseTotal || 0);
+      priorityCheckbox.addEventListener('change', function () {
+        checkoutTotal.textContent = '₹' + (
+          baseTotal + (priorityCheckbox.checked ? priorityFee : 0)
+        ).toFixed(2);
+      });
+      if (priorityCheckbox.checked) {
+        priorityCheckbox.dispatchEvent(new Event('change'));
+      }
+    }
+    var addressFields = [
+      'first_name', 'last_name', 'street', 'street_number', 'zip_code',
+      'city', 'country', 'state', 'phone', 'email',
+    ];
+
+    document.querySelectorAll('.guest-checkout-coupon form').forEach(function (couponForm) {
+      couponForm.addEventListener('submit', function () {
+        couponForm.querySelectorAll('[data-preserved-address]').forEach(function (input) {
+          input.remove();
+        });
+        if (!form) return;
+
+        var formData = new FormData(form);
+        addressFields.forEach(function (field) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = field;
+          input.value = formData.get(field) || '';
+          input.setAttribute('data-preserved-address', '');
+          couponForm.appendChild(input);
+        });
+      });
+    });
+
     if (!form) return;
 
     var locationAdded = false;

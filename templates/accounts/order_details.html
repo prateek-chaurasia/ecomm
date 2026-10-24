@@ -332,7 +332,8 @@
               <div class="info-item">
                 <div class="info-label">Delivery Option</div>
                 <div class="info-value">{{ order.get_delivery_option_display }}{% if order.delivery_distance_km %} ({{ order.delivery_distance_km }} km from office){% endif %}</div>
-              </div>
+                  {% if order.delivery_promise %}<div class="info-value">{{ order.delivery_promise }}</div>{% endif %}
+                </div>
               {% endif %}
               <div class="info-item full-width">
                 <div class="info-label">Shipping Address</div>
@@ -364,12 +365,18 @@
             </div>
             <div class="summary-item">
               <span class="summary-label">Coupon Discount</span>
-              <span class="summary-value discount-value">-₹{{ order.coupon.discount_amount|default:"0" }}</span>
+              <span class="summary-value discount-value">-₹{{ coupon_discount|default:"0" }}</span>
             </div>
             <div class="summary-item">
               <span class="summary-label">Delivery charges</span>
               <span class="summary-value">{% if order.additional_delivery_fee %}₹{{ order.additional_delivery_fee }}{% else %}Free{% endif %}</span>
             </div>
+            {% if order.priority_delivery_fee %}
+            <div class="summary-item">
+              <span class="summary-label">Next-day priority delivery</span>
+              <span class="summary-value">₹{{ order.priority_delivery_fee }}</span>
+            </div>
+            {% endif %}
             <hr class="summary-divider">
             <div class="summary-item total-item">
               <span class="summary-label">Grand Total</span>

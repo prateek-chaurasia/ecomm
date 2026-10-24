@@ -1,6 +1,7 @@
 import json
 from io import BytesIO
-from datetime import timedelta
+from decimal import Decimal
+from datetime import time, timedelta
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth.models import User
@@ -13,6 +14,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from unittest.mock import patch
+from pypdf import PdfReader
 
 from accounts.models import (
     BundleCartItem, BundleCartProduct, BundleOrderItem, BundleOrderProduct,
@@ -24,13 +26,15 @@ from accounts.forms import (
     UserProfileForm, UserUpdateForm,
 )
 from accounts.views import create_order
+from accounts.invoices import build_invoice_context
 from base.emails import (
     send_account_activation_email, send_admin_new_order_email,
     send_order_confirmation_email,
 )
 from home.models import City, DeliveryGuideline, ReturnRefundPolicy, ShippingAddress, State
 from products.models import (
-    Category, Coupon, Product, ProductImage, ProductReview, SizeVariant,
+    Category, Coupon, GSTConfiguration, Product, ProductImage, ProductReview,
+    SizeVariant,
 )
 from PIL import Image
 
@@ -458,6 +462,23 @@ class CartItemQuantityUpdateTests(TestCase):
             html=False,
         )
 
+    def test_guest_cart_badge_shows_item_after_adding_to_cart(self):
+        self.client.logout()
+        response = self.client.post(
+            reverse('add_to_cart', args=[self.product.uid]),
+            {'quantity': 1},
+        )
+
+        self.assertRedirects(response, reverse('cart'))
+        response = self.client.get(reverse('cart'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<span class="badge badge-pill badge-danger notify" >1</span>',
+            html=False,
+        )
+
     def test_mobile_cart_layout_places_coupon_and_actions_after_totals(self):
         Coupon.objects.create(coupon_code='RESPONSIVE')
         response = self.client.get(reverse('cart'))
@@ -492,7 +513,7 @@ class CartItemQuantityUpdateTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'SAVE100')
-        self.assertContains(response, '₹100 off on orders of ₹500 or more.')
+        self.assertContains(response, '10% off up to ₹100 on orders of ₹500 or more.')
         self.assertContains(
             response,
             '<details class="card mb-3 cart-coupon-disclosure">',
@@ -848,7 +869,12 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.assertContains(response, 'is-current')
         self.assertContains(response, 'Checkout product')
         self.assertContains(response, 'Items subtotal')
-        self.assertContains(response, 'order total is below')
+        self.assertContains(
+            response,
+            'Applies because the order total is below the '
+            '₹1000.00 free-delivery threshold.',
+        )
+        self.assertNotContains(response, 'Next-day priority delivery')
         self.assertContains(response, 'Continue to payment')
         self.assertNotContains(response, 'Apply Coupon')
         self.assertNotContains(response, 'Have a coupon code?')
@@ -941,6 +967,152 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.cart.refresh_from_db()
         self.assertTrue(self.cart.is_paid)
 
+    def test_buy_now_checkout_purchases_only_new_item_and_preserves_existing_cart(self):
+        buy_now_product = Product.objects.create(
+            product_name='Buy Now product',
+            category=Category.objects.get(category_name='Checkout gifts'),
+            price=250,
+            product_desription='A separate Buy Now product',
+            stock_quantity=4,
+        )
+        response = self.client.post(
+            reverse('add_to_cart', args=[buy_now_product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('checkout'))
+        buy_now_cart = Cart.objects.get(user=self.user, is_buy_now=True, is_paid=False)
+        self.assertEqual(
+            list(buy_now_cart.cart_items.values_list('product_id', flat=True)),
+            [buy_now_product.pk],
+        )
+        checkout_response = self.client.get(reverse('checkout'))
+        self.assertEqual(checkout_response.context['cart'], buy_now_cart)
+        self.assertContains(checkout_response, 'Buy Now product')
+        self.assertNotContains(checkout_response, 'Checkout product')
+        self.assertContains(
+            checkout_response,
+            '<span class="btn btn-light mb-2 disabled" aria-disabled="true">Back to cart</span>',
+        )
+
+        payment_response = self.client.post(
+            reverse('checkout'),
+            {'selected_address_id': str(self.address.uid)},
+        )
+        self.assertRedirects(
+            payment_response,
+            f'{reverse("payment")}?address={self.address.uid}',
+            fetch_redirect_response=False,
+        )
+        order_response = self.client.post(
+            reverse('place_cod_order'),
+            {'selected_address_id': str(self.address.uid)},
+        )
+
+        self.assertEqual(order_response.status_code, 200, order_response.json())
+        order = Order.objects.get(user=self.user)
+        self.assertEqual(
+            list(order.order_items.values_list('product_id', flat=True)),
+            [buy_now_product.pk],
+        )
+        self.cart.refresh_from_db()
+        self.assertFalse(self.cart.is_paid)
+        self.assertEqual(self.cart.cart_items.get().product.product_name, 'Checkout product')
+        buy_now_cart.refresh_from_db()
+        self.assertTrue(buy_now_cart.is_paid)
+        cart_response = self.client.get(reverse('cart'))
+        self.assertContains(cart_response, 'Checkout product')
+        self.assertNotContains(cart_response, 'Buy Now product')
+
+    def test_standard_delivery_priority_fee_is_saved_and_included_in_total(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('800.00')
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.save()
+        ServiceablePincode.objects.create(pincode=self.address.zip_code)
+
+        response = self.client.post(
+            reverse('place_cod_order'),
+            data=json.dumps({
+                'selected_address_id': str(self.address.uid),
+                'priority_delivery': True,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        order = Order.objects.get(user=self.user)
+        self.assertEqual(order.delivery_option, Order.DeliveryOption.STANDARD)
+        self.assertTrue(order.is_priority_delivery)
+        self.assertEqual(order.priority_delivery_fee, Decimal('35.00'))
+        self.assertEqual(order.grand_total, Decimal('835.00'))
+        details = self.client.get(reverse('order_details', args=[order.order_id]))
+        self.assertContains(details, 'Order will be delivered next day.')
+        self.assertContains(details, 'Next-day priority delivery')
+
+    def test_priority_request_does_not_charge_when_delivery_is_not_standard(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.save()
+
+        response = self.client.post(
+            reverse('place_cod_order'),
+            data=json.dumps({
+                'selected_address_id': str(self.address.uid),
+                'priority_delivery': True,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        order = Order.objects.get(user=self.user)
+        self.assertEqual(order.delivery_option, '')
+        self.assertFalse(order.is_priority_delivery)
+        self.assertEqual(order.priority_delivery_fee, Decimal('0.00'))
+        self.assertEqual(order.grand_total, Decimal('880.00'))
+
+    def test_payment_page_hides_priority_below_free_delivery_threshold(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('801.00')
+        guideline.save()
+
+        response = self.client.get(
+            reverse('payment'),
+            {'address': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['priority_delivery_eligible'])
+        self.assertContains(response, 'id="priority-delivery-control"')
+        self.assertContains(response, 'id="priority-delivery-control"')
+        self.assertContains(response, 'hidden')
+        self.assertContains(response, 'Additional fee ₹')
+        self.assertNotContains(response, 'Only applies if Standard delivery is selected')
+
+    def test_payment_page_shows_delivery_explanations_and_priority_at_threshold(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('800.00')
+        guideline.free_delivery_radius_km = Decimal('3.00')
+        guideline.local_delivery_cutoff_time = time(5, 0)
+        guideline.save()
+
+        response = self.client.get(
+            reverse('payment'),
+            {'address': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['priority_delivery_eligible'])
+        self.assertContains(response, '<strong>Free Local Delivery:</strong>')
+        self.assertContains(response, 'within 3 km from our base location')
+        self.assertContains(response, 'before 5:00')
+        self.assertContains(response, 'IST may arrive within 4–5 hours')
+        self.assertContains(response, '<strong>Standard Delivery:</strong>')
+        self.assertContains(response, 'Prioritize my order for next-day delivery')
+        self.assertContains(response, 'Additional fee ₹')
+        self.assertNotContains(response, 'Only applies if Standard delivery is selected')
+        self.assertNotContains(response, 'id="priority-delivery-control" hidden')
+
     @override_settings(ONLINE_PAYMENT_ENABLED=False)
     def test_payment_page_shows_existing_payment_options_and_order_summary(self):
         response = self.client.get(
@@ -960,6 +1132,8 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.assertContains(response, 'connector-complete')
         self.assertContains(response, 'is-current')
         self.assertContains(response, 'images/misc/payments.png')
+        self.assertContains(response, 'Please wait')
+        self.assertContains(response, 'setPaymentProcessing(true, "Placing your Cash on Delivery order...")')
         self.assertContains(response, 'Visa, Mastercard, RuPay')
         self.assertContains(response, 'class="payment-method-actions"')
         self.assertContains(response, 'Supported payment methods')
@@ -978,6 +1152,21 @@ class RegisteredCheckoutFlowTests(TestCase):
         self.assertIn('.order-summary-column {\n      order: 1;', html)
         self.assertIn('@media (min-width: 992px)', html)
         self.assertIn('.payment-method-actions {\n      flex-direction: row;', html)
+
+    @override_settings(ONLINE_PAYMENT_ENABLED=True)
+    def test_online_payment_button_shows_processing_overlay_while_preparing_payment(self):
+        response = self.client.get(
+            reverse('payment'),
+            {'address': str(self.address.uid)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="rzp-button1"')
+        self.assertContains(response, 'id="payment-processing-overlay"')
+        self.assertContains(
+            response,
+            'setPaymentProcessing(true, "Preparing your secure online payment...")',
+        )
 
     def test_checkout_edit_link_opens_selected_address_form_and_returns_to_checkout(self):
         response = self.client.get(
@@ -1063,7 +1252,12 @@ class GuestCheckoutDeliveryTests(TestCase):
     def test_guest_checkout_shows_total_before_confirming_order(self):
         initial_response = self.client.get(reverse('guest-checkout'))
         self.assertEqual(initial_response.status_code, 200)
+        self.assertEqual(initial_response.context['current_step'], 'checkout')
+        self.assertContains(initial_response, 'aria-label="Checkout progress"')
+        self.assertContains(initial_response, 'aria-current="step"')
         self.assertContains(initial_response, 'We are currently operational across India.')
+        self.assertContains(initial_response, 'Continue to payment')
+        self.assertNotContains(initial_response, 'Check delivery charges')
         self.assertNotContains(initial_response, 'Delivery charges')
         self.assertContains(initial_response, 'data-validate-on-blur')
         self.assertContains(initial_response, 'select2-city')
@@ -1090,8 +1284,22 @@ class GuestCheckoutDeliveryTests(TestCase):
                 self.checkout_data(),
             )
             self.assertEqual(quote_response.status_code, 200)
+            self.assertEqual(quote_response.context['current_step'], 'payment')
+            self.assertContains(quote_response, 'aria-current="step"')
             self.assertContains(quote_response, 'Delivery charges')
             self.assertContains(quote_response, 'Total to pay')
+            self.assertContains(quote_response, 'Shipping Address')
+            self.assertEqual(
+                quote_response.content.count(
+                    b'class="card-header">Shipping Address</div>'
+                ),
+                1,
+            )
+            self.assertNotContains(quote_response, 'Delivery address')
+            self.assertContains(quote_response, 'id="guest-confirm-order-form"')
+            self.assertContains(quote_response, 'id="payment-processing-overlay"')
+            self.assertContains(quote_response, 'id="payment-processing-title">Please wait</h2>')
+            self.assertContains(quote_response, "processingOverlay.showModal()")
             for address_value in (
                 'Guest', 'Customer', 'Main Road', '12', 'New Delhi',
                 'Delhi', '110001', 'India', '9999999999',
@@ -1118,6 +1326,61 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertEqual(order.delivery_option, Order.DeliveryOption.STANDARD)
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertEqual(order.grand_total, 600)
+
+    def test_guest_buy_now_preserves_existing_cart_after_purchase(self):
+        buy_now_product = Product.objects.create(
+            product_name='Guest Buy Now item',
+            category=self.category,
+            price=250,
+            product_desription='A separate guest Buy Now item',
+            stock_quantity=4,
+        )
+        response = self.client.post(
+            reverse('add_to_cart', args=[buy_now_product.uid]),
+            {'quantity': 1, 'buy_now': '1'},
+        )
+
+        self.assertRedirects(response, reverse('guest-checkout'))
+        buy_now_cart = Cart.objects.get(is_buy_now=True, is_paid=False)
+        checkout_response = self.client.get(reverse('guest-checkout'))
+        self.assertEqual(checkout_response.context['cart'], buy_now_cart)
+        self.assertEqual(
+            list(buy_now_cart.cart_items.values_list('product_id', flat=True)),
+            [buy_now_product.pk],
+        )
+        self.assertContains(checkout_response, 'Guest Buy Now item')
+        self.assertContains(
+            checkout_response,
+            '<span class="btn btn-sm btn-outline-primary disabled" aria-disabled="true">Back to Cart</span>',
+        )
+
+        with patch('accounts.views.send_order_confirmation_email'), patch(
+            'accounts.views.send_admin_new_order_email'
+        ):
+            quote_response = self.client.post(
+                reverse('guest-checkout'),
+                self.checkout_data(),
+            )
+            self.assertEqual(quote_response.status_code, 200)
+            order_response = self.client.post(
+                reverse('guest-checkout'),
+                {'confirm_order': '1'},
+            )
+
+        self.assertEqual(order_response.status_code, 302)
+        order = Order.objects.get(guest_email='guest@example.com')
+        self.assertEqual(
+            list(order.order_items.values_list('product_id', flat=True)),
+            [buy_now_product.pk],
+        )
+        self.cart.refresh_from_db()
+        self.assertFalse(self.cart.is_paid)
+        self.assertEqual(self.cart.cart_items.get().product, self.product)
+        buy_now_cart.refresh_from_db()
+        self.assertTrue(buy_now_cart.is_paid)
+        cart_response = self.client.get(reverse('cart'))
+        self.assertContains(cart_response, 'Guest gift')
+        self.assertNotContains(cart_response, 'Guest Buy Now item')
 
     def test_buy_now_coupon_follows_shipping_address_and_appears_in_charge_breakdown(self):
         coupon = Coupon.objects.create(
@@ -1165,6 +1428,54 @@ class GuestCheckoutDeliveryTests(TestCase):
             quote_html.index('Total to pay'),
         )
         self.assertContains(quote_response, '−₹50')
+
+    def test_guest_coupon_changes_preserve_shipping_form_values(self):
+        coupon = Coupon.objects.create(
+            coupon_code='GUESTFORM',
+            discount_amount=50,
+            minimum_amount=500,
+            expiry_date=timezone.localdate() + timedelta(days=30),
+        )
+        session = self.client.session
+        session['buy_now_checkout_cart_uid'] = str(self.cart.uid)
+        session.save()
+
+        form_data = self.checkout_data()
+        form_data.update({'coupon': coupon.coupon_code, 'apply_coupon': '1'})
+        response = self.client.post(reverse('guest-checkout'), form_data)
+        self.assertRedirects(
+            response, reverse('guest-checkout'), fetch_redirect_response=False,
+        )
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.coupon, coupon)
+
+        response = self.client.get(reverse('guest-checkout'))
+        self.assertFalse(response.context['quote_ready'])
+        self.assertTrue(response.context['editing_address'])
+        self.assertEqual(response.context['form']['first_name'].value(), 'Guest')
+        self.assertEqual(response.context['form']['street'].value(), 'Main Road')
+        self.assertEqual(response.context['form']['street_number'].value(), '12')
+        self.assertEqual(response.context['form']['zip_code'].value(), '110001')
+        self.assertEqual(response.context['form']['city'].value(), str(self.city.pk))
+        self.assertEqual(response.context['form']['state'].value(), str(self.state.pk))
+        self.assertEqual(response.context['form']['phone'].value(), '9999999999')
+        self.assertEqual(
+            response.context['form']['email'].value(), 'guest@example.com',
+        )
+
+        remove_data = self.checkout_data()
+        remove_data['remove_checkout_coupon'] = '1'
+        response = self.client.post(reverse('guest-checkout'), remove_data)
+        self.assertRedirects(
+            response, reverse('guest-checkout'), fetch_redirect_response=False,
+        )
+        self.cart.refresh_from_db()
+        self.assertIsNone(self.cart.coupon)
+
+        response = self.client.get(reverse('guest-checkout'))
+        self.assertEqual(response.context['form']['first_name'].value(), 'Guest')
+        self.assertEqual(response.context['form']['city'].value(), str(self.city.pk))
+        self.assertEqual(response.context['form']['email'].value(), 'guest@example.com')
 
     def test_standard_guest_checkout_does_not_offer_or_apply_coupons(self):
         coupon = Coupon.objects.create(
@@ -1234,6 +1545,61 @@ class GuestCheckoutDeliveryTests(TestCase):
         self.assertEqual(response.status_code, 302)
         order = Order.objects.get(guest_email='guest@example.com')
         self.assertEqual(order.delivery_option, Order.DeliveryOption.EXPRESS)
+
+    def test_guest_can_prioritize_standard_delivery_at_configured_fee(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.save()
+
+        quote_response = self.client.post(
+            reverse('guest-checkout'), self.checkout_data(),
+        )
+        self.assertTrue(quote_response.context['priority_delivery_eligible'])
+        self.assertContains(quote_response, 'Prioritize my order for next-day delivery')
+        self.assertContains(quote_response, 'Most orders will arrive in 2–3 business days.')
+
+        with patch('accounts.views.send_order_confirmation_email'), patch(
+            'accounts.views.send_admin_new_order_email'
+        ):
+            response = self.client.post(reverse('guest-checkout'), {
+                'confirm_order': '1',
+                'priority_delivery': 'on',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(guest_email='guest@example.com')
+        self.assertEqual(order.delivery_option, Order.DeliveryOption.STANDARD)
+        self.assertTrue(order.is_priority_delivery)
+        self.assertEqual(order.priority_delivery_fee, Decimal('35.00'))
+        self.assertEqual(order.grand_total, Decimal('635.00'))
+
+    def test_guest_priority_is_hidden_and_rejected_below_free_delivery_threshold(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = Decimal('601.00')
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.save()
+
+        quote_response = self.client.post(
+            reverse('guest-checkout'), self.checkout_data(),
+        )
+
+        self.assertFalse(quote_response.context['priority_delivery_eligible'])
+        self.assertNotContains(
+            quote_response, 'Prioritize my order for next-day delivery')
+
+        with patch('accounts.views.send_order_confirmation_email'), patch(
+            'accounts.views.send_admin_new_order_email'
+        ):
+            response = self.client.post(reverse('guest-checkout'), {
+                'confirm_order': '1',
+                'priority_delivery': 'on',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(guest_email='guest@example.com')
+        self.assertFalse(order.is_priority_delivery)
+        self.assertEqual(order.priority_delivery_fee, Decimal('0.00'))
+        self.assertEqual(order.grand_total, Decimal('680.00'))
 
     def test_guest_checkout_accepts_nonserviceable_pincode_without_review(self):
         data = self.checkout_data()
@@ -1524,6 +1890,114 @@ class RegistrationTests(TestCase):
         self.assertContains(response, '/static/css/register.min.css')
         self.assertContains(response, 'class="google-img"')
         self.assertContains(response, 'class="fab fa-facebook-f facebook-icon"')
+        self.assertContains(response, 'Username, mobile number, or email address')
+
+    def test_user_can_login_with_username_email_or_shipping_mobile(self):
+        user = User.objects.create_user(
+            username='login-customer',
+            email='login-customer@example.com',
+            password='secret123',
+        )
+        user.profile.is_email_verified = True
+        user.profile.save(update_fields=['is_email_verified', 'updated_at'])
+        state = State.objects.get(country__code='IN', name='Uttarakhand')
+        city = city_for_state(state, 'Dehradun')
+        ShippingAddress.objects.create(
+            user=user,
+            first_name='Login',
+            last_name='Customer',
+            street='Main Road',
+            street_number='12',
+            zip_code='248001',
+            city=city,
+            country='IN',
+            state=state,
+            phone='9999999999',
+        )
+
+        for identifier in (
+            'login-customer',
+            'LOGIN-CUSTOMER@EXAMPLE.COM',
+            '9999999999',
+            '+91 9999999999',
+        ):
+            with self.subTest(identifier=identifier):
+                response = self.client.post(reverse('login'), {
+                    'username': identifier,
+                    'password': 'secret123',
+                })
+
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(
+                    self.client.session.get('_auth_user_id'), str(user.pk),
+                )
+                self.client.logout()
+
+    def test_correct_credentials_for_unverified_user_show_activation_message(self):
+        User.objects.create_user(
+            username='escape2728',
+            email='escape2728@gmail.com',
+            password='secret123',
+        )
+
+        for identifier in ('escape2728', 'escape2728@gmail.com'):
+            with self.subTest(identifier=identifier):
+                response = self.client.post(reverse('login'), {
+                    'username': identifier,
+                    'password': 'secret123',
+                })
+
+                self.assertRedirects(
+                    response, reverse('login'), fetch_redirect_response=False,
+                )
+                login_page = self.client.get(reverse('login'))
+                self.assertContains(
+                    login_page,
+                    'Your email address is not yet verified. Please activate your email first.',
+                )
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_inactive_unverified_user_with_correct_password_shows_activation_message(self):
+        User.objects.create_user(
+            username='inactive-unverified-customer',
+            email='inactive-unverified@example.com',
+            password='secret123',
+            is_active=False,
+        )
+
+        response = self.client.post(reverse('login'), {
+            'username': 'inactive-unverified@example.com',
+            'password': 'secret123',
+        })
+
+        self.assertRedirects(
+            response, reverse('login'), fetch_redirect_response=False,
+        )
+        login_page = self.client.get(reverse('login'))
+        self.assertContains(
+            login_page,
+            'Your email address is not yet verified. Please activate your email first.',
+        )
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_unverified_email_is_not_disclosed_when_password_is_invalid(self):
+        User.objects.create_user(
+            username='unverified-private',
+            email='private@example.com',
+            password='secret123',
+        )
+
+        response = self.client.post(reverse('login'), {
+            'username': 'private@example.com',
+            'password': 'wrong-password',
+        })
+
+        self.assertRedirects(
+            response, reverse('login'), fetch_redirect_response=False,
+        )
+        login_page = self.client.get(reverse('login'))
+        self.assertContains(login_page, 'Invalid username or password.')
+        self.assertNotContains(login_page, 'not yet verified')
 
     def test_invalid_email_stays_in_registration_form_with_inline_error(self):
         response = self.client.post(reverse('register'), {
@@ -1699,6 +2173,28 @@ class CustomerEmailBrandingTests(TestCase):
             for attachment in confirmation_email.attachments
         ))
 
+    def test_order_confirmation_includes_applied_coupon_details(self):
+        coupon = Coupon.objects.create(
+            coupon_code='SAVE20',
+            discount_percentage=20,
+            discount_amount=75,
+            minimum_amount=0,
+        )
+        self.order.coupon = coupon
+        self.order.save(update_fields=['coupon', 'updated_at'])
+
+        send_order_confirmation_email(self.order)
+
+        confirmation_email = mail.outbox[0]
+        confirmation_html = confirmation_email.alternatives[0][0]
+        self.assertIn(
+            'Coupon applied: <strong>SAVE20</strong> (20% off, maximum INR 75)',
+            confirmation_html,
+        )
+        self.assertIn('−INR 75.00', confirmation_html)
+        self.assertIn('Coupon applied: SAVE20 (20% off, maximum INR 75)', confirmation_email.body)
+        self.assertIn('Coupon discount: INR 75.00', confirmation_email.body)
+
     @override_settings(PUBLIC_BASE_URL='https://shop.example')
     def test_order_confirmation_embeds_small_product_thumbnail_and_keeps_invoice(self):
         image_bytes = BytesIO()
@@ -1737,6 +2233,57 @@ class CustomerEmailBrandingTests(TestCase):
         self.assertLessEqual(max(thumbnail.size), 96)
 
 
+class GuestOrderAccountLinkTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='guest-order-owner',
+            email='owner@example.com',
+            password='secret123',
+        )
+        self.order = Order.objects.create(
+            user=None,
+            guest_email='OWNER@example.com',
+            guest_name='Guest Buyer',
+            order_id='GUEST-ORDER-TO-CLAIM',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=100,
+            grand_total=100,
+        )
+
+    def test_verified_registered_user_sees_matching_guest_orders_after_login(self):
+        self.user.profile.is_email_verified = True
+        self.user.profile.save(update_fields=['is_email_verified', 'updated_at'])
+
+        self.client.force_login(self.user)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.user, self.user)
+        response = self.client.get(reverse('order_history'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.order_id)
+
+    def test_unverified_user_does_not_claim_matching_guest_orders(self):
+        self.client.force_login(self.user)
+
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.user)
+
+    def test_ambiguous_duplicate_email_does_not_claim_guest_orders(self):
+        self.user.profile.is_email_verified = True
+        self.user.profile.save(update_fields=['is_email_verified', 'updated_at'])
+        User.objects.create_user(
+            username='duplicate-email-owner',
+            email='OWNER@example.com',
+            password='secret123',
+        )
+
+        self.client.force_login(self.user)
+
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.user)
+
+
 class UserShippingAddressTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -1757,6 +2304,45 @@ class UserShippingAddressTests(TestCase):
         CartItem.objects.create(cart=self.cart, product=self.product, quantity=1)
         self.state = State.objects.get(country_id='IN', name='Uttarakhand')
         self.city = city_for_state(self.state, 'Dehradun')
+
+    def test_account_navigation_contains_reviews_orders_and_wishlist(self):
+        self.client.force_login(self.user)
+
+        for url_name, args in (
+            ('profile', [self.user.username]),
+            ('shipping-address', []),
+            ('change_password', []),
+            ('product_reviews', []),
+            ('order_history', []),
+            ('wishlist', []),
+        ):
+            with self.subTest(page=url_name):
+                response = self.client.get(reverse(url_name, args=args))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'aria-label="Account navigation"')
+                self.assertContains(response, 'My Reviews')
+                self.assertContains(response, 'My Orders')
+                self.assertContains(response, 'Wishlist (')
+                self.assertContains(response, 'aria-current="page"')
+                self.assertContains(response, 'account-settings-tabs')
+                if url_name in ('product_reviews', 'order_history', 'wishlist'):
+                    self.assertContains(response, 'account-details-card')
+                    self.assertContains(response, {
+                        'product_reviews': 'My Reviews',
+                        'order_history': 'My Orders',
+                        'wishlist': 'Wishlist</div>',
+                    }[url_name])
+
+        response = self.client.get(
+            reverse('profile', args=[self.user.username]),
+        )
+        primary_navigation = response.content.decode().split(
+            '<ul class="navbar-nav mr-auto"', 1,
+        )[1].split('</ul>', 1)[0]
+        self.assertNotIn(reverse('product_reviews'), primary_navigation)
+        self.assertNotIn(reverse('order_history'), primary_navigation)
+        self.assertNotIn(reverse('wishlist'), primary_navigation)
 
     def test_saved_addresses_are_individual_cards_with_shipping_address_badge(self):
         ShippingAddress.objects.create(
@@ -2070,6 +2656,193 @@ class UserShippingAddressTests(TestCase):
         response = self.client.get(reverse('download_invoice', args=[order.order_id]))
         self.assertEqual(response.status_code, 404)
 
+    def test_invoice_download_prints_order_item_values_on_first_page(self):
+        self.product.hsn_code = '39269099'
+        self.product.gst_rate = Decimal('18.00')
+        self.product.marked_price = 999
+        self.product.save(update_fields=['hsn_code', 'gst_rate', 'marked_price'])
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-INVOICE-ITEMS',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=Decimal('799.20'),
+            grand_total=Decimal('799.20'),
+            seller_state='Uttarakhand',
+            place_of_supply_state='Uttarakhand',
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=Decimal('799.20'),
+            original_product_price=Decimal('999.00'),
+            hsn_code='39269099',
+            gst_rate=Decimal('18.00'),
+        )
+        self.client.force_login(self.user)
+
+        invoice_context = build_invoice_context(order)
+        self.assertEqual(invoice_context['taxable_total'], Decimal('677.29'))
+        self.assertEqual(invoice_context['tax_total'], Decimal('121.91'))
+        self.assertEqual(invoice_context['discount_total'], Decimal('199.80'))
+        self.assertEqual(invoice_context['product_discount_total'], Decimal('199.80'))
+        self.assertEqual(invoice_context['coupon_discount_total'], Decimal('0.00'))
+        self.assertEqual(invoice_context['product_discount_percentage'], Decimal('20.00'))
+        self.assertEqual(invoice_context['invoice_total'], Decimal('799.20'))
+
+        response = self.client.get(reverse('download_invoice', args=[order.order_id]))
+
+        self.assertEqual(response.status_code, 200)
+        pdf = PdfReader(BytesIO(response.content))
+        first_page_text = pdf.pages[0].extract_text()
+        self.assertIn('Item / SKU', first_page_text)
+        self.assertIn('Puzzle Set', first_page_text.replace('\n', ' '))
+        self.assertIn('Qty', first_page_text)
+        self.assertIn('1', first_page_text)
+        self.assertIn('39269099', first_page_text.replace(' ', '').replace('\n', ''))
+        self.assertIn('CGST', first_page_text)
+        self.assertIn('SGST', first_page_text)
+        self.assertIn('BundleofGifts', first_page_text)
+        self.assertIn('Company GSTIN', first_page_text)
+        self.assertIn('[Company GST number]', first_page_text)
+        self.assertIn('Payment summary', first_page_text)
+        self.assertIn('Payment status', first_page_text)
+        self.assertIn('Pending', first_page_text)
+        self.assertIn('Payment method', first_page_text)
+        self.assertIn('Cash on Delivery', first_page_text)
+        self.assertIn('Product discount (20.00%)', first_page_text)
+        self.assertGreaterEqual(len(pdf.pages[0].images), 1)
+
+    def test_invoice_shows_paid_status_and_cash_on_delivery_method(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-PAID-COD-INVOICE',
+            payment_status='Paid',
+            payment_mode='Cash on Delivery',
+            order_total_price=100,
+            grand_total=100,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=100,
+            original_product_price=100,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('download_invoice', args=[order.order_id]))
+
+        self.assertEqual(response.status_code, 200)
+        invoice_text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn('Payment status', invoice_text)
+        self.assertIn('Paid', invoice_text)
+        self.assertIn('Payment method', invoice_text)
+        self.assertIn('Cash on Delivery', invoice_text)
+
+    def test_invoice_payment_summary_separates_product_and_coupon_discounts(self):
+        coupon = Coupon.objects.create(
+            coupon_code='SAVE25',
+            discount_amount=25,
+            discount_percentage=25,
+            minimum_amount=0,
+        )
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-SPLIT-DISCOUNTS',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=100,
+            grand_total=75,
+            coupon=coupon,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=100,
+            original_product_price=150,
+        )
+
+        invoice_context = build_invoice_context(order)
+
+        self.assertEqual(invoice_context['product_discount_total'], Decimal('50.00'))
+        self.assertEqual(invoice_context['product_discount_percentage'], Decimal('33.33'))
+        self.assertEqual(invoice_context['coupon_discount_total'], Decimal('25.00'))
+        self.assertEqual(invoice_context['discount_total'], Decimal('75.00'))
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('download_invoice', args=[order.order_id]))
+        self.assertEqual(response.status_code, 200)
+        invoice_text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn('Product discount (33.33%)', invoice_text)
+        self.assertIn('Coupon applied (SAVE25, 25%, max ₹25)', invoice_text)
+        self.assertIn('-₹25.00', invoice_text)
+
+    def test_order_item_preserves_non_numeric_hsn_reference_snapshot(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-HSN-LONG-CODE',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=100,
+            grand_total=100,
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=100,
+            original_product_price=100,
+            hsn_code='6809 / 6802',
+            gst_rate=Decimal('12.00'),
+        )
+
+        order_item.refresh_from_db()
+        self.assertEqual(order_item.hsn_code, '6809 / 6802')
+        self.assertEqual(order_item.gst_rate, Decimal('12.00'))
+
+    def test_exclusive_tax_mode_adds_gst_to_cart_total(self):
+        self.product.hsn_code = '39269099'
+        self.product.gst_rate = Decimal('18.00')
+        self.product.save(update_fields=['hsn_code', 'gst_rate'])
+        configuration = GSTConfiguration.get_solo()
+        configuration.prices_include_tax = False
+        configuration.save()
+
+        self.assertEqual(self.cart.get_cart_total(), Decimal('944.00'))
+        self.assertEqual(
+            self.cart.get_cart_total_price_after_coupon(),
+            Decimal('944.00'),
+        )
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-EXCLUSIVE-TAX',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=Decimal('944.00'),
+            grand_total=Decimal('944.00'),
+            prices_include_tax=False,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=Decimal('800.00'),
+            original_product_price=Decimal('800.00'),
+            hsn_code='39269099',
+            gst_rate=Decimal('18.00'),
+        )
+        invoice_context = build_invoice_context(order)
+        self.assertEqual(invoice_context['taxable_total'], Decimal('800.00'))
+        self.assertEqual(invoice_context['tax_total'], Decimal('144.00'))
+        self.assertEqual(invoice_context['invoice_total'], Decimal('944.00'))
+
+        configuration.prices_include_tax = True
+        configuration.save()
+        self.assertEqual(self.cart.get_cart_total(), Decimal('800.00'))
+
     def test_order_details_and_confirmation_show_delivery_fee(self):
         order = Order.objects.create(
             user=self.user,
@@ -2192,6 +2965,55 @@ class UserShippingAddressTests(TestCase):
         self.assertEqual(response.status_code, 200)
         amount = razorpay_client.return_value.order.create.call_args.args[0]['amount']
         self.assertEqual(amount, 88000)
+
+    @override_settings(
+        ONLINE_PAYMENT_ENABLED=True,
+        RAZORPAY_KEY_ID='test-key',
+        RAZORPAY_KEY_SECRET='test-secret',
+    )
+    def test_online_payment_amount_includes_standard_priority_fee(self):
+        guideline = DeliveryGuideline.get_solo()
+        guideline.delivery_charge_threshold = 800
+        guideline.delivery_fee = 80
+        guideline.priority_delivery_fee = Decimal('35.00')
+        guideline.save()
+        self.client.force_login(self.user)
+        address = ShippingAddress.objects.create(
+            user=self.user,
+            first_name='Alice',
+            last_name='Smith',
+            street='Main Street',
+            street_number='12',
+            zip_code='248001',
+            city=self.city,
+            country='IN',
+            state=self.state,
+            phone='9999999999',
+        )
+        ServiceablePincode.objects.create(pincode=address.zip_code)
+
+        with patch('accounts.views.razorpay.Client') as razorpay_client:
+            razorpay_client.return_value.order.create.return_value = {
+                'id': 'payment-order-priority',
+                'amount': 83500,
+                'currency': 'INR',
+            }
+            response = self.client.post(
+                reverse('create_payment_order'),
+                data=json.dumps({
+                    'selected_address_id': str(address.uid),
+                    'priority_delivery': True,
+                }),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        amount = razorpay_client.return_value.order.create.call_args.args[0]['amount']
+        self.assertEqual(amount, 83500)
+        self.cart.refresh_from_db()
+        self.assertEqual(
+            self.cart.razorpay_priority_delivery_fee, Decimal('35.00'))
+        self.assertTrue(self.cart.razorpay_priority_delivery)
 
     @override_settings(
         ONLINE_PAYMENT_ENABLED=True,

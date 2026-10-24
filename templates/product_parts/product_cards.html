@@ -36,6 +36,7 @@
         {% else %}
         <span class="product-current-price">₹{{ product.price }}.00</span>
         {% endif %}
+        <small class="d-block text-muted">{{ gst_price_label }}</small>
       </div>
       <a href="{% url 'get_product' product.slug %}" class="product-catalog-cta">View details <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
     </div>

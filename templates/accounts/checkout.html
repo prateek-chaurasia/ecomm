@@ -81,7 +81,7 @@
         <div class="alert alert-success cart-coupon-applied d-flex justify-content-between align-items-center flex-wrap">
           <span class="checkout-coupon-applied-message">
             Coupon <strong>{{ cart.coupon.coupon_code }}</strong> applied
-            (₹{{ cart.coupon.discount_amount }} off).
+            ({{ cart.coupon.discount_percentage }}% off, up to ₹{{ cart.coupon.discount_amount }}).
           </span>
           <form method="post" class="checkout-coupon-remove-form">
             {% csrf_token %}
@@ -110,7 +110,7 @@
             <div class="cart-available-coupon-details">
               <strong>{{ coupon.coupon_code }}</strong>
               <p class="small text-muted mb-0">
-                ₹{{ coupon.discount_amount }} off on orders of ₹{{ coupon.minimum_amount }} or more.
+                {{ coupon.discount_percentage }}% off up to ₹{{ coupon.discount_amount }} on orders of ₹{{ coupon.minimum_amount }} or more.
               </p>
             </div>
             {% if cart.coupon_id == coupon.uid %}
@@ -134,9 +134,13 @@
     {% endif %}
 
     <div class="d-flex justify-content-between flex-wrap">
+      {% if cart.is_buy_now %}
+      <span class="btn btn-light mb-2 disabled" aria-disabled="true">Back to cart</span>
+      {% else %}
       <a href="{% url 'cart' %}" class="btn btn-light mb-2">
         <i class="fa fa-chevron-left mr-1"></i>Back to cart
       </a>
+      {% endif %}
       {% if addresses %}
       <button type="submit" form="checkout-address-form" class="btn btn-primary mb-2">
           Continue to payment <i class="fa fa-chevron-right ml-1"></i>

@@ -1,4 +1,5 @@
 <div class="cart-charge-breakdown">
+  <small class="d-block text-muted mb-2">{{ gst_price_label }}</small>
   <div class="d-flex justify-content-between">
     <span>Items subtotal</span>
     <span>₹{{ cart.get_cart_total }}</span>
@@ -21,6 +22,6 @@
   <hr>
   <div class="d-flex justify-content-between font-weight-bold">
     <span>Total</span>
-    <span>₹{{ cart_total_after_delivery }}</span>
+    <span id="cart-total-amount" data-base-total="{{ cart_total_after_delivery }}">₹{{ cart_total_after_delivery }}</span>
   </div>
 </div>

@@ -1,9 +1,11 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from html.parser import HTMLParser
 from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from PIL import Image
 from django.contrib.auth.models import User
@@ -18,7 +20,7 @@ from django.utils import timezone
 from home.admin import HomeBannerAdminForm
 from home.delivery import (
     get_automatic_delivery_selection, get_delivery_fee, get_delivery_options,
-    validate_delivery_selection,
+    is_before_local_delivery_cutoff, validate_delivery_selection,
 )
 from home.models import (
     City, DeliveryGuideline, HomeBanner, MarqueeAnnouncement,
@@ -146,12 +148,48 @@ class DeliveryGuidelineTests(TestCase):
         self.assertEqual(option['label'], 'Standard delivery')
         self.assertEqual(
             option['description'],
-            'We strive to deliver your order at the earliest possible opportunity. '
-            'Most orders are delivered within 2-3 business days, subject to location '
+            'Most orders will arrive in 2–3 business days, subject to location '
             'and service availability.',
         )
         self.assertNotIn('next day', option['label'].casefold())
         self.assertNotIn('next day', option['description'].casefold())
+
+    def test_delivery_estimates_follow_local_daily_cutoff(self):
+        guideline = DeliveryGuideline(
+            operational_office_city='Dehradun',
+            operational_office_latitude=Decimal('30.316500'),
+            operational_office_longitude=Decimal('78.032200'),
+            free_delivery_radius_km=Decimal('5.00'),
+        )
+        local_timezone = ZoneInfo('Asia/Kolkata')
+        before_cutoff = timezone.make_aware(datetime(2025, 1, 1, 11, 59), local_timezone)
+        after_cutoff = timezone.make_aware(datetime(2025, 1, 1, 12, 0), local_timezone)
+
+        with patch('home.delivery.timezone.localtime', return_value=before_cutoff):
+            before_options = get_delivery_options(
+                guideline, 'Dehradun', 30.32, 78.03, 0, Decimal('600'))
+        with patch('home.delivery.timezone.localtime', return_value=after_cutoff):
+            after_options = get_delivery_options(
+                guideline, 'Dehradun', 30.32, 78.03, 0, Decimal('600'))
+
+        local_before = next(
+            option for option in before_options['options']
+            if option['value'] == 'local_free'
+        )
+        local_after = next(
+            option for option in after_options['options']
+            if option['value'] == 'local_free'
+        )
+        self.assertIn('within 4–5 hours', local_before['description'])
+        self.assertNotIn('within 4–5 hours', local_after['description'])
+        self.assertTrue(before_options['local_delivery_promise_available'])
+        self.assertFalse(after_options['local_delivery_promise_available'])
+        self.assertTrue(is_before_local_delivery_cutoff(
+            guideline, now=before_cutoff,
+        ))
+        self.assertFalse(is_before_local_delivery_cutoff(
+            guideline, now=after_cutoff,
+        ))
 
     def test_guideline_defaults_use_approved_delivery_copy(self):
         approved_copy = (
@@ -399,6 +437,34 @@ class ReturnRefundPolicyTests(TestCase):
         ):
             with self.subTest(content=content):
                 self.assertContains(response, content)
+
+    def test_site_pages_render_saved_return_refund_and_replace_html(self):
+        return_policy = ReturnRefundPolicy.get_solo()
+        return_policy.return_summary = '<ul><li>Return summary HTML</li></ul>'
+        return_policy.return_details = '<ul><li>Return details HTML</li></ul>'
+        return_policy.refund_summary = '<ul><li>Refund summary HTML</li></ul>'
+        return_policy.refund_details = '<ul><li>Refund details HTML</li></ul>'
+        return_policy.save()
+
+        replace_policy = ReplacePolicy.get_solo()
+        replace_policy.replace_summary = '<ul><li>Replace summary HTML</li></ul>'
+        replace_policy.replace_details = '<ul><li>Replace details HTML</li></ul>'
+        replace_policy.save()
+
+        for page_name in ('terms-and-conditions', 'about', 'contact'):
+            response = self.client.get(reverse(page_name))
+            self.assertEqual(response.status_code, 200)
+            for policy_html in (
+                '<ul><li>Return summary HTML</li></ul>',
+                '<ul><li>Return details HTML</li></ul>',
+                '<ul><li>Refund summary HTML</li></ul>',
+                '<ul><li>Refund details HTML</li></ul>',
+                '<ul><li>Replace summary HTML</li></ul>',
+                '<ul><li>Replace details HTML</li></ul>',
+            ):
+                with self.subTest(page=page_name, content=policy_html):
+                    self.assertContains(response, policy_html)
+            self.assertNotContains(response, '&lt;ul&gt;')
 
     def test_policy_page_is_linked_from_footer(self):
         response = self.client.get(reverse('index'))
@@ -759,6 +825,35 @@ class RenderBlockingResourceTests(TestCase):
 
 
 class InfiniteProductLoadingTests(TestCase):
+    def test_home_page_places_out_of_stock_products_after_in_stock_products(self):
+        category = Category.objects.create(category_name='Toys')
+        in_stock = Product.objects.create(
+            product_name='Zebra in stock',
+            category=category,
+            price=900,
+            product_desription='Available toy',
+            stock_quantity=2,
+        )
+        out_of_stock = Product.objects.create(
+            product_name='Apple out of stock',
+            category=category,
+            price=10,
+            product_desription='Unavailable toy',
+            stock_quantity=0,
+        )
+
+        default_response = self.client.get(reverse('index'))
+        self.assertEqual(
+            list(default_response.context['products'].object_list),
+            [in_stock, out_of_stock],
+        )
+
+        price_response = self.client.get(reverse('index'), {'sort': 'priceAsc'})
+        self.assertEqual(
+            list(price_response.context['products'].object_list),
+            [in_stock, out_of_stock],
+        )
+
     def test_home_page_returns_next_product_batch_for_ajax_requests(self):
         category = Category.objects.create(category_name='Toys')
         for product_number in range(21):

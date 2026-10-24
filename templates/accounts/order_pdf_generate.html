@@ -1,469 +1,305 @@
-{% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-
-  <title>{% block title %}Invoice - Order #{{ order.order_id }}{% endblock %}</title>
-
+  <meta charset="utf-8">
+  <title>Invoice {{ invoice_number }}</title>
   <style>
-    /* Modern Color System */
-    :root {
-      --primary-color: #6366f1;
-      --accent-color: #fbbf24;
-      --text-dark: #1e293b;
-      --text-muted: #64748b;
-      --bg-light: #f8fafc;
-      --border-light: #e2e8f0;
-      --success-color: #10b981;
-      --warning-color: #f59e0b;
-      --white: #ffffff;
+    @page {
+      size: A4;
+      margin: 12mm;
     }
 
     * {
-      margin: 0;
-      padding: 0;
       box-sizing: border-box;
     }
 
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      line-height: 1.6;
-      color: var(--text-dark);
-      background: var(--white);
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
-
-    /* Header Section */
-    .invoice-header {
-      background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
-      color: white;
-      padding: 2rem;
-      border-radius: 16px;
-      margin-bottom: 2rem;
-      text-align: center;
-    }
-
-    .invoice-title {
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 0.5rem;
-    }
-
-    .invoice-subtitle {
-      font-size: 1.2rem;
-      opacity: 0.9;
-      font-weight: 500;
-    }
-
-    /* Modern Card Styles */
-    .modern-card {
-      background: var(--white);
-      border-radius: 16px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-      overflow: hidden;
-      margin-bottom: 2rem;
-    }
-
-    .card-header {
-      background: var(--bg-light);
-      padding: 1.5rem;
-      border-bottom: 2px solid var(--border-light);
-    }
-
-    .card-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      color: var(--text-dark);
       margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      color: #263238;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9pt;
+      line-height: 1.35;
     }
 
-    .card-body {
-      padding: 1.5rem;
-    }
-
-    /* Table Styles */
-    .table-container {
-      overflow-x: auto;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    }
-
-    .modern-table {
+    table {
       width: 100%;
       border-collapse: collapse;
-      background: var(--white);
+      table-layout: fixed;
     }
 
-    .modern-table thead {
-      background: var(--primary-color);
-      color: white;
-    }
-
-    .modern-table th {
-      padding: 1rem;
+    td,
+    th {
+      padding: 6px 7px;
+      border: 1px solid #d7dee5;
+      vertical-align: top;
       text-align: left;
-      font-weight: 600;
-      font-size: 0.875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      overflow-wrap: anywhere;
     }
 
-    .modern-table td {
-      padding: 1rem;
-      border-bottom: 1px solid var(--border-light);
+    .invoice-header td {
+      padding: 7px 9px;
+      background: #f3f6f9;
+      vertical-align: middle;
     }
 
-    .modern-table tbody tr:hover {
-      background: var(--bg-light);
+    .brand {
+      width: 65%;
+      color: #263b64;
+      font-size: 13pt;
+      font-weight: bold;
     }
 
-    .modern-table tbody tr:last-child td {
-      border-bottom: none;
+    .brand-icon {
+      width: 25px;
+      height: 25px;
+      margin-right: 6px;
+      vertical-align: middle;
     }
 
-    /* Badge Styles */
-    .badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.875rem;
-      font-weight: 500;
+    .gstin {
+      text-align: right;
+      font-weight: bold;
     }
 
-    .badge-primary {
-      background: var(--primary-color);
-      color: white;
+    .invoice-kind {
+      margin-top: 3px;
+      color: #526170;
+      font-size: 9pt;
+      font-weight: normal;
     }
 
-    .badge-accent {
-      background: var(--accent-color);
-      color: var(--text-dark);
+    .section {
+      margin-top: 10px;
     }
 
-    .badge-success {
-      background: var(--success-color);
-      color: white;
+    .section-title {
+      padding: 6px 8px;
+      background: #eaf0f5;
+      color: #263b64;
+      font-size: 10pt;
+      font-weight: bold;
     }
 
-    /* Info Grid */
-    .info-grid {
-      display: grid;
-      gap: 1rem;
+    .label {
+      width: 17%;
+      color: #526170;
+      font-weight: bold;
     }
 
-    .info-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid var(--border-light);
+    .metadata td {
+      width: 25%;
     }
 
-    .info-item:last-child {
-      border-bottom: none;
+    .metadata .label {
+      width: 17%;
     }
 
-    .info-label {
-      font-weight: 600;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+    .parties td {
+      width: 50%;
     }
 
-    .info-value {
-      font-weight: 700;
-      color: var(--text-dark);
+    .items {
+      font-size: 7.5pt;
+    }
+
+    .items th {
+      background: #eaf0f5;
+      color: #263b64;
+      font-size: 7.5pt;
+    }
+
+    .items th:nth-child(1) { width: 21%; }
+    .items th:nth-child(2) { width: 6%; }
+    .items th:nth-child(3) { width: 9%; }
+    .items th:nth-child(4) { width: 9%; }
+    .items th:nth-child(5) { width: 10%; }
+    .items th:nth-child(6) { width: 12%; }
+    .items th:nth-child(7) { width: 7%; }
+    .items th:nth-child(8) { width: 13%; }
+    .items th:nth-child(9) { width: 13%; }
+
+    .items td:nth-child(n+2) {
       text-align: right;
     }
 
-    /* Summary Styles */
-    .summary-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.75rem 0;
+    .items td:nth-child(6) {
+      text-align: left;
     }
 
-    .summary-divider {
-      border: none;
-      height: 2px;
-      background: var(--border-light);
-      margin: 1rem 0;
+    .items tr,
+    .summary tr,
+    .metadata tr,
+    .parties tr {
+      page-break-inside: avoid;
     }
 
-    .total-item {
-      background: var(--bg-light);
-      padding: 1rem;
-      border-radius: 8px;
-      margin-top: 1rem;
+    .summary .amount {
+      width: 25%;
+      text-align: right;
     }
 
-    .total-item .info-label,
-    .total-item .info-value {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: var(--text-dark);
+    .discount {
+      color: #18794e;
     }
 
-    .discount-value {
-      color: var(--success-color);
+    .total-row td {
+      background: #f3f6f9;
+      font-weight: bold;
     }
 
-    /* Layout */
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      margin: -1rem;
-    }
-
-    .col-12 {
-      flex: 0 0 100%;
-      max-width: 100%;
-      padding: 1rem;
-    }
-
-    .col-8 {
-      flex: 0 0 66.666667%;
-      max-width: 66.666667%;
-      padding: 1rem;
-    }
-
-    .col-4 {
-      flex: 0 0 33.333333%;
-      max-width: 33.333333%;
-      padding: 1rem;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-
-      .col-8,
-      .col-4 {
-        flex: 0 0 100%;
-        max-width: 100%;
-      }
-
-      .container {
-        padding: 1rem;
-      }
-
-      .invoice-title {
-        font-size: 2rem;
-      }
-    }
-
-    @media print {
-      .row {
-        display: block;
-        margin: 0;
-      }
-
-      .col-8,
-      .col-4 {
-        display: block;
-        width: 100%;
-        max-width: 100%;
-        padding: 0;
-      }
-
-      .info-item,
-      .summary-item {
-        display: grid;
-        grid-template-columns: 35% 65%;
-        align-items: start;
-        column-gap: 0.75rem;
-      }
-
-      .info-value {
-        min-width: 0;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-        text-align: left;
-        font-size: 0.8rem;
-      }
-
-      .info-label {
-        font-size: 0.75rem;
-      }
-
-      .summary-item .info-value {
-        text-align: right;
-        font-size: 0.9rem;
-      }
-
-      .modern-card {
-        page-break-inside: avoid;
-      }
+    .note {
+      margin-top: 8px;
+      color: #526170;
+      font-size: 8pt;
     }
   </style>
 </head>
-
 <body>
-  <div class="container">
-    <!-- Invoice Header -->
-    <div class="invoice-header">
-      <h1 class="invoice-title">INVOICE</h1>
-      <p class="invoice-subtitle">Order #{{ order.order_id }}</p>
-    </div>
+  <table class="invoice-header">
+    <tr>
+      <td class="brand">
+        <img class="brand-icon" src="{{ brand_icon_data }}" alt="">
+        BundleofGifts
+        <div class="invoice-kind">Tax Invoice · Original for recipient</div>
+      </td>
+      <td class="gstin">
+        Company GSTIN<br>
+        {{ invoice_settings.seller_gstin|default:"[Company GST number]" }}
+      </td>
+    </tr>
+  </table>
 
-    <!-- Order Items Section -->
-    <div class="modern-card">
-      <div class="card-header">
-        <h2 class="card-title">
-          Order Items
-        </h2>
-      </div>
-      <div class="card-body">
-        <div class="table-container">
-          <table class="modern-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Size</th>
-                <th>Color</th>
-                <th>Quantity</th>
-                <th style="text-align: right;">Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in order_items.all %}
-              <tr>
-                <td>
-                  <strong>{{ item.product.product_name }}</strong>
-                </td>
-                <td>
-                  <span class="badge badge-primary">{{ item.size_variant.size_name|default:"N/A" }}</span>
-                </td>
-                {% if item.size_variant %}
-                  {% for color in item.product.color_variant.all %}
-                  <td>
-                    <span class="badge badge-primary">{{ color.color_name|default:"N/A" }}</span>
-                  </td>
-                  {% endfor %}
-                {% else %}
-                  <td>
-                    <span class="badge badge-primary">N/A</span>
-                  </td>
-                {% endif %}
-                <td>
-                  <span class="badge badge-accent">{{ item.quantity }}</span>
-                </td>
-                <td style="text-align: right;">
-                  <strong>₹{{ item.product_price }}</strong>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+  <table class="metadata section">
+    <tr><th class="section-title" colspan="4">Invoice details</th></tr>
+    <tr>
+      <td class="label">Invoice number</td><td>{{ invoice_number }}</td>
+      <td class="label">Order number</td><td>{{ order.order_id }}</td>
+    </tr>
+    <tr>
+      <td class="label">Order date</td><td>{{ order.order_date|date:"d-m-Y" }}</td>
+      <td class="label">Invoice date</td><td>{{ invoice_date|date:"d-m-Y" }}</td>
+    </tr>
+    <tr>
+      <td class="label">Date of supply</td><td>{{ date_of_supply|date:"d-m-Y" }}</td>
+      <td class="label">Place of supply</td><td>{{ order.place_of_supply_state|default:"Not specified" }}</td>
+    </tr>
+    {% if invoice_settings.seller_state %}
+    <tr>
+      <td class="label">Seller state</td>
+      <td colspan="3">{{ invoice_settings.seller_state }}{% if invoice_settings.seller_state_code %} (Code {{ invoice_settings.seller_state_code }}){% endif %}</td>
+    </tr>
+    {% endif %}
+    {% if invoice_settings.seller_address %}
+    <tr><td class="label">Company address</td><td colspan="3">{{ invoice_settings.seller_address|linebreaksbr }}</td></tr>
+    {% endif %}
+    {% if invoice_settings.seller_email %}
+    <tr><td class="label">Company email</td><td colspan="3">{{ invoice_settings.seller_email }}</td></tr>
+    {% endif %}
+  </table>
 
-    <div class="row">
-      <!-- Order Information -->
-      <div class="col-8">
-        <div class="modern-card">
-          <div class="card-header">
-            <h2 class="card-title">
-              Order Information
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">Order ID</span>
-                <span class="info-value">{{ order.order_id }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Order Date</span>
-                <span class="info-value">{{ order.order_date|date:"F j, Y" }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Customer Name</span>
-                <span class="info-value">
-                  {% if order.user and order.user.first_name or order.user and order.user.last_name %}
-                    {{ order.user.first_name }} {{ order.user.last_name }}
-                  {% elif order.user and order.user.get_full_name %}
-                    {{ order.user.get_full_name }}
-                  {% elif order.user %}
-                    {{ order.user.username }}
-                  {% else %}
-                    {{ order.guest_name }}
-                  {% endif %}
-                </span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Payment Status</span>
-                <span class="info-value">
-                  <span
-                    class="badge {% if order.payment_status == 'Paid' %}badge-success{% else %}badge-accent{% endif %}">
-                    {{ order.payment_status }}
-                  </span>
-                </span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Payment Mode</span>
-                <span class="info-value">{{ order.payment_mode }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Customer Email</span>
-                <span class="info-value">{% if order.user %}{{ order.user.email }}{% else %}{{ order.guest_email }}{% endif %}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Shipping Address</span>
-                <span class="info-value">{{ order.shipping_address|default:"Not Provided" }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+  <table class="parties section">
+    <tr><th class="section-title">Bill to</th><th class="section-title">Ship to</th></tr>
+    <tr>
+      <td>
+        <strong>{{ invoice_customer_name|default:"Customer" }}</strong><br>
+        {{ order.shipping_address|default:"Not provided"|linebreaksbr }}
+        {% if invoice_customer_email %}<br>{{ invoice_customer_email }}{% endif %}
+      </td>
+      <td>{{ order.shipping_address|default:"Not provided"|linebreaksbr }}</td>
+    </tr>
+  </table>
 
-      <!-- Payment Summary -->
-      <div class="col-4">
-        <div class="modern-card">
-          <div class="card-header">
-            <h2 class="card-title">
-              Payment Summary
-            </h2>
-          </div>
-          <div class="card-body">
-            <div class="summary-item">
-              <span class="info-label">Subtotal</span>
-              <span class="info-value">₹{{ order.order_total_price }}</span>
-            </div>
-            <div class="summary-item">
-              <span class="info-label">Coupon Discount</span>
-              <span class="info-value discount-value">-₹{{ order.coupon.discount_amount|default:"0" }}</span>
-            </div>
-            <div class="summary-item">
-              <span class="info-label">Delivery charges</span>
-              <span class="info-value">{% if order.additional_delivery_fee %}₹{{ order.additional_delivery_fee }}{% else %}Free{% endif %}</span>
-            </div>
-            <hr class="summary-divider">
-            <div class="total-item">
-              <div class="summary-item">
-                <span class="info-label">Grand Total</span>
-                <span class="info-value">₹{{ order.grand_total }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <table class="items section">
+    <thead>
+      <tr>
+        <th>Item / SKU</th>
+        <th>Qty</th>
+        <th>Rate (₹)</th>
+        <th>Discount (₹)</th>
+        <th>Taxable (₹)</th>
+        <th>HSN</th>
+        <th>GST %</th>
+        <th>Tax (₹)</th>
+        <th>Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in invoice_lines %}
+      <tr>
+        <td>
+          <strong>{{ item.name }}</strong>
+          {% if item.sku %}<br>SKU: {{ item.sku }}{% endif %}
+          {% if item.size %}<br>Size: {{ item.size }}{% endif %}
+          {% if item.color %}<br>Color: {{ item.color }}{% endif %}
+        </td>
+        <td>{{ item.quantity }}</td>
+        <td>{{ item.unit_price|floatformat:2 }}</td>
+        <td>{{ item.discount|floatformat:2 }}</td>
+        <td>{{ item.taxable_amount|floatformat:2 }}</td>
+        <td>{{ item.hsn_code|default:"Not set" }}</td>
+        <td>{{ item.gst_rate|floatformat:2 }}%</td>
+        <td>
+          {% if same_state_supply %}
+            CGST {{ item.cgst|floatformat:2 }}<br>
+            SGST {{ item.sgst|floatformat:2 }}
+          {% elif tax_type_configured %}
+            IGST {{ item.igst|floatformat:2 }}
+          {% else %}
+            GST {{ item.tax_amount|floatformat:2 }}
+          {% endif %}
+        </td>
+        <td><strong>{{ item.line_total|floatformat:2 }}</strong></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9">No product lines found for this order.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if invoice_lines %}
+    <tfoot>
+      <tr>
+        <th colspan="2">Total quantity: {{ total_quantity }}</th>
+        <th colspan="7">Taxable value ₹{{ taxable_total|floatformat:2 }} · Tax ₹{{ tax_total|floatformat:2 }}</th>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+
+  <table class="summary section">
+    <tr><th class="section-title" colspan="2">Payment summary</th></tr>
+    <tr>
+      <td>Product prices</td>
+      <td class="amount">{% if order.prices_include_tax %}Including tax{% else %}Excluding tax{% endif %}</td>
+    </tr>
+    <tr><td>Payment status</td><td class="amount">{{ order.payment_status|default:"Not specified" }}</td></tr>
+    <tr><td>Payment method</td><td class="amount">{{ order.payment_mode|default:"Not specified" }}</td></tr>
+    <tr><td>Total amount before tax</td><td class="amount">₹{{ taxable_total|floatformat:2 }}</td></tr>
+    <tr><td>Total tax amount</td><td class="amount">₹{{ tax_total|floatformat:2 }}</td></tr>
+    {% if same_state_supply %}
+    <tr><td>CGST / SGST</td><td class="amount">₹{{ cgst_total|floatformat:2 }} / ₹{{ sgst_total|floatformat:2 }}</td></tr>
+    {% elif tax_type_configured %}
+    <tr><td>IGST</td><td class="amount">₹{{ igst_total|floatformat:2 }}</td></tr>
+    {% else %}
+    <tr><td>GST (state not configured)</td><td class="amount">₹{{ tax_total|floatformat:2 }}</td></tr>
+    {% endif %}
+    <tr>
+      <td>Product discount ({{ product_discount_percentage|floatformat:2 }}%)</td>
+      <td class="amount discount">-₹{{ product_discount_total|floatformat:2 }}</td>
+    </tr>
+    {% if coupon_code %}
+    <tr>
+      <td>Coupon applied ({{ coupon_code }}, {{ coupon_discount_percentage }}%, max ₹{{ coupon_discount_cap }})</td>
+      <td class="amount discount">-₹{{ coupon_discount_total|floatformat:2 }}</td>
+    </tr>
+    {% endif %}
+    <tr><td>Total discount</td><td class="amount discount">-₹{{ discount_total|floatformat:2 }}</td></tr>
+    <tr><td>Shipping amount</td><td class="amount">₹{{ shipping_amount|floatformat:2 }}</td></tr>
+    {% if priority_delivery_amount %}
+    <tr><td>Next-day priority delivery</td><td class="amount">₹{{ priority_delivery_amount|floatformat:2 }}</td></tr>
+    {% endif %}
+    <tr class="total-row"><td>Total amount after tax</td><td class="amount">₹{{ invoice_total|floatformat:2 }}</td></tr>
+    <tr><td>Round off</td><td class="amount">₹{{ round_off|floatformat:2 }}</td></tr>
+    <tr class="total-row"><td>Total payable</td><td class="amount">₹{{ invoice_total|floatformat:2 }}</td></tr>
+    <tr><td colspan="2" class="note">This is a computer-generated invoice and does not require a signature.</td></tr>
+  </table>
 </body>
-
 </html>
