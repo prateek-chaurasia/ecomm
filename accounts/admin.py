@@ -2,9 +2,12 @@ from datetime import datetime, timedelta
 
 from django.contrib import admin
 from django import forms
+from django.core.exceptions import PermissionDenied
+from django.http import Http404
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.conf import settings
+from django.urls import path, reverse
 import logging
 import razorpay
 from base.admin import FilterCollapsibleModelAdmin, PaginatedModelAdmin
@@ -221,7 +224,8 @@ class ServiceablePincodeAdmin(FilterCollapsibleModelAdmin):
 @admin.register(Order)
 class OrderAdmin(PaginatedModelAdmin):
     list_display = (
-        'order_id', 'product_thumbnails', 'customer_name', 'delivery_pincode', 'delivery_option',
+        'order_id', 'invoice_links', 'product_thumbnails', 'customer_name',
+        'delivery_pincode', 'delivery_option',
         'status', 'additional_delivery_fee', 'is_priority_delivery',
         'priority_delivery_fee', 'payment_status',
         'grand_total', 'order_date',
@@ -243,6 +247,54 @@ class OrderAdmin(PaginatedModelAdmin):
         return super().get_queryset(request).prefetch_related(
             'order_items__product__product_images',
             'bundle_items__selected_products__product__product_images',
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<path:object_id>/invoice/view/',
+                self.admin_site.admin_view(self.view_invoice),
+                name='accounts_order_view_invoice',
+            ),
+            path(
+                '<path:object_id>/invoice/download/',
+                self.admin_site.admin_view(self.download_invoice),
+                name='accounts_order_download_invoice',
+            ),
+        ]
+        return custom_urls + urls
+
+    def _invoice_response(self, request, object_id, disposition):
+        order = self.get_object(request, object_id)
+        if order is None:
+            raise Http404
+        if not self.has_view_or_change_permission(request, order):
+            raise PermissionDenied
+
+        from accounts.invoices import build_invoice_context
+        from accounts.views import render_to_pdf
+
+        context = build_invoice_context(order)
+        return render_to_pdf(
+            'accounts/order_pdf_generate.html',
+            context,
+            disposition=disposition,
+        )
+
+    def view_invoice(self, request, object_id):
+        return self._invoice_response(request, object_id, 'inline')
+
+    def download_invoice(self, request, object_id):
+        return self._invoice_response(request, object_id, 'attachment')
+
+    @admin.display(description='Invoice')
+    def invoice_links(self, obj):
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">View</a> | '
+            '<a href="{}">Download</a>',
+            reverse('admin:accounts_order_view_invoice', args=[obj.pk]),
+            reverse('admin:accounts_order_download_invoice', args=[obj.pk]),
         )
 
     @admin.display(description='Products')
@@ -331,7 +383,7 @@ class ReturnRequestImageInline(ReturnShipmentImageInline):
 @admin.register(ReturnRequest)
 class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
     list_display = (
-        'order', 'requested_item_name', 'request_type',
+        'order', 'product_thumbnail', 'requested_item_name', 'request_type',
         'replacement_reason', 'status',
         'courier_partner_name', 'tracking_number',
         'replacement_tracking_number', 'item_condition', 'deduction_amount',
@@ -379,6 +431,43 @@ class ReturnRequestAdmin(FilterCollapsibleModelAdmin):
         if not obj or obj.request_type != ReturnRequest.RequestType.RETURN:
             return 'Not applicable'
         return f'INR {obj.calculated_refund_amount:,.2f}'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'order_item__product',
+            'bundle_order_product__product',
+        ).prefetch_related(
+            'order_item__product__product_images',
+            'bundle_order_product__product__product_images',
+        )
+
+    @admin.display(description='Product')
+    def product_thumbnail(self, obj):
+        if obj.order_item_id:
+            product = obj.order_item.product
+        elif obj.bundle_order_product_id:
+            product = obj.bundle_order_product.product
+        else:
+            return '—'
+
+        if not product:
+            return '—'
+        image = next(
+            (
+                image for image in product.product_images.all()
+                if image.image_url
+            ),
+            None,
+        )
+        if not image:
+            return '—'
+        return format_html(
+            '<img src="{}" alt="{}" title="{}" width="48" height="48" '
+            'style="object-fit: cover; border-radius: 4px;" />',
+            image.thumbnail_url,
+            product.product_name,
+            product.product_name,
+        )
 
     def save_model(self, request, obj, form, change):
         if obj.request_type == ReturnRequest.RequestType.RETURN:

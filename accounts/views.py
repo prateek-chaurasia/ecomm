@@ -1499,7 +1499,7 @@ def success(request):
 
 
 # HTML to PDF Conversion
-def render_to_pdf(template_src, context_dict={}):
+def render_to_pdf(template_src, context_dict={}, disposition='attachment'):
     template = get_template(template_src)
     context = dict(context_dict)
     brand_icon_path = finders.find('images/bundleofgifts-icon.png')
@@ -1515,7 +1515,9 @@ def render_to_pdf(template_src, context_dict={}):
     pdf_file = HTML(string=html).write_pdf()
 
     response = HttpResponse(pdf_file, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="invoice_{context_dict["order"].order_id}.pdf"'
+    response['Content-Disposition'] = (
+        f'{disposition}; filename="invoice_{context_dict["order"].order_id}.pdf"'
+    )
     return response
 
 

@@ -1823,6 +1823,46 @@ class OrderAdminFilterTests(TestCase):
         )
         self.assertContains(response, 'alt="Admin order gift"', html=False)
 
+    def test_order_admin_lists_view_and_download_invoice_links(self):
+        response = self.client.get(reverse('admin:accounts_order_changelist'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse(
+                'admin:accounts_order_view_invoice',
+                args=[self.placed_order.pk],
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                'admin:accounts_order_download_invoice',
+                args=[self.placed_order.pk],
+            ),
+        )
+
+    def test_order_admin_can_view_and_download_invoice(self):
+        view_response = self.client.get(reverse(
+            'admin:accounts_order_view_invoice',
+            args=[self.placed_order.pk],
+        ))
+        download_response = self.client.get(reverse(
+            'admin:accounts_order_download_invoice',
+            args=[self.placed_order.pk],
+        ))
+
+        for response in (view_response, download_response):
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response['Content-Type'], 'application/pdf')
+            self.assertTrue(response.content.startswith(b'%PDF'))
+        self.assertTrue(
+            view_response['Content-Disposition'].startswith('inline;'),
+        )
+        self.assertTrue(
+            download_response['Content-Disposition'].startswith('attachment;'),
+        )
+
     def test_order_changelist_supports_page_sizes_and_preserves_filters(self):
         for index in range(26):
             self._create_order(
@@ -4610,6 +4650,36 @@ class ReturnWorkflowTests(TestCase):
                 return_request.status,
                 ReturnRequest.Status.REPLACEMENT_COMPLETED,
             )
+
+    def test_return_request_admin_list_shows_requested_product_thumbnail(self):
+        order_item = self.order.order_items.get(product=self.product)
+        ReturnRequest.objects.create(
+            order=self.order,
+            order_item=order_item,
+            reason='Changed my mind.',
+        )
+        admin_user = User.objects.create_superuser(
+            username='return-list-admin',
+            email='return-list-admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+
+        with TemporaryDirectory() as media_root, override_settings(
+            MEDIA_ROOT=media_root,
+        ):
+            product_image = ProductImage.objects.create(
+                product=self.product,
+                image_url=self.create_request_photo('return-product.png'),
+            )
+            thumbnail_url = product_image.thumbnail_url
+            response = self.client.get(
+                reverse('admin:accounts_returnrequest_changelist'),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, thumbnail_url)
+        self.assertContains(response, 'Returnable gift')
 
     @override_settings(
         RAZORPAY_KEY_ID='test-key',
