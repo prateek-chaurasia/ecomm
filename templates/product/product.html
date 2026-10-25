@@ -766,10 +766,10 @@
                   {% if product.in_stock %}In stock{% else %}Out of stock{% endif %}
                 </div>
               </div>
-              {% if product.gift_wrap_available and product.gift_wrap_price > 0 %}
+              {% if product.gift_wrap_available %}
               <label class="gift-wrap-option w-100 mb-3 ml-3" for="gift-wrap">
-                <input type="checkbox" id="gift-wrap" class="mr-2" aria-describedby="gift-wrap-help">
-                <span><strong><i class="fas fa-gift mr-1"></i>Add gift wrap</strong><br><small id="gift-wrap-help">+₹{{ product.gift_wrap_price }} per item. Total updates with quantity.</small></span>
+                <input type="checkbox" id="gift-wrap" class="mr-2" aria-describedby="gift-wrap-help" {% if product_cart_item.gift_wrap %}checked{% endif %}>
+                <span><strong><i class="fas fa-gift mr-1"></i>Add gift wrap</strong><br><small id="gift-wrap-help">{% if product.gift_wrap_price %}+₹{{ product.gift_wrap_price }} per item. Total updates with quantity.{% else %}Free gift wrapping when selected.{% endif %}</small></span>
               </label>
               {% endif %}
               

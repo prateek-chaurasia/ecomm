@@ -59,6 +59,12 @@ def build_invoice_context(order):
             ),
             'size': item.size_variant.size_name if item.size_variant else '',
             'color': item.color_variant.color_name if item.color_variant else '',
+            'gift_wrap': item.gift_wrap,
+            'gift_wrap_price': (
+                product.gift_wrap_price
+                if item.gift_wrap and product
+                else 0
+            ),
         })
 
     for bundle in order.bundle_items.prefetch_related(

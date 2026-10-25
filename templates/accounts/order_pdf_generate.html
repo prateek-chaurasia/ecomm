@@ -231,6 +231,7 @@
           {% if item.sku %}<br>SKU: {{ item.sku }}{% endif %}
           {% if item.size %}<br>Size: {{ item.size }}{% endif %}
           {% if item.color %}<br>Color: {{ item.color }}{% endif %}
+          {% if item.gift_wrap %}<br>Gift wrapping {% if item.gift_wrap_price %}(+₹{{ item.gift_wrap_price }} per item){% else %}(Free){% endif %}{% endif %}
         </td>
         <td>{{ item.quantity }}</td>
         <td>{{ item.unit_price|floatformat:2 }}</td>

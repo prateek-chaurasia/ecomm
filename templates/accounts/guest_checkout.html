@@ -71,6 +71,12 @@
                 <strong class="text-success">−₹{{ cart_discount }}</strong>
               </div>
               {% endif %}
+              {% if cart_has_gift_wrapping %}
+              <div class="d-flex justify-content-between mt-2">
+                <span>Gift wrapping{% if cart_gift_wrap_total %} (included in items subtotal){% else %} (Free){% endif %}</span>
+                <strong>{% if cart_gift_wrap_total %}₹{{ cart_gift_wrap_total }}{% else %}Free{% endif %}</strong>
+              </div>
+              {% endif %}
               <div class="d-flex justify-content-between mt-2">
                 <span>Total to pay</span>
                 <strong id="guest-checkout-total"

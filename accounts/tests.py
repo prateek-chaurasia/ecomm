@@ -295,6 +295,30 @@ class OrderCancellationTests(TestCase):
         self.assertContains(response, 'src="/media/products/order-item-thumbnail.jpg"', html=False)
         self.assertContains(response, 'alt="Gift box"', html=False)
 
+    def test_zero_price_gift_wrap_is_free_in_order_details_and_invoice(self):
+        self.product.gift_wrap_available = True
+        self.product.gift_wrap_price = 0
+        self.product.save(update_fields=['gift_wrap_available', 'gift_wrap_price'])
+        order_item = self.order.order_items.get()
+        order_item.gift_wrap = True
+        order_item.save(update_fields=['gift_wrap'])
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse('order_details', args=[self.order.order_id]),
+        )
+
+        self.assertContains(response, 'Gift wrapping (Free)')
+        invoice_context = build_invoice_context(self.order)
+        self.assertTrue(invoice_context['invoice_lines'][0]['gift_wrap'])
+        self.assertEqual(invoice_context['invoice_lines'][0]['gift_wrap_price'], 0)
+        invoice_response = self.client.get(
+            reverse('download_invoice', args=[self.order.order_id]),
+        )
+        self.assertEqual(invoice_response.status_code, 200)
+        invoice_text = PdfReader(BytesIO(invoice_response.content)).pages[0].extract_text()
+        self.assertIn('Gift wrapping (Free)', invoice_text.replace('\n', ' '))
+
     @override_settings(ADMIN_EMAIL='ops@example.com, warehouse@example.com')
     def test_cancellation_emails_customer_and_admin_team(self):
         self.client.force_login(self.user)

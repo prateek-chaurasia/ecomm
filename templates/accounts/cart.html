@@ -82,7 +82,7 @@
                         {% endif %}
 
                         <!-- Brand: Nike -->
-                        {% if cart_item.gift_wrap %}<br /><span class="text-success"><i class="fas fa-gift mr-1"></i>Gift wrapped (+₹{{ cart_item.product.gift_wrap_price }} per item)</span>{% endif %}
+                        {% if cart_item.gift_wrap and cart_item.product.gift_wrap_available %}<br /><span class="text-success"><i class="fas fa-gift mr-1"></i>Gift wrapping {% if cart_item.product.gift_wrap_price %}(+₹{{ cart_item.product.gift_wrap_price }} per item){% else %}(Free){% endif %}</span>{% endif %}
                       </p>
                     </figcaption>
                   </figure>

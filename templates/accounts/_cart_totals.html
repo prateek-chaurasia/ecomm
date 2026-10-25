@@ -4,6 +4,12 @@
     <span>Items subtotal</span>
     <span>₹{{ cart.get_cart_total }}</span>
   </div>
+  {% if cart_has_gift_wrapping %}
+  <div class="d-flex justify-content-between mt-2">
+    <span>Gift wrapping{% if cart_gift_wrap_total %} (included above){% else %} (Free){% endif %}</span>
+    <span>{% if cart_gift_wrap_total %}₹{{ cart_gift_wrap_total }}{% else %}Free{% endif %}</span>
+  </div>
+  {% endif %}
   {% if cart_discount %}
   <div class="d-flex justify-content-between mt-2">
     <span>Coupon discount{% if cart.coupon %} ({{ cart.coupon.coupon_code }}){% endif %}</span>

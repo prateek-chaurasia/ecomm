@@ -11,7 +11,7 @@
         <span style="display:block; width:54px; height:54px; border:1px solid #e2e8f0; border-radius:6px; background-color:#f8fafc;"></span>
         {% endif %}
       </td>
-      <td style="border-bottom:1px solid #e2e8f0;">{{ item.product.product_name|default:"Product" }}</td>
+      <td style="border-bottom:1px solid #e2e8f0;">{{ item.product.product_name|default:"Product" }}{% if item.gift_wrap %}<br><span style="color:#15803d;">Gift wrapping {% if item.product.gift_wrap_price %}(+INR {{ item.product.gift_wrap_price }} per item){% else %}(Free){% endif %}</span>{% endif %}</td>
       <td align="right" style="border-bottom:1px solid #e2e8f0;">Qty {{ item.quantity }}</td>
     </tr>
     {% endfor %}

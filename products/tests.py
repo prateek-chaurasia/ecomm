@@ -1620,6 +1620,81 @@ class ProductReviewPageTests(TestCase):
 
 
 class ProductQuantityTests(TestCase):
+    def test_zero_price_gift_wrap_is_opt_in_and_shown_as_free(self):
+        category = Category.objects.create(category_name='Gifts')
+        product = Product.objects.create(
+            product_name='Gift Box',
+            category=category,
+            price=500,
+            product_desription='A gift box',
+            stock_quantity=5,
+            gift_wrap_available=True,
+            gift_wrap_price=0,
+        )
+
+        product_response = self.client.get(
+            reverse('get_product', args=[product.slug]),
+        )
+        self.assertContains(product_response, 'id="gift-wrap"')
+        self.assertContains(product_response, 'Free gift wrapping when selected.')
+        self.assertNotContains(
+            product_response,
+            'aria-describedby="gift-wrap-help" checked',
+        )
+
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'gift_wrap': '0'},
+        )
+        cart_item = CartItem.objects.get(
+            cart__session_key=self.client.session.session_key,
+            product=product,
+        )
+        self.assertFalse(cart_item.gift_wrap)
+        unwrapped_cart_response = self.client.get(reverse('cart'))
+        self.assertNotContains(unwrapped_cart_response, 'Gift wrapping (Free)')
+        self.assertNotContains(unwrapped_cart_response, 'Gift wrapping (included above)')
+
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'gift_wrap': '1'},
+        )
+        cart_item.refresh_from_db()
+        self.assertTrue(cart_item.gift_wrap)
+        self.assertEqual(cart_item.get_product_price(), 1000)
+
+        cart_response = self.client.get(reverse('cart'))
+        self.assertContains(cart_response, 'Gift wrapping (Free)')
+        self.assertContains(cart_response, '₹1000')
+
+    def test_gift_wrap_is_hidden_when_admin_disables_it_for_product(self):
+        category = Category.objects.create(category_name='Gifts')
+        product = Product.objects.create(
+            product_name='Gift Box',
+            category=category,
+            price=500,
+            product_desription='A gift box',
+            stock_quantity=5,
+            gift_wrap_available=True,
+            gift_wrap_price=30,
+        )
+        self.client.post(
+            reverse('add_to_cart', args=[product.uid]),
+            {'quantity': 1, 'gift_wrap': '1'},
+        )
+
+        product.gift_wrap_available = False
+        product.save(update_fields=['gift_wrap_available'])
+
+        product_response = self.client.get(
+            reverse('get_product', args=[product.slug]),
+        )
+        self.assertNotContains(product_response, 'id="gift-wrap"')
+        cart_response = self.client.get(reverse('cart'))
+        self.assertNotContains(cart_response, 'Gift wrapping')
+        self.assertNotContains(cart_response, '(included above)')
+        self.assertContains(cart_response, '₹500')
+
     def test_add_to_cart_merges_matching_product_size_and_color(self):
         category = Category.objects.create(category_name='Toys')
         product = Product.objects.create(

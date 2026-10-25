@@ -127,6 +127,19 @@ def _cart_pricing_context(cart):
     delivery_guideline = DeliveryGuideline.get_solo()
     cart_total_after_coupon = cart.get_cart_total_price_after_coupon()
     cart_has_items = cart.cart_items.exists() or cart.bundle_items.exists()
+    gift_wrap_items = list(
+        cart.cart_items.select_related('product').filter(
+            gift_wrap=True,
+            product__gift_wrap_available=True,
+        )
+    )
+    cart_gift_wrap_total = sum(
+        (
+            Decimal(item.product.gift_wrap_price) * item.quantity
+            for item in gift_wrap_items
+        ),
+        Decimal('0.00'),
+    )
     delivery_fee = (
         get_delivery_fee(delivery_guideline, cart_total_after_coupon)
         if cart_has_items else None
@@ -145,6 +158,8 @@ def _cart_pricing_context(cart):
 
     return {
         'cart_has_items': cart_has_items,
+        'cart_has_gift_wrapping': bool(gift_wrap_items),
+        'cart_gift_wrap_total': cart_gift_wrap_total,
         'cart_subtotal': cart.get_cart_total() + (delivery_fee or 0),
         'cart_discount': cart.get_cart_total() - cart_total_after_coupon,
         'delivery_fee': delivery_fee,
@@ -2257,6 +2272,15 @@ def order_details(request, order_id):
         'return_eligibility_error': return_eligibility_error(order),
         'replacement_eligibility_error': return_eligibility_error(
             order, ReturnRequest.RequestType.REPLACEMENT),
+        'order_has_gift_wrapping': any(item.gift_wrap for item in order_items),
+        'order_gift_wrap_total': sum(
+            (
+                Decimal(item.product.gift_wrap_price) * item.quantity
+                for item in order_items
+                if item.gift_wrap and item.product_id
+            ),
+            Decimal('0.00'),
+        ),
         'order_total_price': sum(item.get_total_price() for item in order_items),
         'coupon_discount': (
             order.coupon.calculate_discount(order.order_total_price)

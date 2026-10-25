@@ -156,6 +156,7 @@
                         <span class="text-muted">Product no longer available</span>
                         {% endif %}
                       </div>
+                      {% if item.gift_wrap %}<small class="text-success"><i class="fas fa-gift mr-1" aria-hidden="true"></i>Gift wrapping {% if item.product.gift_wrap_price %}(+₹{{ item.product.gift_wrap_price }} per item){% else %}(Free){% endif %}</small>{% endif %}
                     </td>
                     <td class="py-3">
                       <span class="size-badge">{{ item.size_variant.size_name|default:"N/A" }}</span>
@@ -371,6 +372,12 @@
               <span class="summary-label">Subtotal</span>
               <span class="summary-value">₹{{ order.order_total_price }}</span>
             </div>
+            {% if order_has_gift_wrapping %}
+            <div class="summary-item">
+              <span class="summary-label">Gift wrapping{% if order_gift_wrap_total %} (included in subtotal){% else %} (Free){% endif %}</span>
+              <span class="summary-value">{% if order_gift_wrap_total %}₹{{ order_gift_wrap_total }}{% else %}Free{% endif %}</span>
+            </div>
+            {% endif %}
             <div class="summary-item">
               <span class="summary-label">Coupon Discount</span>
               <span class="summary-value discount-value">-₹{{ coupon_discount|default:"0" }}</span>

@@ -29,7 +29,7 @@
             {% if cart_item.size_variant %}Size: {{ cart_item.size_variant.size_name }}{% else %}Size: N/A{% endif %}
             <br>
             {% if cart_item.color_variant %}Color: {{ cart_item.color_variant.color_name }}{% else %}Color: N/A{% endif %}
-            {% if cart_item.gift_wrap %}<br><span class="text-success">Gift wrap (+₹{{ cart_item.product.gift_wrap_price }} per item)</span>{% endif %}
+            {% if cart_item.gift_wrap and cart_item.product.gift_wrap_available %}<br><span class="text-success">Gift wrapping {% if cart_item.product.gift_wrap_price %}(+₹{{ cart_item.product.gift_wrap_price }} per item){% else %}(Free){% endif %}</span>{% endif %}
           </p>
         </td>
         <td data-label="Quantity">{{ cart_item.quantity }}</td>
