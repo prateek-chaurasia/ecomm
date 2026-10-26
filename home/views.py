@@ -2,7 +2,7 @@ import json
 import logging
 from decouple import config
 
-from django.db.models import Q, Avg, Case, When, Value, IntegerField
+from django.db.models import Q, Avg, Case, When, Value, IntegerField, Count
 from django.db.models.functions import Coalesce
 from django.core.mail import EmailMessage
 from django.http import HttpResponse, JsonResponse
@@ -75,7 +75,9 @@ def index(request):
             When(stock_quantity__gt=0, then=Value(0)),
             default=Value(1),
             output_field=IntegerField(),
-        )
+        ),
+        avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+        review_count=Count('reviews', distinct=True),
     )
 
     if selected_sort:
@@ -88,13 +90,13 @@ def index(request):
         elif selected_sort == 'priceDesc':
             query = query.order_by('stock_priority', '-price', 'uid')
         elif selected_sort == 'ratingAsc':
-            query = query.annotate(
-                avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
-            ).order_by('stock_priority', 'avg_rating', 'product_name', 'uid')
+            query = query.order_by(
+                'stock_priority', 'avg_rating', 'product_name', 'uid',
+            )
         elif selected_sort == 'ratingDesc':
-            query = query.annotate(
-                avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
-            ).order_by('stock_priority', '-avg_rating', 'product_name', 'uid')
+            query = query.order_by(
+                'stock_priority', '-avg_rating', 'product_name', 'uid',
+            )
         else:
             query = query.order_by('stock_priority', 'product_name', 'uid')
     else:

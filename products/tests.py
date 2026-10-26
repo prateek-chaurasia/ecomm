@@ -443,6 +443,37 @@ class CategoryPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Trail Runner')
 
+    def test_category_products_keep_available_items_first_for_selected_sorts(self):
+        available_product = Product.objects.create(
+            product_name='Alpine Shoe',
+            category=self.category,
+            price=2400,
+            product_desription='Available running shoe',
+            stock_quantity=3,
+        )
+        out_of_stock_product = Product.objects.create(
+            product_name='Budget Shoe',
+            category=self.category,
+            price=100,
+            product_desription='Out of stock running shoe',
+            stock_quantity=0,
+        )
+        category_url = reverse(
+            'category_products', args=[self.category.slug],
+        )
+
+        response = self.client.get(category_url)
+        self.assertEqual(
+            list(response.context['products']),
+            [available_product, self.product, out_of_stock_product],
+        )
+
+        response = self.client.get(category_url, {'sort': 'priceAsc'})
+        self.assertEqual(
+            list(response.context['products']),
+            [self.product, available_product, out_of_stock_product],
+        )
+
     def test_category_product_cards_use_generated_webp_thumbnail(self):
         image_data = BytesIO()
         Image.new('RGB', (900, 700), 'blue').save(image_data, format='JPEG')
@@ -1512,6 +1543,12 @@ class ProductReviewPageTests(TestCase):
         self.user = User.objects.create_user(
             username='reviewer', password='secret123')
         self.client.force_login(self.user)
+
+    def test_product_rating_link_scrolls_to_review_details(self):
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertContains(response, 'href="#product-reviews"')
+        self.assertContains(response, 'id="product-reviews"')
 
     @staticmethod
     def create_test_image(name):

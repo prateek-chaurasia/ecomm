@@ -661,22 +661,22 @@
             <p class="text-muted">{{product.category}}</p>
 
             <div class="rating-wrap my-3">
-              <a href="{% url 'product_reviews_for_product' product.slug %}" class="text-decoration-none">
+              <a href="#product-reviews" class="text-decoration-none">
                 <small class="label-rating text-muted">{{ product.get_rating }}</small>
+                <ul class="rating-stars">
+                  <li style="width: {{ rating_percentage }}%" class="stars-active">
+                    <i class="fa fa-star"></i> <i class="fa fa-star"></i>
+                    <i class="fa fa-star"></i> <i class="fa fa-star"></i>
+                    <i class="fa fa-star"></i>
+                  </li>
+                  <li>
+                    <i class="fa fa-star"></i> <i class="fa fa-star"></i>
+                    <i class="fa fa-star"></i> <i class="fa fa-star"></i>
+                    <i class="fa fa-star"></i>
+                  </li>
+                </ul>
               </a>
-              <ul class="rating-stars">
-                <li style="width: {{ rating_percentage }}%" class="stars-active">
-                  <i class="fa fa-star"></i> <i class="fa fa-star"></i>
-                  <i class="fa fa-star"></i> <i class="fa fa-star"></i>
-                  <i class="fa fa-star"></i>
-                </li>
-                <li>
-                  <i class="fa fa-star"></i> <i class="fa fa-star"></i>
-                  <i class="fa fa-star"></i> <i class="fa fa-star"></i>
-                  <i class="fa fa-star"></i>
-                </li>
-              </ul>
-              <a href="{% url 'product_reviews_for_product' product.slug %}" class="label-rating text-muted">{{ product.reviews.count }} reviews</a>
+              <a href="#product-reviews" class="label-rating text-muted">{{ product.reviews.count }} reviews</a>
             </div>
             <!-- rating-wrap.// -->
 
@@ -697,7 +697,7 @@
               <var class="price h3 mb-0" style="font-size: 2rem; font-weight: 800;">₹{{ current_price }}.00</var>
               {% endif %}
               {% endwith %}
-              <small class="d-block text-muted">{{ gst_price_label }}</small>
+              {% if show_tax_information %}<small class="d-block text-muted">{{ gst_price_label }}</small>{% endif %}
             </div>
             <!-- price-detail-wrap .// -->
 
@@ -955,7 +955,7 @@
     <hr />
 
     <!-- Product Review Section -->
-    <h2 class="title padding-bottom-sm"><a href="{% url 'product_reviews_for_product' product.slug %}" class="text-dark">Reviews</a></h2>
+    <h2 class="title padding-bottom-sm" id="product-reviews"><a href="{% url 'product_reviews_for_product' product.slug %}" class="text-dark">Reviews</a></h2>
 
     <div class="product-review-list">
     {% for review in product.reviews.all %}

@@ -1,5 +1,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
+
 from products.models import GSTConfiguration
 
 
@@ -8,6 +10,63 @@ MONEY = Decimal('0.01')
 
 def _money(value):
     return Decimal(value or 0).quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _under_thousand_in_words(number):
+    ones = (
+        'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+        'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen',
+        'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen',
+    )
+    tens = (
+        '', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy',
+        'eighty', 'ninety',
+    )
+    words = []
+    hundreds, remainder = divmod(number, 100)
+    if hundreds:
+        words.extend((ones[hundreds], 'hundred'))
+    if remainder >= 20:
+        tens_word = tens[remainder // 10]
+        ones_remainder = remainder % 10
+        words.append(
+            f'{tens_word}-{ones[ones_remainder]}'
+            if ones_remainder else tens_word
+        )
+        remainder = 0
+    if remainder:
+        words.append(ones[remainder])
+    return ' '.join(words)
+
+
+def _integer_in_words(number):
+    if number < 1000:
+        return _under_thousand_in_words(number)
+
+    groups = [number % 1000]
+    number //= 1000
+    while number:
+        groups.append(number % 100)
+        number //= 100
+
+    units = ('', 'thousand', 'lakh', 'crore', 'arab', 'kharab')
+    words = []
+    for index in range(len(groups) - 1, -1, -1):
+        if groups[index]:
+            group_words = _under_thousand_in_words(groups[index])
+            unit = units[index] if index < len(units) else 'kharab'
+            words.extend((group_words, unit) if unit else (group_words,))
+    return ' '.join(words)
+
+
+def _amount_in_words(amount):
+    rounded_amount = _money(amount)
+    rupees = int(rounded_amount)
+    paise = int((rounded_amount - rupees) * 100)
+    words = f'{_integer_in_words(rupees)} rupees'
+    if paise:
+        words += f' and {_integer_in_words(paise)} paise'
+    return f'{words} only'.title()
 
 
 def _allocate(total, weights):
@@ -158,6 +217,7 @@ def build_invoice_context(order):
         'seller_state_code': (
             order.seller_state_code or current_seller.seller_state_code
         ),
+        'terms_and_conditions': current_seller.terms_and_conditions,
     }
     tax_type_configured = bool(
         seller['seller_state'] and order.place_of_supply_state
@@ -219,6 +279,7 @@ def build_invoice_context(order):
     invoice_total += shipping_amount + priority_delivery_amount
     return {
         'order': order,
+        'show_tax_information': settings.SHOW_TAX_INFORMATION,
         'invoice_lines': lines,
         'invoice_settings': seller,
         'invoice_customer_name': invoice_customer_name,
@@ -246,6 +307,7 @@ def build_invoice_context(order):
         'shipping_amount': shipping_amount,
         'priority_delivery_amount': priority_delivery_amount,
         'invoice_total': _money(invoice_total),
+        'invoice_total_in_words': _amount_in_words(invoice_total),
         'round_off': _money(0),
         'same_state_supply': same_state,
         'tax_type_configured': tax_type_configured,

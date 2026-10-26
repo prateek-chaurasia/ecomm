@@ -433,6 +433,13 @@ class GSTConfiguration(models.Model):
         help_text='State from which orders are supplied; used to split CGST/SGST and IGST.',
     )
     seller_state_code = models.CharField(max_length=2, blank=True)
+    terms_and_conditions = models.TextField(
+        blank=True,
+        help_text=(
+            'Optional invoice terms and conditions. Basic HTML formatting is '
+            'supported and sanitized when shown on the invoice.'
+        ),
+    )
     prices_include_tax = models.BooleanField(
         default=True,
         verbose_name='Product prices include GST',

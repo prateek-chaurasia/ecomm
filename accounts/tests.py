@@ -26,7 +26,7 @@ from accounts.forms import (
     UserProfileForm, UserUpdateForm,
 )
 from accounts.views import create_order
-from accounts.invoices import build_invoice_context
+from accounts.invoices import _amount_in_words, build_invoice_context
 from base.emails import (
     send_account_activation_email, send_admin_new_order_email,
     send_order_confirmation_email,
@@ -2835,6 +2835,7 @@ class UserShippingAddressTests(TestCase):
         response = self.client.get(reverse('download_invoice', args=[order.order_id]))
         self.assertEqual(response.status_code, 404)
 
+    @override_settings(SHOW_TAX_INFORMATION=True)
     def test_invoice_download_prints_order_item_values_on_first_page(self):
         self.product.hsn_code = '39269099'
         self.product.gst_rate = Decimal('18.00')
@@ -2879,19 +2880,133 @@ class UserShippingAddressTests(TestCase):
         self.assertIn('Puzzle Set', first_page_text.replace('\n', ' '))
         self.assertIn('Qty', first_page_text)
         self.assertIn('1', first_page_text)
+        self.assertIn('Taxable', first_page_text)
         self.assertIn('39269099', first_page_text.replace(' ', '').replace('\n', ''))
+        self.assertIn('GST %', ' '.join(first_page_text.split()))
         self.assertIn('CGST', first_page_text)
         self.assertIn('SGST', first_page_text)
         self.assertIn('BundleofGifts', first_page_text)
         self.assertIn('Company GSTIN', first_page_text)
         self.assertIn('[Company GST number]', first_page_text)
+        self.assertIn('Invoice', first_page_text)
+        self.assertNotIn('Tax Invoice', first_page_text)
+        self.assertIn('Total amount after tax', first_page_text)
         self.assertIn('Payment summary', first_page_text)
         self.assertIn('Payment status', first_page_text)
         self.assertIn('Pending', first_page_text)
         self.assertIn('Payment method', first_page_text)
         self.assertIn('Cash on Delivery', first_page_text)
         self.assertIn('Product discount (20.00%)', first_page_text)
+        self.assertIn('Amount in words', first_page_text)
+        self.assertIn(
+            'Seven Hundred Ninety Nine Rupees',
+            ' '.join(first_page_text.replace('-', ' ').split()),
+        )
         self.assertGreaterEqual(len(pdf.pages[0].images), 1)
+
+    def test_invoice_amount_in_words_handles_rupees_and_paise(self):
+        self.assertEqual(
+            _amount_in_words(Decimal('1234567.89')),
+            'Twelve Lakh Thirty-Four Thousand Five Hundred Sixty-Seven Rupees '
+            'And Eighty-Nine Paise Only',
+        )
+        self.assertEqual(
+            _amount_in_words(Decimal('100.00')),
+            'One Hundred Rupees Only',
+        )
+
+    def test_invoice_renders_sanitized_html_terms_from_gst_settings(self):
+        configuration = GSTConfiguration.get_solo()
+        configuration.terms_and_conditions = (
+            '<p>Pay <strong>within seven days</strong>.</p>'
+            '<img src="invalid" onerror="alert(1)">'
+        )
+        configuration.save()
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-INVOICE-TERMS',
+            order_total_price=100,
+            grand_total=100,
+        )
+
+        invoice_context = build_invoice_context(order)
+        invoice_html = render_to_string(
+            'accounts/order_pdf_generate.html',
+            invoice_context,
+        )
+
+        self.assertIn('<div class="section-title">Terms and Conditions</div>', invoice_html)
+        self.assertIn('<p>Pay <strong>within seven days</strong>.</p>', invoice_html)
+        self.assertNotIn('<img src="invalid"', invoice_html)
+        self.assertNotIn('onerror=', invoice_html)
+
+    @override_settings(SHOW_TAX_INFORMATION=False)
+    def test_invoice_hides_tax_information_without_changing_order_total(self):
+        self.product.hsn_code = '39269099'
+        self.product.gst_rate = Decimal('18.00')
+        self.product.save(update_fields=['hsn_code', 'gst_rate'])
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-INVOICE-NO-TAX-DISPLAY',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+            order_total_price=Decimal('100.00'),
+            grand_total=Decimal('118.00'),
+            prices_include_tax=False,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=1,
+            product_price=Decimal('100.00'),
+            original_product_price=Decimal('100.00'),
+            hsn_code='39269099',
+            gst_rate=Decimal('18.00'),
+        )
+        self.client.force_login(self.user)
+
+        invoice_context = build_invoice_context(order)
+        self.assertEqual(invoice_context['tax_total'], Decimal('18.00'))
+        self.assertEqual(invoice_context['invoice_total'], Decimal('118.00'))
+        response = self.client.get(
+            reverse('download_invoice', args=[order.order_id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invoice_text = PdfReader(BytesIO(response.content)).pages[0].extract_text()
+        self.assertIn('Invoice', invoice_text)
+        self.assertNotIn('Tax Invoice', invoice_text)
+        for hidden_label in (
+            'Company GSTIN',
+            'Taxable',
+            'HSN',
+            'GST %',
+            'CGST',
+            'IGST',
+            'Total amount before tax',
+            'Total tax amount',
+            'Total amount after tax',
+            'Including tax',
+            'Date of supply',
+            'Place of supply',
+        ):
+            with self.subTest(hidden_label=hidden_label):
+                self.assertNotIn(hidden_label, invoice_text)
+        self.assertIn('Payment summary', invoice_text)
+        self.assertIn('Total payable', invoice_text)
+
+    def test_customer_product_page_tax_label_follows_display_setting(self):
+        product_url = reverse('get_product', args=[self.product.slug])
+
+        response = self.client.get(product_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Including tax amount')
+        with override_settings(SHOW_TAX_INFORMATION=True):
+            response = self.client.get(product_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Including tax amount')
 
     def test_invoice_shows_paid_status_and_cash_on_delivery_method(self):
         order = Order.objects.create(

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  {% load product_description %}
   <meta charset="utf-8">
   <title>Invoice {{ invoice_number }}</title>
   <style>
@@ -108,15 +109,21 @@
       font-size: 7.5pt;
     }
 
-    .items th:nth-child(1) { width: 21%; }
-    .items th:nth-child(2) { width: 6%; }
-    .items th:nth-child(3) { width: 9%; }
-    .items th:nth-child(4) { width: 9%; }
-    .items th:nth-child(5) { width: 10%; }
-    .items th:nth-child(6) { width: 12%; }
-    .items th:nth-child(7) { width: 7%; }
-    .items th:nth-child(8) { width: 13%; }
-    .items th:nth-child(9) { width: 13%; }
+    .items:not(.items-no-tax) th:nth-child(1) { width: 21%; }
+    .items:not(.items-no-tax) th:nth-child(2) { width: 6%; }
+    .items:not(.items-no-tax) th:nth-child(3) { width: 9%; }
+    .items:not(.items-no-tax) th:nth-child(4) { width: 9%; }
+    .items:not(.items-no-tax) th:nth-child(5) { width: 10%; }
+    .items:not(.items-no-tax) th:nth-child(6) { width: 12%; }
+    .items:not(.items-no-tax) th:nth-child(7) { width: 7%; }
+    .items:not(.items-no-tax) th:nth-child(8) { width: 13%; }
+    .items:not(.items-no-tax) th:nth-child(9) { width: 13%; }
+
+    .items-no-tax th:nth-child(1) { width: 42%; }
+    .items-no-tax th:nth-child(2) { width: 10%; }
+    .items-no-tax th:nth-child(3) { width: 16%; }
+    .items-no-tax th:nth-child(4) { width: 16%; }
+    .items-no-tax th:nth-child(5) { width: 16%; }
 
     .items td:nth-child(n+2) {
       text-align: right;
@@ -152,20 +159,26 @@
       color: #526170;
       font-size: 8pt;
     }
+
+    .terms-and-conditions {
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 <body>
   <table class="invoice-header">
     <tr>
-      <td class="brand">
+      <td class="brand"{% if not show_tax_information %} colspan="2"{% endif %}>
         <img class="brand-icon" src="{{ brand_icon_data }}" alt="">
         BundleofGifts
-        <div class="invoice-kind">Tax Invoice · Original for recipient</div>
+        <div class="invoice-kind">Invoice</div>
       </td>
+      {% if show_tax_information %}
       <td class="gstin">
         Company GSTIN<br>
         {{ invoice_settings.seller_gstin|default:"[Company GST number]" }}
       </td>
+      {% endif %}
     </tr>
   </table>
 
@@ -179,6 +192,7 @@
       <td class="label">Order date</td><td>{{ order.order_date|date:"d-m-Y" }}</td>
       <td class="label">Invoice date</td><td>{{ invoice_date|date:"d-m-Y" }}</td>
     </tr>
+    {% if show_tax_information %}
     <tr>
       <td class="label">Date of supply</td><td>{{ date_of_supply|date:"d-m-Y" }}</td>
       <td class="label">Place of supply</td><td>{{ order.place_of_supply_state|default:"Not specified" }}</td>
@@ -188,6 +202,7 @@
       <td class="label">Seller state</td>
       <td colspan="3">{{ invoice_settings.seller_state }}{% if invoice_settings.seller_state_code %} (Code {{ invoice_settings.seller_state_code }}){% endif %}</td>
     </tr>
+    {% endif %}
     {% endif %}
     {% if invoice_settings.seller_address %}
     <tr><td class="label">Company address</td><td colspan="3">{{ invoice_settings.seller_address|linebreaksbr }}</td></tr>
@@ -209,17 +224,19 @@
     </tr>
   </table>
 
-  <table class="items section">
+  <table class="items{% if not show_tax_information %} items-no-tax{% endif %} section">
     <thead>
       <tr>
         <th>Item / SKU</th>
         <th>Qty</th>
         <th>Rate (₹)</th>
         <th>Discount (₹)</th>
+        {% if show_tax_information %}
         <th>Taxable (₹)</th>
         <th>HSN</th>
         <th>GST %</th>
         <th>Tax (₹)</th>
+        {% endif %}
         <th>Total (₹)</th>
       </tr>
     </thead>
@@ -236,6 +253,7 @@
         <td>{{ item.quantity }}</td>
         <td>{{ item.unit_price|floatformat:2 }}</td>
         <td>{{ item.discount|floatformat:2 }}</td>
+        {% if show_tax_information %}
         <td>{{ item.taxable_amount|floatformat:2 }}</td>
         <td>{{ item.hsn_code|default:"Not set" }}</td>
         <td>{{ item.gst_rate|floatformat:2 }}%</td>
@@ -249,17 +267,20 @@
             GST {{ item.tax_amount|floatformat:2 }}
           {% endif %}
         </td>
+        {% endif %}
         <td><strong>{{ item.line_total|floatformat:2 }}</strong></td>
       </tr>
       {% empty %}
-      <tr><td colspan="9">No product lines found for this order.</td></tr>
+      <tr><td colspan="{% if show_tax_information %}9{% else %}5{% endif %}">No product lines found for this order.</td></tr>
       {% endfor %}
     </tbody>
     {% if invoice_lines %}
     <tfoot>
       <tr>
-        <th colspan="2">Total quantity: {{ total_quantity }}</th>
+        <th colspan="{% if show_tax_information %}2{% else %}5{% endif %}">Total quantity: {{ total_quantity }}</th>
+        {% if show_tax_information %}
         <th colspan="7">Taxable value ₹{{ taxable_total|floatformat:2 }} · Tax ₹{{ tax_total|floatformat:2 }}</th>
+        {% endif %}
       </tr>
     </tfoot>
     {% endif %}
@@ -267,15 +288,18 @@
 
   <table class="summary section">
     <tr><th class="section-title" colspan="2">Payment summary</th></tr>
+    {% if show_tax_information %}
     <tr>
       <td>Product prices</td>
       <td class="amount">{% if order.prices_include_tax %}Including tax{% else %}Excluding tax{% endif %}</td>
     </tr>
+    {% endif %}
     <tr><td>Payment status</td><td class="amount">{{ order.payment_status|default:"Not specified" }}</td></tr>
     <tr><td>Payment method</td><td class="amount">{{ order.payment_mode|default:"Not specified" }}</td></tr>
     {% if order.razorpay_payment_id %}
     <tr><td>Transaction ID</td><td class="amount">{{ order.razorpay_payment_id }}</td></tr>
     {% endif %}
+    {% if show_tax_information %}
     <tr><td>Total amount before tax</td><td class="amount">₹{{ taxable_total|floatformat:2 }}</td></tr>
     <tr><td>Total tax amount</td><td class="amount">₹{{ tax_total|floatformat:2 }}</td></tr>
     {% if same_state_supply %}
@@ -284,6 +308,7 @@
     <tr><td>IGST</td><td class="amount">₹{{ igst_total|floatformat:2 }}</td></tr>
     {% else %}
     <tr><td>GST (state not configured)</td><td class="amount">₹{{ tax_total|floatformat:2 }}</td></tr>
+    {% endif %}
     {% endif %}
     <tr>
       <td>Product discount ({{ product_discount_percentage|floatformat:2 }}%)</td>
@@ -300,10 +325,22 @@
     {% if priority_delivery_amount %}
     <tr><td>Next-day priority delivery</td><td class="amount">₹{{ priority_delivery_amount|floatformat:2 }}</td></tr>
     {% endif %}
+    {% if show_tax_information %}
     <tr class="total-row"><td>Total amount after tax</td><td class="amount">₹{{ invoice_total|floatformat:2 }}</td></tr>
+    {% endif %}
     <tr><td>Round off</td><td class="amount">₹{{ round_off|floatformat:2 }}</td></tr>
     <tr class="total-row"><td>Total payable</td><td class="amount">₹{{ invoice_total|floatformat:2 }}</td></tr>
+    <tr>
+      <td><strong>Amount in words:</strong></td>
+      <td class="amount">{{ invoice_total_in_words }}</td>
+    </tr>
     <tr><td colspan="2" class="note">This is a computer-generated invoice and does not require a signature.</td></tr>
   </table>
+  {% if invoice_settings.terms_and_conditions %}
+  <div class="section">
+    <div class="section-title">Terms and Conditions</div>
+    <div class="terms-and-conditions">{{ invoice_settings.terms_and_conditions|render_product_description }}</div>
+  </div>
+  {% endif %}
 </body>
 </html>

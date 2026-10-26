@@ -30,6 +30,8 @@ TESTING = 'test' in sys.argv
 IS_PRODUCTION = not DEBUG and not TESTING
 ONLINE_PAYMENT_ENABLED = config(
     "ONLINE_PAYMENT_ENABLED", default=not IS_PRODUCTION, cast=bool)
+SHOW_TAX_INFORMATION = config(
+    "SHOW_TAX_INFORMATION", default=False, cast=bool)
 
 # Allowed hosts - read from environment variable (comma-separated values)
 ALLOWED_HOSTS = config(

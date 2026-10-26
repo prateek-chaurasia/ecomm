@@ -73,6 +73,8 @@ To run this project locally, please follow these steps:
     - Before running migrations, create a `.env` file in the project root. You can use `.env.example` as a template.
     - For local development, set `DEBUG=True`; local HTTP such as `http://localhost:8080` is allowed. For production, set `DEBUG=False`; production HTTPS hardening is then enabled by default.
     - Online payments are enabled by default outside production and shown as “Coming Soon” in production. Set `ONLINE_PAYMENT_ENABLED=True` to enable them explicitly, or `ONLINE_PAYMENT_ENABLED=False` to disable them in any environment.
+    - GST/tax information is hidden from customer-facing pages and invoices by default. Set `SHOW_TAX_INFORMATION=True` in `.env` to show it again; this only changes what is displayed, not how order totals are calculated.
+    - Invoice terms and conditions can be entered in the Django admin under Products > GST and invoice settings. Basic HTML is supported; unsafe tags and attributes are removed when the terms are printed.
     - Configure `PUBLIC_BASE_URL` with the public website URL used in customer-facing emails and tracking links:
       ```
       PUBLIC_BASE_URL=http://localhost:8080  # For local development

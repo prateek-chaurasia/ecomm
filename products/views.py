@@ -1,7 +1,7 @@
 import random
 import logging
 from .forms import ReviewForm
-from django.db.models import Q, Count, Avg
+from django.db.models import Q, Count, Avg, Case, When, Value, IntegerField
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.contrib import messages
@@ -263,20 +263,36 @@ def category_products(request, slug):
     if selected_tag:
         products = products.filter(tags__name=selected_tag).distinct()
 
+    products = products.annotate(
+        stock_priority=Case(
+            When(stock_quantity__gt=0, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+        review_count=Count('reviews', distinct=True),
+    )
+
     if selected_sort == 'newest':
-        products = products.filter(newest_product=True).order_by('category_id', 'uid')
+        products = products.filter(newest_product=True).order_by(
+            'stock_priority', 'category_id', 'uid',
+        )
     elif selected_sort == 'priceAsc':
-        products = products.order_by('price', 'uid')
+        products = products.order_by('stock_priority', 'price', 'uid')
     elif selected_sort == 'priceDesc':
-        products = products.order_by('-price', 'uid')
+        products = products.order_by('stock_priority', '-price', 'uid')
     elif selected_sort == 'ratingAsc':
-        products = products.annotate(
-            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
-        ).order_by('avg_rating', 'product_name', 'uid')
+        products = products.order_by(
+            'stock_priority', 'avg_rating', 'product_name', 'uid',
+        )
     elif selected_sort == 'ratingDesc':
-        products = products.annotate(
-            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
-        ).order_by('-avg_rating', 'product_name', 'uid')
+        products = products.order_by(
+            'stock_priority', '-avg_rating', 'product_name', 'uid',
+        )
+    else:
+        products = products.order_by(
+            'stock_priority', 'product_name', 'uid',
+        )
 
     categories = Category.objects.all()
     context = {
@@ -319,7 +335,15 @@ def get_product(request, slug):
         product.size_variant.filter(size_name=selected_size).first()
         if selected_size else None
     )
-    related_products = list(product.category.products.filter(parent=None).exclude(uid=product.uid))
+    related_products = list(
+        product.category.products.filter(parent=None)
+        .exclude(uid=product.uid)
+        .annotate(
+            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+            review_count=Count('reviews', distinct=True),
+        )
+        .prefetch_related('product_images', 'age_groups')
+    )
 
     # Review product view
     review = None

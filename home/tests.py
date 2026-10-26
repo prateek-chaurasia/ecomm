@@ -27,7 +27,7 @@ from home.models import (
     City, DeliveryGuideline, HomeBanner, MarqueeAnnouncement,
     ReplacePolicy, ReturnRefundPolicy, State,
 )
-from products.models import Category, Product
+from products.models import Category, Product, ProductReview
 
 
 class HeadingLevelParser(HTMLParser):
@@ -847,6 +847,38 @@ class RenderBlockingResourceTests(TestCase):
 
 
 class InfiniteProductLoadingTests(TestCase):
+    def test_home_product_cards_show_average_review_rating_before_price(self):
+        category = Category.objects.create(category_name='Toys')
+        product = Product.objects.create(
+            product_name='Rated toy',
+            category=category,
+            price=900,
+            product_desription='Popular toy',
+            stock_quantity=2,
+        )
+        first_reviewer = User.objects.create_user(username='rating-reviewer-one')
+        second_reviewer = User.objects.create_user(username='rating-reviewer-two')
+        ProductReview.objects.create(
+            product=product, user=first_reviewer, stars=5,
+        )
+        ProductReview.objects.create(
+            product=product, user=second_reviewer, stars=4,
+        )
+
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'aria-label="Rated 4.5 out of 5 from 2 reviews"',
+        )
+        self.assertContains(response, '<span>4.5</span>', html=False)
+        page_html = response.content.decode()
+        self.assertLess(
+            page_html.index('aria-label="Rated 4.5 out of 5 from 2 reviews"'),
+            page_html.index('₹900.00'),
+        )
+
     def test_home_page_places_out_of_stock_products_after_in_stock_products(self):
         category = Category.objects.create(category_name='Toys')
         in_stock = Product.objects.create(

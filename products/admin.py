@@ -209,6 +209,9 @@ class GSTConfigurationAdmin(FilterCollapsibleModelAdmin):
                 'seller_state', 'seller_state_code',
             ],
         }),
+        ('Invoice terms and conditions', {
+            'fields': ['terms_and_conditions'],
+        }),
         ('Product pricing', {
             'fields': ['prices_include_tax'],
         }),

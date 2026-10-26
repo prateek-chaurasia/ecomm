@@ -1,5 +1,7 @@
 <div class="cart-charge-breakdown">
+  {% if show_tax_information %}
   <small class="d-block text-muted mb-2">{{ gst_price_label }}</small>
+  {% endif %}
   <div class="d-flex justify-content-between">
     <span>Items subtotal</span>
     <span>₹{{ cart.get_cart_total }}</span>
