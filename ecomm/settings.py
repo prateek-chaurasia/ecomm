@@ -143,6 +143,9 @@ SOCIALACCOUNT_PROVIDERS = {
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_LOGIN_ON_GET=True
 
+VISITOR_LOGGING_ENABLED = config(
+    'VISITOR_LOGGING_ENABLED', default=False, cast=bool)
+
 MIDDLEWARE = [
     'ecomm.middleware.CanonicalHostMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -155,6 +158,16 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'axes.middleware.AxesMiddleware',  # For account lockout after failed login attempts
 ]
+
+if VISITOR_LOGGING_ENABLED:
+    MIDDLEWARE.append('home.middleware.VisitorLoggingMiddleware')
+
+# Only trust forwarded client IPs when the reverse proxy is configured to
+# sanitize/append X-Forwarded-For. Zero uses the direct peer address.
+VISITOR_TRUSTED_PROXY_COUNT = config(
+    'VISITOR_TRUSTED_PROXY_COUNT', default=0, cast=int)
+VISITOR_GEOIP_CITY_DATABASE = config(
+    'VISITOR_GEOIP_CITY_DATABASE', default='')
 
 # Keep local development convenient while requiring secure transport in production.
 SECURE_SSL_REDIRECT = config(

@@ -7,7 +7,7 @@ from email.mime.image import MIMEImage
 from PIL import Image, ImageOps
 from django.conf import settings
 from django.contrib.staticfiles import finders
-from django.core.mail import EmailMultiAlternatives, send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.mail.message import SafeMIMEMultipart
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -160,6 +160,110 @@ def _prepare_order_thumbnails(order_items):
     return inline_images
 
 
+def _admin_email_recipients():
+    return [
+        address.strip()
+        for address in settings.ADMIN_EMAIL.split(',')
+        if address.strip()
+    ]
+
+
+def _send_admin_notification(
+    subject,
+    heading,
+    summary,
+    details,
+    action_url,
+    action_label,
+    recipients=None,
+    items=(),
+):
+    recipients = recipients if recipients is not None else _admin_email_recipients()
+    if not recipients:
+        return False
+
+    plain_lines = [heading, '', summary, '']
+    plain_lines.extend(
+        f'{label}: {value}'
+        for label, value in details
+    )
+    if items:
+        plain_lines.extend(['', 'Items:'])
+        plain_lines.extend(
+            f'- {item["name"]} | SKU {item["sku"]} | '
+            f'Qty {item["quantity"]} | INR {item["unit_price"]} each'
+            for item in items
+        )
+    plain_lines.extend(['', f'{action_label}: {action_url}'])
+
+    email = EmailMultiAlternatives(
+        subject,
+        '\n'.join(plain_lines),
+        settings.DEFAULT_FROM_EMAIL,
+        recipients,
+    )
+    email.attach_alternative(
+        render_to_string(
+            'emails/admin_notification.html',
+            {
+                'heading': heading,
+                'summary': summary,
+                'details': [
+                    {'label': label, 'value': value}
+                    for label, value in details
+                ],
+                'items': items,
+                'action_url': action_url,
+                'action_label': action_label,
+            },
+        ),
+        'text/html',
+    )
+    email.send(fail_silently=False)
+    return True
+
+
+def _admin_order_item_details(order):
+    order_items = order.order_items.select_related(
+        'product', 'size_variant', 'color_variant',
+    )
+    details = [
+        {
+            'name': item.product.product_name if item.product else 'Product unavailable',
+            'sku': item.product.sku if item.product else 'N/A',
+            'variant': ', '.join(
+                value for value in (
+                    item.size_variant.size_name if item.size_variant else '',
+                    item.color_variant.color_name if item.color_variant else '',
+                ) if value
+            ) or 'Standard',
+            'quantity': item.quantity,
+            'unit_price': item.product_price if item.product_price is not None else 'N/A',
+            'line_total': (
+                item.product_price * item.quantity
+                if item.product_price is not None else 'N/A'
+            ),
+        }
+        for item in order_items
+    ]
+    for bundle in order.bundle_items.prefetch_related(
+        'selected_products__product',
+    ):
+        included_products = ', '.join(
+            selected.product.product_name
+            for selected in bundle.selected_products.all()
+        ) or 'No product details'
+        details.append({
+            'name': f'{bundle.title} (includes: {included_products})',
+            'sku': 'BUNDLE',
+            'variant': bundle.packaging_name or 'Bundle',
+            'quantity': bundle.quantity,
+            'unit_price': bundle.unit_price,
+            'line_total': bundle.get_total_price(),
+        })
+    return details
+
+
 def send_account_activation_email(email, email_token):
     subject = "Your account needs to be verified"
 
@@ -268,59 +372,85 @@ def send_order_confirmation_email(order):
 
 
 def send_admin_new_order_email(order):
-    seller_recipients = [
-        address.strip()
-        for address in settings.ADMIN_EMAIL.split(',')
-        if address.strip()
-    ]
+    seller_recipients = _admin_email_recipients()
     if not seller_recipients:
         logger.warning("New order %s has no configured seller recipients", order.order_id)
         return
 
-    seller_order_link = (
+    order_link = (
         f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_order_change", args=[order.pk])}'
     )
     customer_name = order.guest_name or (
         order.user.get_full_name() or order.user.username
         if order.user else 'Guest customer'
     )
-    order_items = list(order.order_items.all())
-    item_count = sum(item.quantity for item in order_items)
-    subject = f'New BundleofGifts.com order - {order.order_id}'
-    plain_lines = [
-        f'New order received: {order.order_id}\n\n'
-        f'Customer: {customer_name}\n'
-        f'Email: {order.guest_email or (order.user.email if order.user else "Not provided")}\n'
-        f'Items: {item_count}\n'
-        f'Delivery charges: INR {order.additional_delivery_fee if order.additional_delivery_fee else 0}',
+    items = _admin_order_item_details(order)
+    item_count = sum(item['quantity'] for item in items)
+    details = [
+        ('Order ID', order.order_id),
+        ('Order placed', order.created_at.strftime('%d %b %Y, %I:%M %p')),
+        ('Customer', customer_name),
+        ('Customer email', order.guest_email or (
+            order.user.email if order.user else 'Not provided'
+        )),
+        ('Order status', order.get_status_display()),
+        ('Delivery pincode', order.delivery_pincode or 'Not provided'),
+        ('Delivery option', order.get_delivery_option_display() or 'Not specified'),
+        ('Delivery promise', order.delivery_promise or 'Not specified'),
+        ('Item count', item_count),
+        ('Payment method', order.payment_mode),
+        ('Payment status', order.payment_status),
+        ('Delivery charges', f'INR {order.additional_delivery_fee or 0}'),
+        ('Priority delivery fee', f'INR {order.priority_delivery_fee or 0}'),
+        ('Total', f'INR {order.grand_total}'),
     ]
     if order.outside_service_area:
-        plain_lines.append('Delivery area: Outside Standard Service Area (estimated 4-6 days)')
-    plain_lines.extend([
-        f'Total: INR {order.grand_total}',
-        f'Payment: {order.payment_mode} ({order.payment_status})',
-        '',
-        f'Open this order in the seller portal: {seller_order_link}',
-    ])
-    plain_message = '\n'.join(plain_lines)
-    html_message = render_to_string(
-        'emails/seller_new_order.html',
-        {
-            'order': order,
-            'customer_name': customer_name,
-            'item_count': item_count,
-            'seller_order_link': seller_order_link,
-        },
+        details.append((
+            'Delivery area',
+            'Outside Standard Service Area (estimated 4-6 days)',
+        ))
+
+    _send_admin_notification(
+        subject=f'NEW ORDER RECEIVED | {order.order_id} | {item_count} item(s)',
+        heading='New order received',
+        summary='Review payment and delivery details, then prepare the order.',
+        details=details,
+        action_url=order_link,
+        action_label='Open order details in seller portal',
+        recipients=seller_recipients,
+        items=items,
     )
-    email = EmailMultiAlternatives(
-        subject,
-        plain_message,
-        settings.DEFAULT_FROM_EMAIL,
-        seller_recipients,
-    )
-    email.attach_alternative(html_message, 'text/html')
-    email.send()
     logger.info('New order notification sent for %s', order.order_id)
+
+
+def send_admin_low_stock_email(product):
+    recipients = _admin_email_recipients()
+    if not recipients:
+        logger.warning(
+            'Low-stock product %s has no configured admin recipients',
+            product.uid,
+        )
+        return
+
+    product_link = (
+        f'{settings.PUBLIC_BASE_URL}{reverse("admin:products_product_change", args=[product.pk])}'
+    )
+    _send_admin_notification(
+        subject=f'LOW STOCK ALERT | {product.sku} | {product.product_name}',
+        heading='Product inventory is low',
+        summary='Stock has entered the configured low-stock range. Review inventory and restock as needed.',
+        details=[
+            ('Product', product.product_name),
+            ('SKU', product.sku),
+            ('Available stock', product.stock_quantity),
+            ('Low-stock threshold', product.low_stock_threshold),
+            ('Stock status', product.stock_status),
+            ('Unit price', f'INR {product.price}'),
+        ],
+        action_url=product_link,
+        action_label='Open product inventory',
+        recipients=recipients,
+    )
 
 
 def send_order_status_update_email(order):
@@ -369,11 +499,44 @@ def send_order_status_update_email(order):
             'tracking_link': tracking_link,
             'order_items': order_items,
         },
-        bcc=[settings.ADMIN_EMAIL] if settings.ADMIN_EMAIL else [],
         inline_images=inline_images,
     )
     logger.info(
         'Order status email sent for order %s to %s', order.order_id, recipient)
+
+
+def send_admin_order_status_update_email(order):
+    recipients = _admin_email_recipients()
+    if not recipients:
+        return
+
+    customer_name = order.guest_name or (
+        order.user.get_full_name() or order.user.username
+        if order.user else 'Guest customer'
+    )
+    order_link = (
+        f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_order_change", args=[order.pk])}'
+    )
+    _send_admin_notification(
+        subject=f'ORDER STATUS UPDATE | {order.order_id} | {order.get_status_display()}',
+        heading='Order status updated',
+        summary='An order status changed. Review the current fulfillment and payment state.',
+        details=[
+            ('Order ID', order.order_id),
+            ('Customer', customer_name),
+            ('Customer email', order.guest_email or (
+                order.user.email if order.user else 'Not provided'
+            )),
+            ('Current status', order.get_status_display()),
+            ('Payment method', order.payment_mode),
+            ('Payment status', order.payment_status),
+            ('Order total', f'INR {order.grand_total}'),
+        ],
+        action_url=order_link,
+        action_label='Open order details in seller portal',
+        recipients=recipients,
+        items=_admin_order_item_details(order),
+    )
 
 
 def send_order_cancelled_customer_email(order):
@@ -427,11 +590,7 @@ def send_order_cancelled_customer_email(order):
 
 
 def send_admin_order_cancelled_email(order):
-    seller_recipients = [
-        address.strip()
-        for address in settings.ADMIN_EMAIL.split(',')
-        if address.strip()
-    ]
+    seller_recipients = _admin_email_recipients()
     if not seller_recipients:
         logger.warning(
             'Cancelled order %s has no configured seller recipients', order.order_id)
@@ -447,32 +606,27 @@ def send_admin_order_cancelled_email(order):
     seller_order_link = (
         f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_order_change", args=[order.pk])}'
     )
-    subject = f'Order cancelled - {order.order_id}'
-    message = (
-        f'Order {order.order_id} was cancelled by the customer.\n\n'
-        f'Customer: {customer_name}\n'
-        f'Email: {customer_email}\n'
-        f'Total: INR {order.grand_total}\n'
-        f'Payment mode: {order.payment_mode}\n'
-        f'Payment status: {order.payment_status}\n\n'
-        f'Open order in the seller portal: {seller_order_link}'
-    )
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        seller_recipients,
-        fail_silently=False,
+    _send_admin_notification(
+        subject=f'Order cancelled | {order.order_id}',
+        heading='Order cancelled',
+        summary='The customer cancelled this order. Review its payment and fulfillment state.',
+        details=[
+            ('Order ID', order.order_id),
+            ('Customer', customer_name),
+            ('Customer email', customer_email),
+            ('Order total', f'INR {order.grand_total}'),
+            ('Payment method', order.payment_mode),
+            ('Payment status', order.payment_status),
+        ],
+        action_url=seller_order_link,
+        action_label='Open order details',
+        recipients=seller_recipients,
     )
     logger.info('Seller cancellation notification sent for order %s', order.order_id)
 
 
 def send_admin_return_request_email(return_request):
-    recipients = [
-        address.strip()
-        for address in settings.ADMIN_EMAIL.split(',')
-        if address.strip()
-    ]
+    recipients = _admin_email_recipients()
     if not recipients:
         logger.error(
             'Return request for order %s has no configured seller recipients',
@@ -488,32 +642,37 @@ def send_admin_return_request_email(return_request):
         return_request.request_type == 'replacement'
     )
     request_label = 'replacement' if is_replacement else 'return'
-    message = (
-        f'A {request_label} was requested for order {order.order_id}.\n\n'
-        f'Customer: {order.guest_name or (order.user.get_full_name() if order.user else "Guest")}\n'
-        f'Email: {order.guest_email or (order.user.email if order.user else "Not provided")}\n'
-        f'Request type: {return_request.get_request_type_display()}\n'
-        f'Item: {return_request.requested_item_name}\n'
-        f'Replacement reason: {return_request.replacement_reason if is_replacement else "Not applicable"}\n'
-        f'Reason: {return_request.reason}\n\n'
-        f'Request photos: {return_request.request_images.count()}\n\n'
-        f'Review this request in the seller portal: {seller_link}'
+    customer_name = order.guest_name or (
+        order.user.get_full_name() if order.user else 'Guest'
     )
-    send_mail(
-        f'{request_label.title()} requested - {order.order_id}',
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        recipients,
-        fail_silently=False,
+    _send_admin_notification(
+        subject=f'{request_label.upper()} REQUEST | {order.order_id}',
+        heading=f'{request_label.title()} request received',
+        summary='Review the request details and attached customer evidence in the seller portal.',
+        details=[
+            ('Order ID', order.order_id),
+            ('Customer', customer_name),
+            ('Customer email', order.guest_email or (
+                order.user.email if order.user else 'Not provided'
+            )),
+            ('Request type', return_request.get_request_type_display()),
+            ('Requested item', return_request.requested_item_name),
+            ('Replacement reason', (
+                return_request.replacement_reason if is_replacement
+                else 'Not applicable'
+            )),
+            ('Customer reason', return_request.reason),
+            ('Request photos', return_request.request_images.count()),
+            ('Order total', f'INR {order.grand_total}'),
+        ],
+        action_url=seller_link,
+        action_label='Review request',
+        recipients=recipients,
     )
 
 
 def send_admin_return_shipment_email(return_request):
-    recipients = [
-        address.strip()
-        for address in settings.ADMIN_EMAIL.split(',')
-        if address.strip()
-    ]
+    recipients = _admin_email_recipients()
     if not recipients:
         logger.warning(
             'Return shipment for order %s has no configured seller recipients',
@@ -524,20 +683,65 @@ def send_admin_return_shipment_email(return_request):
     seller_link = (
         f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_returnrequest_change", args=[return_request.pk])}'
     )
-    message = (
-        f'The customer shipped the return for order {return_request.order.order_id}.\n\n'
-        f'Item: {return_request.requested_item_name}\n'
-        f'Courier partner: {return_request.courier_partner_name}\n'
-        f'Carrier tracking number: {return_request.tracking_number}\n'
-        f'Shipment photos are available in the return request in the seller portal.\n\n'
-        f'Review the return in the seller portal: {seller_link}'
+    order = return_request.order
+    request_label = return_request.get_request_type_display()
+    _send_admin_notification(
+        subject=f'RETURN SHIPPED | {order.order_id}',
+        heading=f'{request_label} shipment submitted',
+        summary='The customer submitted shipment details. Review tracking and photos.',
+        details=[
+            ('Order ID', order.order_id),
+            ('Request type', request_label),
+            ('Requested item', return_request.requested_item_name),
+            ('Courier partner', return_request.courier_partner_name or 'Not provided'),
+            ('Carrier tracking number', return_request.tracking_number or 'Not provided'),
+            ('Shipment photos', return_request.shipment_images.count()),
+        ],
+        action_url=seller_link,
+        action_label='Review shipment',
+        recipients=recipients,
     )
-    send_mail(
-        f'Return shipped - {return_request.order.order_id}',
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        recipients,
-        fail_silently=False,
+
+
+def send_admin_return_status_update_email(return_request):
+    recipients = _admin_email_recipients()
+    if not recipients:
+        return
+
+    order = return_request.order
+    customer_name = order.guest_name or (
+        order.user.get_full_name() or order.user.username
+        if order.user else 'Guest customer'
+    )
+    request_label = return_request.get_request_type_display()
+    request_link = (
+        f'{settings.PUBLIC_BASE_URL}{reverse("admin:accounts_returnrequest_change", args=[return_request.pk])}'
+    )
+    details = [
+        ('Order ID', order.order_id),
+        ('Customer', customer_name),
+        ('Customer email', order.guest_email or (
+            order.user.email if order.user else 'Not provided'
+        )),
+        ('Request type', request_label),
+        ('Request status', return_request.get_status_display()),
+        ('Requested item', return_request.requested_item_name),
+    ]
+    if return_request.refund_amount is not None:
+        details.append(('Refund amount', f'INR {return_request.refund_amount}'))
+    if return_request.refund_reference:
+        details.append(('Refund reference', return_request.refund_reference))
+    if return_request.admin_note:
+        details.append(('Admin note', return_request.admin_note))
+
+    _send_admin_notification(
+        subject=f'{request_label.upper()} STATUS UPDATE | {order.order_id}',
+        heading=f'{request_label} status updated',
+        summary='A return or replacement request changed status.',
+        details=details,
+        action_url=request_link,
+        action_label='Open request details',
+        recipients=recipients,
     )
 
 

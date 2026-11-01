@@ -1550,6 +1550,7 @@ def download_invoice(request, order_id):
 def profile_view(request, username):
     user_name = get_object_or_404(User, username=username)
     user = request.user
+    original_email = user.email
     profile = user.profile
 
     user_form = UserUpdateForm(instance=user)
@@ -1560,10 +1561,27 @@ def profile_view(request, username):
         profile_form = UserProfileForm(
             request.POST, request.FILES, instance=profile)
         if user_form.is_valid() and profile_form.is_valid():
-            user_form.save()
-            profile_form.save()
-            messages.success(
-                request, 'Your profile has been updated successfully!')
+            email_changed = (
+                original_email.strip().casefold()
+                != user_form.cleaned_data['email'].strip().casefold()
+            )
+            email_token = str(uuid.uuid4()) if email_changed else None
+            with transaction.atomic():
+                user_form.save()
+                if email_changed:
+                    profile_form.instance.is_email_verified = False
+                    profile_form.instance.email_token = email_token
+                profile_form.save()
+
+            if email_changed:
+                send_account_activation_email(user.email, email_token)
+                messages.success(
+                    request,
+                    'Your email was updated. Verify the new address using the link we sent.',
+                )
+            else:
+                messages.success(
+                    request, 'Your profile has been updated successfully!')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
     context = {

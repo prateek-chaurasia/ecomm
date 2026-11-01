@@ -134,6 +134,24 @@ Static CSS, JavaScript, and image URLs use content-hashed filenames. After deplo
 
 Frontend libraries and web fonts used by the site are stored locally under `public/media` and collected with the rest of the static files. Upstream license notices are retained with the vendored files; accompanying license texts are in `public/media/js/vendor/licenses/`. Razorpay's checkout script remains hosted by Razorpay as required for its payment integration. Serving local assets avoids third-party connection setup and lets the browser reuse the site's versioned static-asset cache; it does not reduce the libraries' transfer size.
 
+### Visitor report
+
+Visitor logging is disabled by default. To enable it, set `VISITOR_LOGGING_ENABLED=True` and restart the application. Successful public HTML page views are then recorded in the Django admin under **Home > Page visits**. Only staff users granted the `home | page visit | Can view page visit` permission can access the report. Admin/account/checkout pages, non-HTML responses, and URL query strings are excluded. With logging disabled, the middleware is not loaded.
+
+The client IP defaults to `REMOTE_ADDR`. If the site is behind a reverse proxy, set `VISITOR_TRUSTED_PROXY_COUNT` to the number of trusted proxy hops only when those proxies sanitize or append `X-Forwarded-For` correctly. Do not trust a client-supplied forwarding header directly.
+
+Approximate location is resolved locally when a MaxMind GeoLite2 City database is installed. Download and license the database through MaxMind, then configure its absolute path:
+
+```text
+VISITOR_GEOIP_CITY_DATABASE=/absolute/path/to/GeoLite2-City.mmdb
+```
+
+Without that file, visits are still recorded and location fields remain blank. No visitor IP is sent to a third-party lookup service. Schedule the retention command to run daily so records older than 90 days are deleted:
+
+```bash
+python manage.py purge_page_visits
+```
+
 ## Troubleshooting
 
 If you encounter issues during setup, here are some common problems and their solutions:

@@ -29,7 +29,7 @@ from accounts.views import create_order
 from accounts.invoices import _amount_in_words, build_invoice_context
 from base.emails import (
     send_account_activation_email, send_admin_new_order_email,
-    send_order_confirmation_email,
+    send_admin_return_shipment_email, send_order_confirmation_email,
 )
 from home.models import City, DeliveryGuideline, ReturnRefundPolicy, ShippingAddress, State
 from products.models import (
@@ -341,6 +341,8 @@ class OrderCancellationTests(TestCase):
         )
         self.assertIn('Order cancelled', admin_email.subject)
         self.assertIn(self.order.order_id, admin_email.body)
+        self.assertEqual(admin_email.alternatives[0][1], 'text/html')
+        self.assertIn('<th scope="row"', admin_email.alternatives[0][0])
 
     def test_customer_can_cancel_before_dispatch_after_24_hours(self):
         self.order.order_date = timezone.now() - timedelta(hours=48)
@@ -2453,6 +2455,78 @@ class GuestOrderAccountLinkTests(TestCase):
         self.order.refresh_from_db()
         self.assertIsNone(self.order.user)
 
+    def test_changing_email_requires_verification_before_linking_guest_orders(self):
+        user = User.objects.create_user(
+            username='email-change-owner',
+            email='old-address@example.com',
+            password='secret123',
+        )
+        user.profile.is_email_verified = True
+        user.profile.save(update_fields=['is_email_verified', 'updated_at'])
+        self.client.force_login(user)
+        old_email_order = Order.objects.create(
+            user=None,
+            guest_email='old-address@example.com',
+            guest_name='Old Address Buyer',
+            order_id='GUEST-ORDER-OLD-EMAIL',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=100,
+            grand_total=100,
+        )
+
+        self.client.post(
+            reverse('profile', args=[user.username]),
+            {
+                'first_name': '',
+                'last_name': '',
+                'email': 'new-address@example.com',
+                'bio': '',
+            },
+        )
+
+        user.refresh_from_db()
+        user.profile.refresh_from_db()
+        old_email_order.refresh_from_db()
+        self.assertEqual(user.email, 'new-address@example.com')
+        self.assertFalse(user.profile.is_email_verified)
+        self.assertIsNone(old_email_order.user)
+        self.assertEqual(mail.outbox[-1].to, ['new-address@example.com'])
+
+        new_email_order = Order.objects.create(
+            user=None,
+            guest_email='new-address@example.com',
+            guest_name='New Address Buyer',
+            order_id='GUEST-ORDER-NEW-EMAIL',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=100,
+            grand_total=100,
+        )
+        self.client.logout()
+        login_response = self.client.post(reverse('login'), {
+            'username': user.username,
+            'password': 'secret123',
+        })
+        self.assertEqual(login_response.status_code, 302)
+        old_email_order.refresh_from_db()
+        new_email_order.refresh_from_db()
+        self.assertIsNone(old_email_order.user)
+        self.assertIsNone(new_email_order.user)
+
+        self.client.get(
+            reverse('activate_email', args=[user.profile.email_token]),
+        )
+        login_response = self.client.post(reverse('login'), {
+            'username': user.username,
+            'password': 'secret123',
+        })
+        self.assertEqual(login_response.status_code, 302)
+        old_email_order.refresh_from_db()
+        new_email_order.refresh_from_db()
+        self.assertIsNone(old_email_order.user)
+        self.assertEqual(new_email_order.user, user)
+
 
 class UserShippingAddressTests(TestCase):
     def setUp(self):
@@ -3589,6 +3663,7 @@ class UserShippingAddressTests(TestCase):
         ]))
         self.assertEqual(response.status_code, 404)
 
+    @override_settings(ADMIN_EMAIL='')
     def test_order_status_change_emails_customer_once(self):
         order = Order.objects.create(
             user=self.user,
@@ -3615,6 +3690,31 @@ class UserShippingAddressTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
 
     @override_settings(ADMIN_EMAIL='ops@example.com, warehouse@example.com')
+    def test_order_status_change_sends_separate_admin_summary(self):
+        order = Order.objects.create(
+            user=self.user,
+            order_id='ORDER-ADMIN-STATUS',
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=800,
+            grand_total=800,
+        )
+
+        order.status = Order.Status.DISPATCHED
+        order.save(update_fields=['status', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 2)
+        admin_email = mail.outbox[1]
+        self.assertEqual(
+            admin_email.to,
+            ['ops@example.com', 'warehouse@example.com'],
+        )
+        self.assertIn('ORDER STATUS UPDATE', admin_email.subject)
+        self.assertIn('Dispatched', admin_email.body)
+        self.assertIn('Open order details', admin_email.alternatives[0][0])
+        self.assertIn('<th scope="row"', admin_email.alternatives[0][0])
+
+    @override_settings(ADMIN_EMAIL='ops@example.com, warehouse@example.com')
     def test_new_order_notification_reaches_admin_team(self):
         order = Order.objects.create(
             user=self.user,
@@ -3623,6 +3723,19 @@ class UserShippingAddressTests(TestCase):
             payment_mode='Razorpay',
             order_total_price=800,
             grand_total=800,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            quantity=2,
+            product_price=400,
+        )
+        BundleOrderItem.objects.create(
+            order=order,
+            title='Birthday Gift Bundle',
+            quantity=1,
+            original_unit_price=Decimal('500'),
+            unit_price=Decimal('500'),
         )
 
         send_admin_new_order_email(order)
@@ -3633,8 +3746,13 @@ class UserShippingAddressTests(TestCase):
             ['ops@example.com', 'warehouse@example.com'],
         )
         self.assertIn('BOG-20260919-ABC123', mail.outbox[0].subject)
-        self.assertIn('Open this order in the seller portal', mail.outbox[0].body)
-        self.assertIn('Open order details', mail.outbox[0].alternatives[0][0])
+        self.assertIn('NEW ORDER RECEIVED', mail.outbox[0].subject)
+        self.assertIn('Open order details in seller portal', mail.outbox[0].body)
+        self.assertIn('3 item(s)', mail.outbox[0].subject)
+        self.assertIn('Order items', mail.outbox[0].alternatives[0][0])
+        self.assertIn(self.product.sku, mail.outbox[0].alternatives[0][0])
+        self.assertIn('Birthday Gift Bundle', mail.outbox[0].alternatives[0][0])
+        self.assertIn('Payment status', mail.outbox[0].alternatives[0][0])
         self.assertIn('seller portal', mail.outbox[0].body)
         self.assertNotIn('in admin', mail.outbox[0].body.lower())
 
@@ -3939,6 +4057,8 @@ class ReturnWorkflowTests(TestCase):
         self.assertEqual(mail.outbox[-1].to, ['returns@example.com'])
         self.assertIn(self.order.order_id, mail.outbox[-1].body)
         self.assertIn("Defective or doesn't work", mail.outbox[-1].body)
+        self.assertEqual(mail.outbox[-1].alternatives[0][1], 'text/html')
+        self.assertIn('<th scope="row"', mail.outbox[-1].alternatives[0][0])
         customer_email = next(
             email for email in mail.outbox
             if self.user.email in email.to
@@ -3951,6 +4071,46 @@ class ReturnWorkflowTests(TestCase):
         )
         self.assertIn('awaiting seller review', customer_email.body)
         self.assertNotIn('admin review', customer_email.body.lower())
+
+    @override_settings(ADMIN_EMAIL='returns@example.com')
+    def test_return_status_update_sends_separate_admin_summary(self):
+        return_request = ReturnRequest.objects.create(
+            order=self.order,
+            reason='Item is defective.',
+        )
+        mail.outbox.clear()
+
+        return_request.status = ReturnRequest.Status.APPROVED
+        return_request.save(update_fields=['status', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 2)
+        admin_email = mail.outbox[1]
+        self.assertEqual(admin_email.to, ['returns@example.com'])
+        self.assertIn('RETURN AND REFUND STATUS UPDATE', admin_email.subject)
+        self.assertIn(self.order.order_id, admin_email.body)
+        self.assertIn('Approved', admin_email.body)
+        self.assertIn('<th scope="row"', admin_email.alternatives[0][0])
+
+    @override_settings(ADMIN_EMAIL='returns@example.com')
+    def test_return_shipment_admin_email_uses_structured_summary(self):
+        return_request = ReturnRequest.objects.create(
+            order=self.order,
+            reason='Item is defective.',
+            status=ReturnRequest.Status.SHIPPED,
+            courier_partner_name='Example Courier',
+            tracking_number='TRACK-12345',
+        )
+        mail.outbox.clear()
+
+        send_admin_return_shipment_email(return_request)
+
+        self.assertEqual(len(mail.outbox), 1)
+        admin_email = mail.outbox[0]
+        self.assertEqual(admin_email.to, ['returns@example.com'])
+        self.assertIn('RETURN SHIPPED', admin_email.subject)
+        self.assertIn('TRACK-12345', admin_email.body)
+        self.assertIn('Example Courier', admin_email.alternatives[0][0])
+        self.assertIn('<th scope="row"', admin_email.alternatives[0][0])
 
     def test_return_requires_details_when_reason_is_not_defined(self):
         response = self.client.post(

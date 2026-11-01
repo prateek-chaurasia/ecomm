@@ -53,6 +53,21 @@ class MarqueeAnnouncement(BaseModel):
         return self.text[:80]
 
 
+class PageVisit(models.Model):
+    ip_address = models.GenericIPAddressField(db_index=True)
+    path = models.CharField(max_length=2048)
+    country = models.CharField(max_length=100, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    region = models.CharField(max_length=100, blank=True)
+    visited_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-visited_at']
+
+    def __str__(self):
+        return f'{self.ip_address} visited {self.path} at {self.visited_at:%Y-%m-%d %H:%M}'
+
+
 class DeliveryGuideline(models.Model):
     title = models.CharField(max_length=120, default='Delivery information')
     operational_office_city = models.CharField(max_length=100, blank=True)

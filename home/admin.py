@@ -1,14 +1,46 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django import forms
+from django.utils import timezone
 from base.admin import FilterCollapsibleModelAdmin
 from .models import (
     City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
-    DeliveryGuideline, ReturnRefundPolicy, ReplacePolicy,
+    DeliveryGuideline, PageVisit, ReturnRefundPolicy, ReplacePolicy,
 )
 
 # Register your models here.
 
 admin.site.register(ShippingAddress)
+
+
+@admin.register(PageVisit)
+class PageVisitAdmin(admin.ModelAdmin):
+    list_display = ('visited_at', 'ip_address', 'country', 'region', 'city', 'path')
+    list_filter = ('country', 'visited_at')
+    search_fields = ('ip_address', 'country', 'region', 'city', 'path')
+    date_hierarchy = 'visited_at'
+    ordering = ('-visited_at',)
+
+    def get_queryset(self, request):
+        retention_cutoff = timezone.now() - timedelta(days=90)
+        return super().get_queryset(request).filter(visited_at__gte=retention_cutoff)
+
+    def has_view_permission(self, request, obj=None):
+        return (
+            request.user.is_active
+            and request.user.is_staff
+            and request.user.has_perm('home.view_pagevisit')
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(State)

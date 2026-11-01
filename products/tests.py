@@ -244,6 +244,40 @@ class ProductInventoryAdminTests(TestCase):
         self.assertEqual(self.product.stock_status, 'Low stock')
         self.assertFalse(self.product.in_stock is False)
 
+    @override_settings(
+        ADMIN_EMAIL='inventory@example.com, operations@example.com',
+        PUBLIC_BASE_URL='https://shop.example',
+    )
+    def test_admins_are_emailed_once_when_product_enters_low_stock(self):
+        self.product.stock_quantity = 10
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+        self.assertEqual(len(mail.outbox), 0)
+
+        self.product.stock_quantity = 5
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(
+            email.to,
+            ['inventory@example.com', 'operations@example.com'],
+        )
+        self.assertIn('LOW STOCK ALERT', email.subject)
+        self.assertIn(self.product.sku, email.subject)
+        self.assertIn('Available stock: 5', email.body)
+        self.assertIn('Low-stock threshold: 5', email.body)
+        self.assertIn('Open product inventory', email.body)
+        self.assertEqual(email.alternatives[0][1], 'text/html')
+        self.assertIn('<th scope="row"', email.alternatives[0][0])
+        self.assertIn(
+            f'https://shop.example/admin/products/product/{self.product.pk}/change/',
+            email.body,
+        )
+
+        self.product.stock_quantity = 4
+        self.product.save(update_fields=['stock_quantity', 'updated_at'])
+        self.assertEqual(len(mail.outbox), 1)
+
     def test_restock_selected_admin_action_updates_stock(self):
         queryset = Product.objects.filter(pk=self.product.pk)
         restock_selected(admin.site._registry[Product], None, queryset)
@@ -251,6 +285,7 @@ class ProductInventoryAdminTests(TestCase):
         self.product.refresh_from_db()
         self.assertGreaterEqual(self.product.stock_quantity, self.product.low_stock_threshold)
 
+    @override_settings(ADMIN_EMAIL='')
     def test_admin_restock_action_emails_wishlist_subscriber(self):
         self.product.stock_quantity = 0
         self.product.save(update_fields=['stock_quantity', 'updated_at'])
@@ -1466,7 +1501,10 @@ class WishlistBackInStockTests(TestCase):
             large,
         )
 
-    @override_settings(DEFAULT_FROM_EMAIL='noreply@example.com')
+    @override_settings(
+        ADMIN_EMAIL='',
+        DEFAULT_FROM_EMAIL='noreply@example.com',
+    )
     def test_transition_from_out_of_stock_sends_one_email_to_subscribed_user(self):
         wishlist_item = Wishlist.objects.create(
             user=self.user,
@@ -1493,6 +1531,7 @@ class WishlistBackInStockTests(TestCase):
         self.product.save(update_fields=['stock_quantity', 'updated_at'])
         self.assertEqual(len(mail.outbox), 1)
 
+    @override_settings(ADMIN_EMAIL='')
     def test_back_in_stock_email_embeds_a_product_thumbnail_when_available(self):
         image_bytes = BytesIO()
         Image.new('RGB', (240, 120), 'blue').save(image_bytes, format='PNG')

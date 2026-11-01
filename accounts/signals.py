@@ -7,6 +7,8 @@ from django.contrib.auth.signals import user_logged_in
 from accounts.models import Order, Profile, ReturnRequest
 from accounts.order_linking import attach_verified_guest_orders
 from base.emails import (
+    send_admin_order_status_update_email,
+    send_admin_return_status_update_email,
     send_order_status_update_email,
     send_return_status_update_email,
 )
@@ -55,6 +57,11 @@ def notify_customer_of_order_status(sender, instance, created, **kwargs):
     except Exception:
         logger.exception(
             'Order status email failed for order %s', instance.order_id)
+    try:
+        send_admin_order_status_update_email(instance)
+    except Exception:
+        logger.exception(
+            'Admin order status email failed for order %s', instance.order_id)
 
 
 @receiver(pre_save, sender=ReturnRequest)
@@ -80,3 +87,11 @@ def notify_customer_of_return_status(sender, instance, created, **kwargs):
             'Return status email failed for order %s',
             instance.order.order_id,
         )
+    if not created and getattr(instance, '_return_status_changed', False):
+        try:
+            send_admin_return_status_update_email(instance)
+        except Exception:
+            logger.exception(
+                'Admin return status email failed for order %s',
+                instance.order.order_id,
+            )
