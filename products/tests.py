@@ -1206,6 +1206,12 @@ class ProductCartStateTests(TestCase):
         self.assertNotContains(response, 'added to cart')
         self.assertContains(response, f'<a href="{reverse("cart")}" id="go-to-cart-link"')
         self.assertContains(response, 'id="go-to-cart-link" class="btn btn-outline-primary" hidden')
+        self.assertContains(
+            response,
+            '<a href="https://wa.me/919762983929" class="btn btn-success whatsapp-enquiry-link" '
+            'target="_blank" rel="noopener noreferrer">',
+        )
+        self.assertContains(response, "What's app Enquiry")
 
     def test_product_image_opens_in_accessible_full_size_viewer(self):
         ProductImage.objects.create(
@@ -1549,6 +1555,25 @@ class ProductReviewPageTests(TestCase):
 
         self.assertContains(response, 'href="#product-reviews"')
         self.assertContains(response, 'id="product-reviews"')
+
+    @override_settings(
+        PUBLIC_BASE_URL='https://bundleofgifts.com',
+        ALLOWED_HOSTS=['testserver', 'www.bundleofgifts.com'],
+    )
+    def test_sorted_product_reviews_use_public_canonical_without_query_string(self):
+        response = self.client.get(
+            reverse('product_reviews_for_product', args=[self.product.slug]),
+            {'sort': 'lowest'},
+            HTTP_HOST='www.bundleofgifts.com',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<link rel="canonical" href="https://bundleofgifts.com'
+            f'{reverse("product_reviews_for_product", args=[self.product.slug])}">',
+        )
+        self.assertNotContains(response, '?sort=lowest')
 
     @staticmethod
     def create_test_image(name):

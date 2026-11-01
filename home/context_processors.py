@@ -21,4 +21,5 @@ def delivery_guideline(request):
         'marquee_announcements': MarqueeAnnouncement.objects.filter(
             is_active=True,
         ),
+        'public_base_url': settings.PUBLIC_BASE_URL,
     }

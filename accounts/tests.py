@@ -2056,6 +2056,10 @@ class RegistrationTests(TestCase):
         self.assertContains(response, 'class="google-img"')
         self.assertContains(response, 'class="fab fa-facebook-f facebook-icon"')
         self.assertContains(response, 'Username, mobile number, or email address')
+        self.assertContains(
+            response,
+            '<meta name="robots" content="noindex,follow">',
+        )
 
     def test_user_can_login_with_username_email_or_shipping_mobile(self):
         user = User.objects.create_user(

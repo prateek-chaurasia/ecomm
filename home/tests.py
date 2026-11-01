@@ -780,6 +780,7 @@ class SitemapTests(TestCase):
         self.assertContains(response, 'Allow: /')
         self.assertContains(response, 'Disallow: /admin/')
         self.assertContains(response, 'Disallow: /accounts/')
+        self.assertContains(response, 'Allow: /accounts/login/')
         self.assertContains(response, 'Disallow: /product/wishlist/')
         self.assertContains(response, 'Disallow: /product/add-to-cart/')
         self.assertContains(
@@ -798,6 +799,40 @@ class SitemapTests(TestCase):
             '<loc>https://bundleofgifts.com/product/bundles/</loc>',
         )
         self.assertNotContains(response, 'https://example.com/')
+
+
+class CanonicalHostMiddlewareTests(TestCase):
+    @override_settings(
+        IS_PRODUCTION=True,
+        PUBLIC_BASE_URL='https://bundleofgifts.com',
+        ALLOWED_HOSTS=['bundleofgifts.com', 'www.bundleofgifts.com'],
+    )
+    def test_www_host_redirects_to_apex_and_preserves_path_and_query(self):
+        response = self.client.get(
+            '/terms-and-conditions/?sort=lowest',
+            HTTP_HOST='www.bundleofgifts.com',
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response['Location'],
+            'https://bundleofgifts.com/terms-and-conditions/?sort=lowest',
+        )
+
+    @override_settings(
+        IS_PRODUCTION=True,
+        PUBLIC_BASE_URL='https://bundleofgifts.com',
+        ALLOWED_HOSTS=['bundleofgifts.com', 'www.bundleofgifts.com'],
+    )
+    def test_apex_host_is_not_redirected(self):
+        response = self.client.get(
+            reverse('robots_txt'),
+            HTTP_HOST='bundleofgifts.com',
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
 
 
 class RenderBlockingResourceTests(TestCase):
