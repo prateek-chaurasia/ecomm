@@ -209,7 +209,10 @@ class HSNCodeAdminTests(TestCase):
 
         self.assertEqual(
             product_admin.autocomplete_fields,
-            ['hsn_reference', 'color_variant', 'age_groups', 'tags'],
+            [
+                'parent', 'hsn_reference', 'color_variant', 'age_groups', 'tags',
+                'similar_color_products', 'similar_size_products',
+            ],
         )
 
     def test_product_entry_page_renders_searchable_reference_and_variant_fields(self):
@@ -223,9 +226,77 @@ class HSNCodeAdminTests(TestCase):
         response = self.client.get(reverse('admin:products_product_add'))
 
         self.assertEqual(response.status_code, 200)
-        for field_name in ('hsn_reference', 'color_variant', 'age_groups', 'tags'):
+        for field_name in (
+            'parent', 'hsn_reference', 'color_variant', 'age_groups', 'tags',
+            'similar_color_products', 'similar_size_products',
+        ):
             self.assertContains(response, f'name="{field_name}"')
         self.assertContains(response, 'admin-autocomplete')
+
+    def test_parent_selector_only_offers_top_level_products(self):
+        category = Category.objects.create(category_name='Action figures')
+        parent = Product.objects.create(
+            product_name='Avengers figure series',
+            category=category,
+            price=500,
+            product_desription='Action figures in the Avengers series.',
+        )
+        child = Product.objects.create(
+            product_name='Hulk figure',
+            category=category,
+            price=500,
+            product_desription='Hulk action figure.',
+            parent=parent,
+        )
+        another_child = Product.objects.create(
+            product_name='Spider-Man figure',
+            category=category,
+            price=500,
+            product_desription='Spider-Man action figure.',
+            parent=parent,
+        )
+
+        parent_form = ProductAdminForm(instance=parent)
+        child_form = ProductAdminForm(instance=child)
+
+        self.assertNotIn(parent, parent_form.fields['parent'].queryset)
+        self.assertIn(parent, child_form.fields['parent'].queryset)
+        self.assertNotIn(child, child_form.fields['parent'].queryset)
+        self.assertNotIn(another_child, child_form.fields['parent'].queryset)
+
+    def test_parent_autocomplete_only_returns_top_level_products(self):
+        category = Category.objects.create(category_name='Action figures')
+        parent = Product.objects.create(
+            product_name='Avengers figure series',
+            category=category,
+            price=500,
+            product_desription='Action figures in the Avengers series.',
+        )
+        child = Product.objects.create(
+            product_name='Hulk figure',
+            category=category,
+            price=500,
+            product_desription='Hulk action figure.',
+            parent=parent,
+        )
+        admin_user = User.objects.create_superuser(
+            username='collection-admin',
+            email='collection-admin@example.com',
+            password='secret123',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('admin:autocomplete'), {
+            'app_label': 'products',
+            'model_name': 'product',
+            'field_name': 'parent',
+            'term': 'figure',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        result_names = [result['text'] for result in response.json()['results']]
+        self.assertIn(parent.product_name, result_names)
+        self.assertNotIn(child.product_name, result_names)
 
 
 class ProductInventoryAdminTests(TestCase):
@@ -1095,6 +1166,89 @@ class ProductCartStateTests(TestCase):
             stock_quantity=8,
         )
         self.client.force_login(self.user)
+
+    def test_curated_color_and_size_products_are_linked_on_product_pages(self):
+        red_product = Product.objects.create(
+            product_name='Toy robot - red',
+            category=self.category,
+            price=750,
+            product_desription='Red toy robot',
+        )
+        large_product = Product.objects.create(
+            product_name='Toy robot - large',
+            category=self.category,
+            price=900,
+            product_desription='Large toy robot',
+        )
+        self.product.similar_color_products.add(red_product)
+        self.product.similar_size_products.add(large_product)
+
+        response = self.client.get(reverse('get_product', args=[self.product.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertQuerySetEqual(
+            response.context['color_related_products'],
+            [red_product],
+        )
+        self.assertQuerySetEqual(
+            response.context['size_related_products'],
+            [large_product],
+        )
+        self.assertContains(response, 'Explore other colors')
+        self.assertContains(response, 'Explore other sizes')
+        self.assertContains(
+            response,
+            f'href="{reverse("get_product", args=[red_product.slug])}"',
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("get_product", args=[large_product.slug])}"',
+        )
+
+        reverse_response = self.client.get(
+            reverse('get_product', args=[red_product.slug]),
+        )
+        self.assertQuerySetEqual(
+            reverse_response.context['color_related_products'],
+            [self.product],
+        )
+
+    def test_parent_and_sibling_products_are_shown_as_a_collection(self):
+        hulk = Product.objects.create(
+            product_name='Hulk figure',
+            category=self.category,
+            price=750,
+            product_desription='Hulk action figure',
+            parent=self.product,
+        )
+        spider_man = Product.objects.create(
+            product_name='Spider-Man figure',
+            category=self.category,
+            price=750,
+            product_desription='Spider-Man action figure',
+            parent=self.product,
+        )
+
+        parent_response = self.client.get(
+            reverse('get_product', args=[self.product.slug]),
+        )
+        self.assertEqual(
+            list(parent_response.context['collection_products']),
+            [hulk, spider_man],
+        )
+        self.assertContains(parent_response, 'More in this collection')
+        self.assertContains(parent_response, hulk.product_name)
+        self.assertContains(parent_response, spider_man.product_name)
+
+        child_response = self.client.get(
+            reverse('get_product', args=[hulk.slug]),
+        )
+        self.assertEqual(
+            list(child_response.context['collection_products']),
+            [spider_man, self.product],
+        )
+        self.assertContains(child_response, self.product.product_name)
+        self.assertContains(child_response, spider_man.product_name)
 
     def test_product_page_shows_existing_cart_quantity_instead_of_add_button(self):
         cart = Cart.objects.create(user=self.user)

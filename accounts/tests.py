@@ -25,7 +25,7 @@ from accounts.forms import (
     GuestShippingAddressForm, RegistrationForm, ShippingAddressForm,
     UserProfileForm, UserUpdateForm,
 )
-from accounts.views import create_order
+from accounts.views import _newsletter_coupon_error, create_order
 from accounts.invoices import _amount_in_words, build_invoice_context
 from base.emails import (
     send_account_activation_email, send_admin_new_order_email,
@@ -5179,4 +5179,96 @@ class ReturnWorkflowTests(TestCase):
         self.assertIn(
             'Deduction reason: Minor damage on inspection.',
             processed_email.body,
+        )
+
+
+class NewsletterCouponEligibilityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='newsletter-customer',
+            email='shopper@example.com',
+            password='secret123',
+        )
+        self.category = Category.objects.create(category_name='Newsletter gifts')
+        self.product = Product.objects.create(
+            product_name='Newsletter gift',
+            category=self.category,
+            price=1000,
+            product_desription='A gift for newsletter discount tests',
+            stock_quantity=3,
+        )
+        self.coupon = Coupon.objects.create(
+            coupon_code='NEWSLETTER',
+            subscriber_email=self.user.email,
+            discount_percentage=5,
+            discount_amount=2_147_483_647,
+            minimum_amount=0,
+        )
+
+    def test_subscriber_code_requires_matching_email(self):
+        self.assertIn(
+            'only valid for the email address',
+            _newsletter_coupon_error(self.coupon, 'other@example.com'),
+        )
+        self.assertEqual(
+            _newsletter_coupon_error(self.coupon, self.user.email),
+            '',
+        )
+
+    def test_subscriber_code_rejects_an_existing_guest_order(self):
+        Order.objects.create(
+            order_id='NEWSLETTER-PRIOR-GUEST',
+            guest_email=self.user.email,
+            payment_status='Paid',
+            payment_mode='Razorpay',
+            order_total_price=1000,
+            grand_total=1000,
+        )
+
+        self.assertIn(
+            'first order',
+            _newsletter_coupon_error(self.coupon, self.user.email),
+        )
+
+    def test_cancelled_order_does_not_consume_first_order_discount(self):
+        Order.objects.create(
+            order_id='NEWSLETTER-CANCELLED',
+            guest_email=self.user.email,
+            status=Order.Status.CANCELLED,
+            payment_status='Refund processed',
+            payment_mode='Razorpay',
+            order_total_price=1000,
+            grand_total=1000,
+        )
+
+        self.assertEqual(
+            _newsletter_coupon_error(self.coupon, self.user.email),
+            '',
+        )
+
+    def test_coupon_can_only_be_used_for_one_placed_order(self):
+        cart = Cart.objects.create(user=self.user, coupon=self.coupon)
+        CartItem.objects.create(cart=cart, product=self.product, quantity=1)
+
+        first_order = create_order(
+            cart,
+            order_id='NEWSLETTER-FIRST-ORDER',
+            payment_status='Pending',
+            payment_mode='Cash on Delivery',
+        )
+
+        self.assertEqual(first_order.coupon, self.coupon)
+        self.assertEqual(self.coupon.calculate_discount(1000), Decimal('50.00'))
+        with self.assertRaisesMessage(ValueError, 'first order'):
+            create_order(
+                cart,
+                order_id='NEWSLETTER-SECOND-ORDER',
+                payment_status='Pending',
+                payment_mode='Cash on Delivery',
+            )
+
+    def test_private_coupon_is_not_listed_as_a_public_offer(self):
+        self.assertTrue(self.coupon.is_available)
+        self.assertFalse(
+            Coupon.objects.available().filter(subscriber_email='').exists(),
         )

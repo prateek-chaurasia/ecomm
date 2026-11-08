@@ -1,0 +1,35 @@
+<dialog class="newsletter-popup" id="newsletter-popup" aria-labelledby="newsletter-popup-title">
+  <button class="newsletter-popup-close" type="button" aria-label="Close newsletter subscription">
+    <span aria-hidden="true">&times;</span>
+  </button>
+  <div class="newsletter-popup-content">
+    <p class="newsletter-popup-eyebrow">A little something for your first order</p>
+    <h2 id="newsletter-popup-title">Get 5% off</h2>
+    <p class="newsletter-popup-description">
+      Subscribe to our newsletter for updates and email offers. Confirm your email to receive a unique code for 5% off your first order.
+    </p>
+    <form class="newsletter-popup-form" action="{% url 'newsletter_subscribe' %}" method="post">
+      {% csrf_token %}
+      <label for="newsletter-popup-email">Email address</label>
+      <input
+        id="newsletter-popup-email"
+        name="email"
+        type="email"
+        autocomplete="email"
+        maxlength="254"
+        required
+      >
+      <div class="newsletter-popup-honeypot" aria-hidden="true">
+        <label for="newsletter-popup-website">Leave this field empty</label>
+        <input id="newsletter-popup-website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+      <label class="newsletter-popup-consent">
+        <input name="consent" type="checkbox" required>
+        <span>I agree to receive newsletter and promotional emails. I can unsubscribe at any time.</span>
+      </label>
+      <button class="newsletter-popup-submit" type="submit">Subscribe and get 5% off</button>
+      <p class="newsletter-popup-feedback" role="status" aria-live="polite"></p>
+    </form>
+    <p class="newsletter-popup-privacy">We’ll only use your email for updates you’ve agreed to receive.</p>
+  </div>
+</dialog>

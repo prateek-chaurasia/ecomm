@@ -1,9 +1,11 @@
 from datetime import time, timedelta
+import uuid
 
 from django.contrib.auth.models import User
 from base.models import BaseModel
 from django.urls import reverse
 from django.db import models
+from django.db.models import Q
 from django import forms
 from django.core.exceptions import ValidationError
 from django_countries.fields import CountryField
@@ -13,6 +15,11 @@ import re
 import unicodedata
 
 # Create your models here.
+
+THEME_COLOR_VALIDATOR = RegexValidator(
+    regex=r'^#[0-9A-Fa-f]{6}$',
+    message='Enter a six-digit hexadecimal color, for example #3167EB.',
+)
 
 
 class HomeBanner(BaseModel):
@@ -51,6 +58,141 @@ class MarqueeAnnouncement(BaseModel):
 
     def __str__(self):
         return self.text[:80]
+
+
+class SiteTheme(models.Model):
+    name = models.CharField(max_length=100)
+    primary_color = models.CharField(
+        max_length=7,
+        default='#3167EB',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    primary_text_color = models.CharField(
+        max_length=7,
+        default='#FFFFFF',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    secondary_color = models.CharField(
+        max_length=7,
+        default='#081828',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    accent_color = models.CharField(
+        max_length=7,
+        default='#FBBF24',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    page_background_color = models.CharField(
+        max_length=7,
+        default='#FFFFFF',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    surface_color = models.CharField(
+        max_length=7,
+        default='#FFFFFF',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    text_color = models.CharField(
+        max_length=7,
+        default='#212529',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    footer_background_color = models.CharField(
+        max_length=7,
+        default='#081828',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    footer_text_color = models.CharField(
+        max_length=7,
+        default='#FFFFFF',
+        validators=[THEME_COLOR_VALIDATOR],
+    )
+    is_active = models.BooleanField(
+        default=False,
+        help_text='Enable this theme during the scheduled date and time window.',
+    )
+    starts_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Leave blank to make this theme eligible immediately.',
+    )
+    ends_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Leave blank for no scheduled end date.',
+    )
+
+    class Meta:
+        ordering = ('name',)
+        verbose_name = 'site theme'
+        verbose_name_plural = 'site themes'
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_active(cls):
+        now = timezone.now()
+        return cls.objects.filter(
+            is_active=True,
+        ).filter(
+            Q(starts_at__isnull=True) | Q(starts_at__lte=now),
+        ).filter(
+            Q(ends_at__isnull=True) | Q(ends_at__gt=now),
+        ).order_by('-starts_at', '-pk').first()
+
+    def clean(self):
+        super().clean()
+        if self.starts_at and self.ends_at and self.starts_at >= self.ends_at:
+            raise ValidationError({
+                'ends_at': 'The end date and time must be after the start date and time.',
+            })
+
+        if not self.is_active:
+            return
+
+        overlapping_themes = type(self).objects.filter(is_active=True).exclude(pk=self.pk)
+        if self.ends_at:
+            overlapping_themes = overlapping_themes.filter(
+                Q(starts_at__isnull=True) | Q(starts_at__lt=self.ends_at),
+            )
+        if self.starts_at:
+            overlapping_themes = overlapping_themes.filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gt=self.starts_at),
+            )
+        if overlapping_themes.exists():
+            raise ValidationError(
+                'Active theme schedules cannot overlap. Adjust the dates or disable the other theme.'
+            )
+
+
+class NewsletterSubscriber(models.Model):
+    email = models.EmailField(unique=True)
+    is_subscribed = models.BooleanField(default=False)
+    consented_at = models.DateTimeField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    unsubscribed_at = models.DateTimeField(null=True, blank=True)
+    confirmation_sent_at = models.DateTimeField(null=True, blank=True)
+    confirmation_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    unsubscribe_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    coupon = models.OneToOneField(
+        'products.Coupon',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='newsletter_subscriber',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().casefold()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.email
 
 
 class PageVisit(models.Model):

@@ -1,6 +1,7 @@
 from django.conf import settings
 from .models import (
     DeliveryGuideline, MarqueeAnnouncement, ReplacePolicy, ReturnRefundPolicy,
+    SiteTheme,
 )
 from products.models import Category
 
@@ -18,8 +19,10 @@ def delivery_guideline(request):
         'replace_policy': ReplacePolicy.get_solo(),
         'footer_categories': Category.objects.order_by('category_name'),
         'service_area_message': service_area_message,
+        'active_site_theme': SiteTheme.get_active(),
         'marquee_announcements': MarqueeAnnouncement.objects.filter(
             is_active=True,
         ),
         'public_base_url': settings.PUBLIC_BASE_URL,
+        'newsletter_enabled': settings.NEWSLETTER_ENABLED,
     }

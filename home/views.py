@@ -1,26 +1,253 @@
 import json
 import logging
+import secrets
+import string
+import uuid
+from datetime import timedelta
 from decouple import config
 
+from django.conf import settings
+from django.db import transaction
 from django.db.models import Q, Avg, Case, When, Value, IntegerField, Count
 from django.db.models.functions import Coalesce
 from django.core.mail import EmailMessage
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import redirect, render
-from django.conf import settings
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.contrib import messages
-from products.models import Product, Category, Tag
+from products.models import Product, Category, Tag, Coupon
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods, require_POST
 
 from base.emails import send_customer_email
-from home.models import HomeBanner, ReplacePolicy, ReturnRefundPolicy
-from home.forms import ContactForm
+from home.models import (
+    HomeBanner, NewsletterSubscriber, ReplacePolicy, ReturnRefundPolicy,
+)
+from home.forms import ContactForm, NewsletterSignupForm
 
 logger = logging.getLogger(__name__)
 
 VERIFY_TOKEN = config("WHATSAPP_VERIFY_TOKEN")
+NEWSLETTER_CONFIRMATION_RESEND_DELAY = timedelta(minutes=5)
+
+
+@require_POST
+def newsletter_subscribe(request):
+    if not settings.NEWSLETTER_ENABLED:
+        raise Http404
+
+    form = NewsletterSignupForm(request.POST)
+    if not form.is_valid():
+        message = next(iter(form.errors.values()))[0]
+        return JsonResponse({'success': False, 'message': message}, status=400)
+    if form.cleaned_data['website']:
+        return JsonResponse({
+            'success': False,
+            'message': 'We could not process your request.',
+        }, status=400)
+
+    email = form.cleaned_data['email']
+    now = timezone.now()
+    send_confirmation = False
+    with transaction.atomic():
+        subscriber, created = NewsletterSubscriber.objects.get_or_create(
+            email=email,
+            defaults={'consented_at': now},
+        )
+        if subscriber.is_subscribed:
+            return JsonResponse({
+                'success': True,
+                'message': 'This email is already subscribed to our newsletter.',
+            })
+
+        if not created:
+            subscriber = NewsletterSubscriber.objects.select_for_update().get(
+                pk=subscriber.pk,
+            )
+            if subscriber.is_subscribed:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'This email is already subscribed to our newsletter.',
+                })
+            if subscriber.unsubscribed_at:
+                subscriber.confirmation_token = uuid.uuid4()
+                subscriber.unsubscribe_token = uuid.uuid4()
+                subscriber.unsubscribed_at = None
+                subscriber.confirmation_sent_at = None
+                subscriber.confirmed_at = None
+            subscriber.consented_at = now
+
+        if (
+            subscriber.confirmation_sent_at is None
+            or subscriber.confirmation_sent_at
+            <= now - NEWSLETTER_CONFIRMATION_RESEND_DELAY
+        ):
+            subscriber.confirmation_sent_at = now
+            send_confirmation = True
+        subscriber.save()
+
+    if send_confirmation:
+        confirmation_url = request.build_absolute_uri(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        try:
+            send_customer_email(
+                'Confirm your Bundle of Gifts newsletter subscription',
+                (
+                    'Please confirm that you want to receive newsletter and '
+                    'promotional emails from Bundle of Gifts. Confirm your '
+                    f'subscription here: {confirmation_url}\n\n'
+                    'After confirming, you will receive a unique 5% discount '
+                    'code for your first order.'
+                ),
+                email,
+                'emails/newsletter_confirmation.html',
+                {'confirmation_url': confirmation_url},
+            )
+        except Exception:
+            logger.exception('Newsletter confirmation email failed for %s', email)
+            NewsletterSubscriber.objects.filter(
+                pk=subscriber.pk,
+                is_subscribed=False,
+            ).update(confirmation_sent_at=None)
+            return JsonResponse({
+                'success': False,
+                'message': 'We could not send the confirmation email. Please try again later.',
+            }, status=503)
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Please check your inbox and confirm your email to receive your 5% first-order discount.',
+    })
+
+
+@require_http_methods(['GET', 'POST'])
+def newsletter_confirm(request, token):
+    if not settings.NEWSLETTER_ENABLED:
+        raise Http404
+
+    subscriber = get_object_or_404(
+        NewsletterSubscriber,
+        confirmation_token=token,
+    )
+    if request.method == 'GET':
+        return render(request, 'home/newsletter_confirm.html', {
+            'subscriber': subscriber,
+            'hide_newsletter_popup': True,
+        })
+
+    newly_confirmed = False
+    with transaction.atomic():
+        subscriber = get_object_or_404(
+            NewsletterSubscriber.objects.select_for_update(),
+            confirmation_token=token,
+        )
+        if not subscriber.is_subscribed:
+            coupon = subscriber.coupon
+            if coupon is None:
+                alphabet = string.ascii_uppercase + string.digits
+                coupon_code = ''.join(
+                    secrets.choice(alphabet) for _ in range(10)
+                )
+                while Coupon.objects.filter(
+                    coupon_code__iexact=coupon_code,
+                ).exists():
+                    coupon_code = ''.join(
+                        secrets.choice(alphabet) for _ in range(10)
+                    )
+                coupon = Coupon.objects.create(
+                    coupon_code=coupon_code,
+                    subscriber_email=subscriber.email,
+                    discount_percentage=5,
+                    discount_amount=2_147_483_647,
+                    minimum_amount=0,
+                )
+                subscriber.coupon = coupon
+            subscriber.is_subscribed = True
+            subscriber.confirmed_at = timezone.now()
+            subscriber.unsubscribed_at = None
+            subscriber.save(update_fields=[
+                'coupon', 'is_subscribed', 'confirmed_at', 'unsubscribed_at',
+            ])
+            newly_confirmed = True
+
+    coupon_email_sent = None
+    if newly_confirmed:
+        unsubscribe_url = request.build_absolute_uri(reverse(
+            'newsletter_unsubscribe',
+            args=[subscriber.unsubscribe_token],
+        ))
+        try:
+            send_customer_email(
+                'Your 5% first-order discount from Bundle of Gifts',
+                (
+                    'Thanks for confirming your newsletter subscription. '
+                    'Use this unique code for 5% off your first order: '
+                    f'{subscriber.coupon.coupon_code}\n\n'
+                    f'Your code is for {subscriber.email} only.\n\n'
+                    f'You can unsubscribe from promotional emails here: {unsubscribe_url}'
+                ),
+                subscriber.email,
+                'emails/newsletter_welcome.html',
+                {
+                    'coupon_code': subscriber.coupon.coupon_code,
+                    'subscriber_email': subscriber.email,
+                    'unsubscribe_url': unsubscribe_url,
+                },
+            )
+        except Exception:
+            logger.exception(
+                'Newsletter welcome email failed for %s',
+                subscriber.email,
+            )
+            coupon_email_sent = False
+        else:
+            coupon_email_sent = True
+
+    return render(request, 'home/newsletter_confirm.html', {
+        'subscriber': subscriber,
+        'coupon': subscriber.coupon,
+        'confirmed': True,
+        'coupon_email_sent': coupon_email_sent,
+        'hide_newsletter_popup': True,
+    })
+
+
+@require_http_methods(['GET', 'POST'])
+def newsletter_unsubscribe(request, token):
+    subscriber = get_object_or_404(
+        NewsletterSubscriber,
+        unsubscribe_token=token,
+    )
+    if request.method == 'GET':
+        return render(request, 'home/newsletter_unsubscribe.html', {
+            'subscriber': subscriber,
+            'hide_newsletter_popup': True,
+        })
+
+    with transaction.atomic():
+        subscriber = get_object_or_404(
+            NewsletterSubscriber.objects.select_for_update(),
+            unsubscribe_token=token,
+        )
+        if subscriber.is_subscribed:
+            subscriber.is_subscribed = False
+            subscriber.unsubscribed_at = timezone.now()
+            subscriber.confirmation_sent_at = None
+            subscriber.confirmation_token = uuid.uuid4()
+            subscriber.unsubscribe_token = uuid.uuid4()
+            subscriber.save(update_fields=[
+                'is_subscribed', 'unsubscribed_at', 'confirmation_sent_at',
+                'confirmation_token', 'unsubscribe_token',
+            ])
+    return render(request, 'home/newsletter_unsubscribe.html', {
+        'subscriber': subscriber,
+        'unsubscribed': True,
+        'hide_newsletter_popup': True,
+    })
 
 def _product_search_queryset(search_term):
     term = (search_term or '').strip()

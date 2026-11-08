@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 from axes.utils import reset as reset_axes_attempts
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core import mail
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -25,9 +26,9 @@ from home.delivery import (
 )
 from home.models import (
     City, DeliveryGuideline, HomeBanner, MarqueeAnnouncement,
-    ReplacePolicy, ReturnRefundPolicy, State,
+    NewsletterSubscriber, ReplacePolicy, ReturnRefundPolicy, SiteTheme, State,
 )
-from products.models import Category, Product, ProductReview
+from products.models import Category, Coupon, Product, ProductReview
 
 
 class HeadingLevelParser(HTMLParser):
@@ -82,7 +83,7 @@ class ContactFormTests(TestCase):
         })
 
         self.assertRedirects(response, reverse('contact'))
-        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(len(mail.outbox), 3)
         sent_email = mail.outbox[0]
         self.assertEqual(
             sent_email.to,
@@ -971,3 +972,343 @@ class InfiniteProductLoadingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['has_next'])
         self.assertIn('Toy 20', response.json()['html'])
+
+
+class SiteThemeTests(TestCase):
+    def test_active_theme_is_selected_only_inside_its_schedule(self):
+        now = timezone.now()
+        theme = SiteTheme.objects.create(
+            name='Summer',
+            is_active=True,
+            starts_at=now - timedelta(hours=1),
+            ends_at=now + timedelta(hours=1),
+        )
+
+        with patch('home.models.timezone.now', return_value=now):
+            self.assertEqual(SiteTheme.get_active(), theme)
+
+        with patch('home.models.timezone.now', return_value=now + timedelta(hours=1)):
+            self.assertIsNone(SiteTheme.get_active())
+
+    def test_disabled_and_future_themes_are_not_active(self):
+        now = timezone.now()
+        SiteTheme.objects.create(
+            name='Disabled',
+            is_active=False,
+            starts_at=now - timedelta(days=1),
+        )
+        SiteTheme.objects.create(
+            name='Future',
+            is_active=True,
+            starts_at=now + timedelta(days=1),
+        )
+
+        with patch('home.models.timezone.now', return_value=now):
+            self.assertIsNone(SiteTheme.get_active())
+
+    def test_theme_without_dates_is_active_indefinitely(self):
+        theme = SiteTheme.objects.create(name='Always on', is_active=True)
+
+        with patch('home.models.timezone.now', return_value=timezone.now()):
+            self.assertEqual(SiteTheme.get_active(), theme)
+
+    def test_active_schedules_cannot_overlap(self):
+        now = timezone.now()
+        SiteTheme.objects.create(
+            name='First',
+            is_active=True,
+            starts_at=now,
+            ends_at=now + timedelta(days=2),
+        )
+        overlapping_theme = SiteTheme(
+            name='Overlapping',
+            is_active=True,
+            starts_at=now + timedelta(days=1),
+            ends_at=now + timedelta(days=3),
+        )
+
+        with self.assertRaises(ValidationError):
+            overlapping_theme.full_clean()
+
+    def test_adjacent_schedules_are_valid(self):
+        transition = timezone.now() + timedelta(days=1)
+        SiteTheme.objects.create(
+            name='First',
+            is_active=True,
+            starts_at=None,
+            ends_at=transition,
+        )
+        next_theme = SiteTheme(
+            name='Next',
+            is_active=True,
+            starts_at=transition,
+        )
+
+        next_theme.full_clean()
+
+    def test_invalid_schedule_and_color_values_are_rejected(self):
+        now = timezone.now()
+        theme = SiteTheme(
+            name='Invalid',
+            starts_at=now + timedelta(days=1),
+            ends_at=now,
+            primary_color='red',
+        )
+
+        with self.assertRaises(ValidationError) as error:
+            theme.full_clean()
+
+        self.assertIn('ends_at', error.exception.message_dict)
+        self.assertIn('primary_color', error.exception.message_dict)
+
+    def test_active_theme_is_applied_without_changing_seo_content(self):
+        theme = SiteTheme.objects.create(
+            name='Autumn',
+            is_active=True,
+            primary_color='#123456',
+            primary_text_color='#EEEEEE',
+            starts_at=timezone.now() - timedelta(hours=1),
+            ends_at=timezone.now() + timedelta(hours=1),
+        )
+
+        response = self.client.get(reverse('index'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['active_site_theme'], theme)
+        self.assertContains(response, '/static/css/theme.css')
+        self.assertContains(response, '--site-primary: #123456;')
+        self.assertContains(response, '<title>', html=False)
+        self.assertContains(response, 'rel="canonical"', html=False)
+
+    def test_admin_theme_form_uses_color_pickers(self):
+        admin_user = User.objects.create_superuser(
+            username='theme-admin',
+            email='theme-admin@example.com',
+            password='test-password',
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse('admin:home_sitetheme_add'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="color"')
+        self.assertContains(response, 'name="starts_at_0"')
+        self.assertContains(response, 'name="ends_at_0"')
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    DEFAULT_FROM_EMAIL='newsletter@example.com',
+)
+class NewsletterSubscriptionTests(TestCase):
+    def subscribe(self, email='shopper@example.com'):
+        return self.client.post(reverse('newsletter_subscribe'), {
+            'email': email,
+            'consent': 'on',
+            'website': '',
+        })
+
+    @override_settings(NEWSLETTER_ENABLED=False)
+    def test_newsletter_can_be_disabled_without_blocking_unsubscribe(self):
+        response = self.client.get(reverse('index'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="newsletter-popup"')
+        self.assertNotContains(response, '/static/js/newsletter-popup.js')
+        self.assertNotContains(response, '/static/css/newsletter-popup.css')
+
+        response = self.subscribe()
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(NewsletterSubscriber.objects.exists())
+
+        subscriber = NewsletterSubscriber.objects.create(
+            email='shopper@example.com',
+            consented_at=timezone.now(),
+            is_subscribed=True,
+            confirmed_at=timezone.now(),
+        )
+        response = self.client.get(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        self.assertEqual(response.status_code, 404)
+        response = self.client.post(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        self.assertEqual(response.status_code, 404)
+        subscriber.refresh_from_db()
+        self.assertTrue(subscriber.is_subscribed)
+        self.assertIsNone(subscriber.coupon)
+
+        response = self.client.post(reverse(
+            'newsletter_unsubscribe',
+            args=[subscriber.unsubscribe_token],
+        ))
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertFalse(subscriber.is_subscribed)
+
+    def test_popup_is_loaded_site_wide_and_confirmation_pages_hide_it(self):
+        for page in (reverse('index'), reverse('contact')):
+            with self.subTest(page=page):
+                response = self.client.get(page)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="newsletter-popup"')
+                self.assertContains(response, '/static/js/newsletter-popup.js')
+                self.assertContains(response, '/static/css/newsletter-popup.css')
+
+        self.subscribe()
+        subscriber = NewsletterSubscriber.objects.get()
+        response = self.client.get(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="newsletter-popup"')
+
+    def test_consent_is_required_and_honeypot_submissions_are_rejected(self):
+        response = self.client.post(reverse('newsletter_subscribe'), {
+            'email': 'shopper@example.com',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(NewsletterSubscriber.objects.exists())
+
+        response = self.client.post(reverse('newsletter_subscribe'), {
+            'email': 'shopper@example.com',
+            'consent': 'on',
+            'website': 'bot-filled-this',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(NewsletterSubscriber.objects.exists())
+
+    def test_signup_saves_pending_consent_and_sends_confirmation_without_coupon(self):
+        response = self.subscribe(' Shopper@Example.com ')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('confirm your email', response.json()['message'])
+        subscriber = NewsletterSubscriber.objects.get()
+        self.assertEqual(subscriber.email, 'shopper@example.com')
+        self.assertFalse(subscriber.is_subscribed)
+        self.assertIsNotNone(subscriber.consented_at)
+        self.assertEqual(mail.outbox[0].to, ['shopper@example.com'])
+        self.assertIn(str(subscriber.confirmation_token), mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        confirmation_html, content_type = mail.outbox[0].alternatives[0]
+        self.assertEqual(content_type, 'text/html')
+        self.assertIn('cid:bundleofgifts-brand-icon', confirmation_html)
+        self.assertIn('BundleofGifts', confirmation_html)
+        self.assertFalse(Coupon.objects.exists())
+
+    def test_confirmation_is_required_before_creating_and_revealing_discount(self):
+        self.subscribe()
+        subscriber = NewsletterSubscriber.objects.get()
+        confirmation_url = reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        )
+
+        response = self.client.get(confirmation_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(NewsletterSubscriber.objects.get().is_subscribed)
+        self.assertFalse(Coupon.objects.exists())
+
+        response = self.client.post(confirmation_url)
+
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertTrue(subscriber.is_subscribed)
+        self.assertIsNotNone(subscriber.confirmed_at)
+        self.assertContains(response, subscriber.coupon.coupon_code)
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertIn(subscriber.coupon.coupon_code, mail.outbox[1].body)
+        self.assertIn('newsletter/unsubscribe/', mail.outbox[1].body)
+        self.assertEqual(len(mail.outbox[1].alternatives), 1)
+        welcome_html, content_type = mail.outbox[1].alternatives[0]
+        self.assertEqual(content_type, 'text/html')
+        self.assertIn('cid:bundleofgifts-brand-icon', welcome_html)
+        self.assertIn(subscriber.coupon.coupon_code, welcome_html)
+        self.assertIn('BundleofGifts', welcome_html)
+        self.assertEqual(subscriber.coupon.discount_percentage, 5)
+        self.assertEqual(subscriber.coupon.minimum_amount, 0)
+        self.assertIsNone(subscriber.coupon.expiry_date)
+        self.assertTrue(subscriber.coupon.is_available)
+        self.assertTrue(
+            Coupon.objects.available().filter(pk=subscriber.coupon.pk).exists(),
+        )
+        self.assertFalse(
+            Coupon.objects.available().filter(subscriber_email='').exists(),
+        )
+
+        self.client.post(confirmation_url)
+        self.assertEqual(Coupon.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 2)
+
+    def test_pending_signup_confirmation_email_is_throttled(self):
+        self.subscribe()
+        response = self.subscribe('SHOPPER@example.com')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NewsletterSubscriber.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_confirmed_subscriber_can_unsubscribe_with_a_post(self):
+        self.subscribe()
+        subscriber = NewsletterSubscriber.objects.get()
+        self.client.post(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        subscriber.refresh_from_db()
+
+        unsubscribe_url = reverse(
+            'newsletter_unsubscribe',
+            args=[subscriber.unsubscribe_token],
+        )
+        response = self.client.get(unsubscribe_url)
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertTrue(subscriber.is_subscribed)
+
+        response = self.client.post(unsubscribe_url)
+
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertFalse(subscriber.is_subscribed)
+        self.assertIsNotNone(subscriber.unsubscribed_at)
+        self.assertIsNotNone(subscriber.coupon)
+
+    def test_unsubscribed_visitor_can_subscribe_again(self):
+        self.subscribe()
+        subscriber = NewsletterSubscriber.objects.get()
+        old_confirmation_token = subscriber.confirmation_token
+        old_unsubscribe_token = subscriber.unsubscribe_token
+        self.client.post(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+        subscriber.refresh_from_db()
+        self.client.post(reverse(
+            'newsletter_unsubscribe',
+            args=[subscriber.unsubscribe_token],
+        ))
+
+        response = self.subscribe()
+
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertFalse(subscriber.is_subscribed)
+        self.assertIsNone(subscriber.unsubscribed_at)
+        self.assertIsNone(subscriber.confirmed_at)
+        self.assertNotEqual(subscriber.confirmation_token, old_confirmation_token)
+        self.assertNotEqual(subscriber.unsubscribe_token, old_unsubscribe_token)
+        self.assertEqual(len(mail.outbox), 3)
+
+        response = self.client.post(reverse(
+            'newsletter_confirm',
+            args=[subscriber.confirmation_token],
+        ))
+
+        self.assertEqual(response.status_code, 200)
+        subscriber.refresh_from_db()
+        self.assertTrue(subscriber.is_subscribed)
+        self.assertIsNotNone(subscriber.coupon)

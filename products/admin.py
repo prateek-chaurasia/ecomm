@@ -75,6 +75,19 @@ class ProductAdminForm(forms.ModelForm):
         for field_name in ('hsn_code', 'gst_rate'):
             if field_name in self.fields:
                 self.fields[field_name].required = False
+        if 'parent' in self.fields:
+            parent_products = Product.objects.filter(parent__isnull=True)
+            if self.instance.pk:
+                parent_products = parent_products.exclude(pk=self.instance.pk)
+            self.fields['parent'].queryset = parent_products
+        if self.instance.pk:
+            for field_name in (
+                'similar_color_products',
+                'similar_size_products',
+            ):
+                self.fields[field_name].queryset = Product.objects.exclude(
+                    pk=self.instance.pk,
+                )
 
         if self.instance.pk and not self.instance.hsn_reference_id:
             matches = HSNCode.objects.filter(
@@ -175,11 +188,26 @@ class ProductAdmin(PaginatedModelAdmin):
     search_fields = ['product_name', 'sku', 'brand_name', 'tags__name', 'hsn_reference__product_material', 'hsn_reference__hsn_code']
     inlines = [ProductImageAdmin, ReturnDetailsInline]
     actions = [restock_selected]
-    autocomplete_fields = ['hsn_reference', 'color_variant', 'age_groups', 'tags']
+    autocomplete_fields = [
+        'parent', 'hsn_reference', 'color_variant', 'age_groups', 'tags',
+        'similar_color_products', 'similar_size_products',
+    ]
     readonly_fields = ['hsn_code', 'gst_rate']
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related('product_images')
+
+    def get_search_results(self, request, queryset, search_term):
+        queryset, use_distinct = super().get_search_results(
+            request,
+            queryset,
+            search_term,
+        )
+        if request.GET.get('field_name') == 'parent':
+            queryset = queryset.filter(parent__isnull=True).order_by(
+                'product_name',
+            )
+        return queryset, use_distinct
 
     @admin.display(description='Image')
     def image_thumbnail(self, obj):
@@ -329,7 +357,9 @@ class CouponAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['expiry_date'].required = True
+        self.fields['expiry_date'].required = not bool(
+            self.instance.subscriber_email
+        )
         self.fields['discount_percentage'].required = True
         self.fields['discount_amount'].label = 'Maximum discount amount'
 

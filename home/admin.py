@@ -6,12 +6,60 @@ from django.utils import timezone
 from base.admin import FilterCollapsibleModelAdmin
 from .models import (
     City, State, ShippingAddress, HomeBanner, MarqueeAnnouncement,
-    DeliveryGuideline, PageVisit, ReturnRefundPolicy, ReplacePolicy,
+    DeliveryGuideline, PageVisit, ReturnRefundPolicy, ReplacePolicy, SiteTheme,
+    NewsletterSubscriber,
 )
 
 # Register your models here.
 
 admin.site.register(ShippingAddress)
+
+
+@admin.register(NewsletterSubscriber)
+class NewsletterSubscriberAdmin(FilterCollapsibleModelAdmin):
+    list_display = (
+        'email', 'is_subscribed', 'consented_at', 'confirmed_at', 'created_at',
+    )
+    list_filter = ('is_subscribed', 'confirmed_at', 'created_at')
+    search_fields = ('email',)
+    readonly_fields = (
+        'email', 'consented_at', 'confirmed_at', 'unsubscribed_at',
+        'confirmation_sent_at', 'confirmation_token', 'unsubscribe_token',
+        'coupon', 'created_at',
+    )
+    fields = readonly_fields + ('is_subscribed',)
+    ordering = ('-created_at',)
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SiteTheme)
+class SiteThemeAdmin(FilterCollapsibleModelAdmin):
+    list_display = ('name', 'is_active', 'starts_at', 'ends_at')
+    list_filter = ('is_active',)
+    search_fields = ('name',)
+    ordering = ('name',)
+    fields = (
+        'name',
+        'primary_color',
+        'primary_text_color',
+        'secondary_color',
+        'accent_color',
+        'page_background_color',
+        'surface_color',
+        'text_color',
+        'footer_background_color',
+        'footer_text_color',
+        'is_active',
+        'starts_at',
+        'ends_at',
+    )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name.endswith('_color'):
+            kwargs['widget'] = forms.TextInput(attrs={'type': 'color'})
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 @admin.register(PageVisit)

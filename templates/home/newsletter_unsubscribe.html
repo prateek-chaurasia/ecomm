@@ -1,0 +1,25 @@
+{% extends "base/base.html" %}
+{% block title %}Newsletter Preferences | Bundle of Gifts{% endblock %}
+{% block meta_description %}Manage your Bundle of Gifts newsletter subscription preferences.{% endblock %}
+{% block start %}
+<main class="section-content padding-y">
+  <div class="container">
+    <div class="card mx-auto" style="max-width: 620px;">
+      <div class="card-body text-center">
+        {% if unsubscribed %}
+        <h1 class="h3">You’re unsubscribed</h1>
+        <p>We’ll no longer send newsletter or promotional emails to {{ subscriber.email }}.</p>
+        {% else %}
+        <h1 class="h3">Unsubscribe from emails?</h1>
+        <p>Stop newsletter and promotional emails to {{ subscriber.email }}.</p>
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn btn-outline-danger" type="submit">Unsubscribe</button>
+          <a class="btn btn-outline-secondary" href="{% url 'index' %}">Keep my subscription</a>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

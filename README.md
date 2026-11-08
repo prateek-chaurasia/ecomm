@@ -25,6 +25,8 @@
 - **Replacements:** Eligible customers can choose a configurable replacement reason, upload photos of a wrong or damaged item, and follow admin review, replacement preparation, dispatch, and completion from the same order return page.
 - **Responsive Design:** A mobile-friendly UI ensures a consistent experience across all devices.
 - **Admin Panel:** Efficiently manage products, orders, and users through Django's admin interface.
+- **Scheduled Site Themes:** Under Django admin > Home > Site themes, create/edit named color palettes and activate them immediately or for scheduled date and time windows. Leave the start or end blank for an immediate start or an open-ended schedule; overlapping active schedules are rejected. Theme changes affect presentation only; page content and SEO metadata remain unchanged.
+- **Newsletter Sign-Up:** Set `NEWSLETTER_ENABLED=False` in `.env` to disable the sign-up dialog, new subscriptions, and subscription confirmations; it defaults to enabled. Restart the application after changing the value. Existing unsubscribe links remain available, and previously issued coupons are unaffected. When enabled, a dismissible sign-up dialog appears after five seconds and stays suppressed for 30 days after dismissal or permanently after submission. Email consent is confirmed before a lead is marked subscribed; confirmed subscribers receive a private 5% first-order coupon tied to their email. Leads and opt-out status are managed in Django admin under Home > Newsletter subscribers.
 - **URL-Based Images:** All images (products, categories, profiles) use URLs instead of file uploads, reducing storage requirements and enabling external image hosting.
 
 ## Technologies Used
@@ -133,6 +135,14 @@ To run this project locally, please follow these steps:
 Static CSS, JavaScript, and image URLs use content-hashed filenames. After deploying changes to static assets, run `python manage.py collectstatic --noinput` and configure the production static-file server or CDN to send `Cache-Control: public, max-age=31536000, immutable` for `/static/`. Do not apply this long-lived policy to HTML responses or `/media/` uploads.
 
 Frontend libraries and web fonts used by the site are stored locally under `public/media` and collected with the rest of the static files. Upstream license notices are retained with the vendored files; accompanying license texts are in `public/media/js/vendor/licenses/`. Razorpay's checkout script remains hosted by Razorpay as required for its payment integration. Serving local assets avoids third-party connection setup and lets the browser reuse the site's versioned static-asset cache; it does not reduce the libraries' transfer size.
+
+### Linking products by color or size
+
+In Django admin, open **Products > Products**, edit a product, then search for and select products in **Similar color products** or **Similar size products**. Save the product to show those links under **Explore other colors** or **Explore other sizes** on its product page. These links are mutual, so each selected product shows the relationship too. For example, edit **Blue Cotton Scarf**, select **Red Cotton Scarf** under **Similar color products**, and save; shoppers can move between the two scarf pages from either page. The existing **You may also like** category recommendations remain separate.
+
+### Grouping products into a collection
+
+Use **Collection parent** to group products that belong to one series but are separate purchasable items, such as action figures with different characters. Create the lead product first, then create each other character and choose the lead product in **Collection parent**. For example, create **Batman** as a top-level product, then create **Hulk**, **Thanos**, and **Spider-Man** with **Batman** as their Collection parent. Each product page will show the other visible products in the family under **More in this collection**. On a child product page, the top-level product and its siblings are shown; on the top-level product page, its children are shown. Parent choices are restricted to top-level products so collections stay one level deep. Each product retains its own price, stock, SKU, and images.
 
 ### Visitor report
 

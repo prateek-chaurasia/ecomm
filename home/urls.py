@@ -3,6 +3,17 @@ from home.views import *
 
 urlpatterns = [
     path('', index, name="index"),
+    path('newsletter/subscribe/', newsletter_subscribe, name='newsletter_subscribe'),
+    path(
+        'newsletter/confirm/<uuid:token>/',
+        newsletter_confirm,
+        name='newsletter_confirm',
+    ),
+    path(
+        'newsletter/unsubscribe/<uuid:token>/',
+        newsletter_unsubscribe,
+        name='newsletter_unsubscribe',
+    ),
     path('search/', product_search, name='product_search'),
     path('contact/', contact, name='contact'),
     path('about/', about, name='about'),

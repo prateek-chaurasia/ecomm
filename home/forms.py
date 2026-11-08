@@ -23,3 +23,15 @@ class ContactForm(forms.Form):
     subject = forms.ChoiceField(choices=SUBJECT_CHOICES)
     message = forms.CharField(max_length=5000, widget=forms.Textarea)
     newsletter = forms.BooleanField(required=False)
+
+
+class NewsletterSignupForm(forms.Form):
+    email = forms.EmailField(max_length=254)
+    consent = forms.BooleanField(
+        required=True,
+        error_messages={'required': 'Please agree to receive newsletter emails.'},
+    )
+    website = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def clean_email(self):
+        return self.cleaned_data['email'].strip().casefold()

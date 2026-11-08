@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.core.files.storage import default_storage
 from base.models import BaseModel
 from django.utils.text import slugify
@@ -117,7 +118,17 @@ class Product(BaseModel):
     ]
 
     parent = models.ForeignKey(
-        'self', related_name='variants', on_delete=models.CASCADE, blank=True, null=True)
+        'self',
+        related_name='variants',
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        verbose_name='Collection parent',
+        help_text=(
+            'Choose the top-level product for this product family. Parent and '
+            'sibling products will be linked on each product page.'
+        ),
+    )
     product_name = models.CharField(max_length=100)
     sku = models.CharField(
         max_length=12,
@@ -141,6 +152,24 @@ class Product(BaseModel):
     brand_name = models.CharField(max_length=100, default='Generic')
     age_groups = models.ManyToManyField('AgeGroup', related_name='products', blank=True)
     tags = models.ManyToManyField('Tag', related_name='products', blank=True)
+    similar_color_products = models.ManyToManyField(
+        'self',
+        symmetrical=True,
+        blank=True,
+        help_text=(
+            'Link separately listed products that offer a similar item in another '
+            'color. The link will appear on both product pages.'
+        ),
+    )
+    similar_size_products = models.ManyToManyField(
+        'self',
+        symmetrical=True,
+        blank=True,
+        help_text=(
+            'Link separately listed products that offer a similar item in another '
+            'size. The link will appear on both product pages.'
+        ),
+    )
     price = models.IntegerField()
     marked_price = models.IntegerField(default=0, help_text='Original price before discount')
     hsn_code = models.CharField(
@@ -349,7 +378,9 @@ class CouponQuerySet(models.QuerySet):
         return self.filter(
             is_active=True,
             is_expired=False,
-            expiry_date__gte=on_date or timezone.localdate(),
+        ).filter(
+            Q(expiry_date__gte=on_date or timezone.localdate())
+            | Q(subscriber_email__gt='', expiry_date__isnull=True)
         )
 
 
@@ -357,6 +388,11 @@ class Coupon(BaseModel):
     objects = CouponQuerySet.as_manager()
 
     coupon_code = models.CharField(max_length=10)
+    subscriber_email = models.EmailField(
+        blank=True,
+        editable=False,
+        help_text='When set, this coupon is private and redeemable only by this subscriber on their first order.',
+    )
     is_active = models.BooleanField(default=True)
     is_expired = models.BooleanField(default=False)
     expiry_date = models.DateField(
@@ -381,8 +417,11 @@ class Coupon(BaseModel):
         return (
             self.is_active
             and not self.is_expired
-            and self.expiry_date is not None
-            and self.expiry_date >= timezone.localdate()
+            and (
+                self.expiry_date >= timezone.localdate()
+                if self.expiry_date is not None
+                else bool(self.subscriber_email)
+            )
         )
 
     def calculate_discount(self, subtotal):

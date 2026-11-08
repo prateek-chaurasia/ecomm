@@ -1,0 +1,105 @@
+:root {
+  --site-primary: #3167eb;
+  --site-primary-text: #fff;
+  --site-secondary: #081828;
+  --site-accent: #fbbf24;
+  --site-page-background: #fff;
+  --site-surface: #fff;
+  --site-text: #212529;
+  --site-footer-background: #081828;
+  --site-footer-text: #fff;
+}
+
+html body {
+  background-color: var(--site-page-background);
+  color: var(--site-text);
+}
+
+a:not(.btn) {
+  color: var(--site-primary);
+}
+
+a:not(.btn):hover {
+  color: var(--site-secondary);
+}
+
+header .navbar.bg-dark {
+  background-color: var(--site-secondary) !important;
+}
+
+header .navbar.bg-dark .nav-link {
+  color: var(--site-primary-text);
+}
+
+header .navbar.bg-dark .nav-link:hover,
+header .navbar.bg-dark .nav-link:focus {
+  color: var(--site-accent);
+}
+
+header .header-main,
+header .header-main .container {
+  background-color: var(--site-surface);
+  color: var(--site-text);
+}
+
+.header-banner {
+  background-color: var(--site-primary) !important;
+  color: var(--site-primary-text) !important;
+}
+
+.header-banner .content,
+.header-banner .header-promotion {
+  color: var(--site-primary-text) !important;
+}
+
+.btn-primary,
+.button .btn,
+.card-product-grid .btn-overlay {
+  background-color: var(--site-primary) !important;
+  border-color: var(--site-primary) !important;
+  color: var(--site-primary-text) !important;
+}
+
+.btn-primary:hover,
+.button .btn:hover,
+.card-product-grid .btn-overlay:hover {
+  background-color: var(--site-secondary) !important;
+  border-color: var(--site-secondary) !important;
+  color: var(--site-primary-text) !important;
+}
+
+.card,
+.card-product-grid,
+.product-catalog-card,
+.dropdown-menu,
+.modal-content {
+  background-color: var(--site-surface);
+  color: var(--site-text);
+}
+
+.card .title,
+.card .card-title,
+.card-product-grid .title,
+.product-catalog-card,
+main,
+main h1,
+main h2,
+main h3,
+main h4 {
+  color: var(--site-text);
+}
+
+footer.bg-dark {
+  background-color: var(--site-footer-background) !important;
+  color: var(--site-footer-text) !important;
+}
+
+footer.bg-dark :is(h1, h2, h3, h4, p, small, .text-light, .footer-link) {
+  color: var(--site-footer-text) !important;
+}
+
+footer.bg-dark .footer-link:hover,
+footer.bg-dark .brand-highlight,
+footer.bg-dark .contact-icon {
+  color: var(--site-accent) !important;
+}

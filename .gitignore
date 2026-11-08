@@ -88,6 +88,13 @@ ipython_config.py
 
 # Static Media files
 public/media/*
+!public/media/css/
+public/media/css/*
+!public/media/css/theme.css
+!public/media/css/newsletter-popup.css
+!public/media/js/
+public/media/js/*
+!public/media/js/newsletter-popup.js
 htmlcov/*
 
 # pyenv

@@ -420,6 +420,19 @@ def _apply_coupon(request, cart_obj):
     if not coupon_obj.is_available:
         messages.error(request, 'Coupon code expired.')
         return False
+    customer_email = (
+        request.user.email
+        if request.user.is_authenticated
+        else request.POST.get('email', '')
+    )
+    newsletter_coupon_error = _newsletter_coupon_error(
+        coupon_obj,
+        customer_email,
+        user=request.user if request.user.is_authenticated else None,
+    )
+    if newsletter_coupon_error:
+        messages.error(request, newsletter_coupon_error)
+        return False
     if cart_obj.get_cart_total() < coupon_obj.minimum_amount:
         messages.error(
             request, f'Amount should be greater than {coupon_obj.minimum_amount}')
@@ -429,6 +442,38 @@ def _apply_coupon(request, cart_obj):
     cart_obj.save(update_fields=['coupon', 'updated_at'])
     messages.success(request, 'Coupon applied successfully.')
     return True
+
+
+def _newsletter_coupon_error(coupon, email, user=None, ignore_order_id=None):
+    if not coupon or not coupon.subscriber_email:
+        return ''
+
+    customer_email = (email or '').strip().casefold()
+    if not customer_email and user is None:
+        return ''
+    if customer_email != coupon.subscriber_email.casefold():
+        return 'This subscriber discount is only valid for the email address that subscribed.'
+
+    matching_orders = Order.objects.filter(
+        Q(guest_email__iexact=customer_email)
+        | Q(user__email__iexact=customer_email)
+    )
+    if user is not None:
+        matching_orders = matching_orders | Order.objects.filter(user=user)
+    matching_orders = matching_orders.exclude(status=Order.Status.CANCELLED)
+    if ignore_order_id:
+        matching_orders = matching_orders.exclude(order_id=ignore_order_id)
+    if matching_orders.exists():
+        return 'This 5% discount is only available on your first order.'
+
+    used_coupon_orders = Order.objects.filter(coupon=coupon).exclude(
+        status=Order.Status.CANCELLED,
+    )
+    if ignore_order_id:
+        used_coupon_orders = used_coupon_orders.exclude(order_id=ignore_order_id)
+    if used_coupon_orders.exists():
+        return 'This subscriber discount has already been used.'
+    return ''
 
 
 @require_POST
@@ -567,7 +612,9 @@ def cart(request):
         'stock_notices': stock_notices,
         'current_step': 'cart',
         'base_url': settings.BASE_URL,
-        'available_coupons': Coupon.objects.available().order_by(
+        'available_coupons': Coupon.objects.available().filter(
+            subscriber_email='',
+        ).order_by(
             'minimum_amount', 'coupon_code'),
         **_cart_pricing_context(cart_obj),
     }
@@ -649,7 +696,9 @@ def checkout(request):
         'addresses': addresses,
         'selected_address_id': str(selected_address.uid) if selected_address else '',
         'coupon_enabled': coupon_enabled,
-        'available_coupons': Coupon.objects.available().order_by(
+        'available_coupons': Coupon.objects.available().filter(
+            subscriber_email='',
+        ).order_by(
             'minimum_amount', 'coupon_code') if coupon_enabled else (),
         **_cart_pricing_context(cart_obj),
     }
@@ -1281,30 +1330,37 @@ def guest_checkout(request):
         if form.is_valid() and not _service_area_error(
             form.cleaned_data['city'], form.cleaned_data['country'],
         ):
-            address = {
-                field: form.cleaned_data[field]
-                for field in (
-                    'first_name', 'last_name', 'street', 'street_number',
-                    'zip_code', 'phone', 'email',
-                )
-            }
-            address['city'] = str(form.cleaned_data['city'].pk)
-            address['country'] = form.cleaned_data['country']
-            address['state'] = str(form.cleaned_data['state'].pk)
-            current_cart_total = cart_obj.get_cart_total_price_after_coupon()
-            delivery_fee = _cart_delivery_fee(cart_obj)
-            cart_total_after_delivery = current_cart_total + delivery_fee
-            quote = {
-                'cart_uid': str(cart_obj.uid),
-                'address': address,
-                'cart_total': str(current_cart_total),
-                'delivery_fee': str(delivery_fee),
-                'delivery_latitude': request.POST.get('delivery_latitude'),
-                'delivery_longitude': request.POST.get('delivery_longitude'),
-                'delivery_accuracy_meters': request.POST.get('delivery_accuracy_meters'),
-            }
-            request.session[quote_key] = quote
-            quote_ready = True
+            newsletter_coupon_error = _newsletter_coupon_error(
+                cart_obj.coupon,
+                form.cleaned_data['email'],
+            )
+            if newsletter_coupon_error:
+                form.add_error('email', newsletter_coupon_error)
+            else:
+                address = {
+                    field: form.cleaned_data[field]
+                    for field in (
+                        'first_name', 'last_name', 'street', 'street_number',
+                        'zip_code', 'phone', 'email',
+                    )
+                }
+                address['city'] = str(form.cleaned_data['city'].pk)
+                address['country'] = form.cleaned_data['country']
+                address['state'] = str(form.cleaned_data['state'].pk)
+                current_cart_total = cart_obj.get_cart_total_price_after_coupon()
+                delivery_fee = _cart_delivery_fee(cart_obj)
+                cart_total_after_delivery = current_cart_total + delivery_fee
+                quote = {
+                    'cart_uid': str(cart_obj.uid),
+                    'address': address,
+                    'cart_total': str(current_cart_total),
+                    'delivery_fee': str(delivery_fee),
+                    'delivery_latitude': request.POST.get('delivery_latitude'),
+                    'delivery_longitude': request.POST.get('delivery_longitude'),
+                    'delivery_accuracy_meters': request.POST.get('delivery_accuracy_meters'),
+                }
+                request.session[quote_key] = quote
+                quote_ready = True
         elif form.is_valid():
             form.add_error(None, _service_area_error(
                 form.cleaned_data['city'], form.cleaned_data['country'],
@@ -1405,7 +1461,9 @@ def guest_checkout(request):
         'shipping_address_summary': shipping_address_summary,
         'cart': cart_obj,
         'coupon_enabled': coupon_enabled,
-        'available_coupons': Coupon.objects.available().order_by(
+        'available_coupons': Coupon.objects.available().filter(
+            subscriber_email='',
+        ).order_by(
             'minimum_amount', 'coupon_code') if coupon_enabled else (),
         **_cart_pricing_context(cart_obj),
     })
@@ -2049,6 +2107,7 @@ def create_order(
     priority_delivery_fee=None,
 ):
     with transaction.atomic():
+        resolved_order_id = order_id or generate_order_id()
         cart_items = list(CartItem.objects.select_related(
             'product', 'size_variant', 'color_variant').filter(cart=cart))
         bundle_items = list(BundleCartItem.objects.select_related(
@@ -2102,6 +2161,23 @@ def create_order(
             and is_before_local_delivery_cutoff(DeliveryGuideline.get_solo())
         )
         order_coupon = cart.coupon
+        if order_coupon and order_coupon.subscriber_email:
+            order_coupon = Coupon.objects.select_for_update().get(
+                pk=order_coupon.pk,
+            )
+            customer_email = guest_email or getattr(
+                getattr(cart, 'user', None),
+                'email',
+                '',
+            )
+            newsletter_coupon_error = _newsletter_coupon_error(
+                order_coupon,
+                customer_email,
+                user=cart.user,
+                ignore_order_id=resolved_order_id,
+            )
+            if newsletter_coupon_error:
+                raise ValueError(newsletter_coupon_error)
         gst_configuration = GSTConfiguration.get_solo()
         if (
             order_coupon
@@ -2113,7 +2189,7 @@ def create_order(
             order_coupon = None
         order, created = Order.objects.get_or_create(
             user=cart.user,
-            order_id=order_id or generate_order_id(),
+            order_id=resolved_order_id,
             guest_access_token=guest_access_token or uuid.uuid4().hex,
             guest_name=order_customer_name,
             guest_email=guest_email,

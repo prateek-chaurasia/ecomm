@@ -725,8 +725,6 @@
                 {% for color in product.color_variant.all %} {{ color.color_name }} {% endfor %}
               </dd>
 
-              <dt class="col-sm-3">Delivery</dt>
-              <dd class="col-sm-9">{{ delivery_guideline.summary }}</dd>
             </dl>
 
             <hr />
@@ -948,8 +946,35 @@
       {% endif %}
     </div>
 
-    <!-- Related Products Section -->
-    <h2 class="title padding-y-sm">Related products</h2>
+    {% if collection_products %}
+    <section aria-labelledby="product-collection-heading">
+      <h2 class="title padding-y-sm" id="product-collection-heading">More in this collection</h2>
+      {% with collection_products as list_products %}
+      {% include 'product_parts/product_list.html' %}
+      {% endwith %}
+    </section>
+    {% endif %}
+
+    {% if color_related_products %}
+    <section aria-labelledby="similar-colors-heading">
+      <h2 class="title padding-y-sm" id="similar-colors-heading">Explore other colors</h2>
+      {% with color_related_products as list_products %}
+      {% include 'product_parts/product_list.html' %}
+      {% endwith %}
+    </section>
+    {% endif %}
+
+    {% if size_related_products %}
+    <section aria-labelledby="similar-sizes-heading">
+      <h2 class="title padding-y-sm" id="similar-sizes-heading">Explore other sizes</h2>
+      {% with size_related_products as list_products %}
+      {% include 'product_parts/product_list.html' %}
+      {% endwith %}
+    </section>
+    {% endif %}
+
+    <!-- Category recommendations -->
+    <h2 class="title padding-y-sm">You may also like</h2>
     {% if related_products%}
     {% with related_products as list_products %}
     {% include 'product_parts/product_list.html' %}

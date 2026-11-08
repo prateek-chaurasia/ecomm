@@ -335,6 +335,34 @@ def get_product(request, slug):
         product.size_variant.filter(size_name=selected_size).first()
         if selected_size else None
     )
+    collection_parent_id = product.parent_id or product.pk
+    collection_products = (
+        Product.objects.filter(
+            Q(pk=collection_parent_id) | Q(parent_id=collection_parent_id),
+            show_in_catalog=True,
+        )
+        .exclude(pk=product.pk)
+        .annotate(
+            avg_rating=Coalesce(Avg('reviews__stars'), 0.0),
+            review_count=Count('reviews', distinct=True),
+        )
+        .order_by('product_name')
+        .prefetch_related('product_images', 'age_groups')
+    )
+    color_related_products = (
+        product.similar_color_products
+        .filter(show_in_catalog=True, parent__isnull=True)
+        .exclude(pk=product.pk)
+        .order_by('product_name')
+        .prefetch_related('product_images', 'age_groups')
+    )
+    size_related_products = (
+        product.similar_size_products
+        .filter(show_in_catalog=True, parent__isnull=True)
+        .exclude(pk=product.pk)
+        .order_by('product_name')
+        .prefetch_related('product_images', 'age_groups')
+    )
     related_products = list(
         product.category.products.filter(parent=None)
         .exclude(uid=product.uid)
@@ -412,6 +440,9 @@ def get_product(request, slug):
         'product': product,
         'product_images': product_images,
         'sorted_size_variants': sorted_size_variants,
+        'collection_products': collection_products,
+        'color_related_products': color_related_products,
+        'size_related_products': size_related_products,
         'related_products': related_products,
         'review_form': review_form,
         'user_review': review,

@@ -1,0 +1,35 @@
+{% extends "base/base.html" %}
+{% block title %}Newsletter Subscription | Bundle of Gifts{% endblock %}
+{% block meta_description %}Confirm your Bundle of Gifts newsletter subscription and receive a 5% discount on your first order.{% endblock %}
+{% block start %}
+<main class="section-content padding-y">
+  <div class="container">
+    <div class="card mx-auto" style="max-width: 620px;">
+      <div class="card-body text-center">
+        {% if confirmed %}
+        <h1 class="h3">You’re subscribed!</h1>
+        <p>Your email is confirmed. Use this unique code for 5% off your first order:</p>
+        <p class="h3 my-4"><code>{{ coupon.coupon_code }}</code></p>
+        <p class="text-muted">This code is private to {{ subscriber.email }} and can only be used on their first order.</p>
+        {% if coupon_email_sent %}
+        <p>We’ve also emailed your code to {{ subscriber.email }}.</p>
+        {% elif coupon_email_sent == False %}
+        <p class="text-warning">We couldn’t email your code, so please save it from this page.</p>
+        {% endif %}
+        <a class="btn btn-primary" href="{% url 'index' %}">Continue shopping</a>
+        <p class="small text-muted mt-4">
+          You can <a href="{% url 'newsletter_unsubscribe' subscriber.unsubscribe_token %}">unsubscribe from newsletter emails</a> at any time.
+        </p>
+        {% else %}
+        <h1 class="h3">Confirm your subscription</h1>
+        <p>Confirm that you want newsletter and promotional emails sent to {{ subscriber.email }}. We’ll then show your unique 5% first-order discount code.</p>
+        <form method="post">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit">Confirm and get my 5% code</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}
